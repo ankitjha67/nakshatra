@@ -36,6 +36,36 @@ header.site{display:flex;align-items:baseline;justify-content:space-between;padd
 /* a cream "sheet" floating on the void: holds reading prose so ink text stays readable */
 .sheet{background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:14px;
   padding:24px 26px;box-shadow:0 24px 64px rgba(0,0,0,.45);margin-top:24px}
+/* transparent "glass" panel: the celestial render shows through the birth-details area */
+.card.glass{background:rgba(8,8,18,.40);color:var(--cream);border-color:var(--hair-dark);
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+.card.glass .kicker{color:var(--brass-lt)}
+.card.glass label.fld{color:var(--cream-dim)}
+.card.glass .note{color:var(--cream-dim)}
+.card.glass input,.card.glass select,.card.glass textarea{
+  background:rgba(10,10,22,.55);color:var(--cream);border-color:var(--hair-dark);color-scheme:dark}
+.card.glass input::placeholder{color:var(--cream-faint)}
+.card.glass button.ghost{color:var(--cream-dim);border-color:var(--hair-dark)}
+.card.glass button.ghost:hover{color:var(--brass-lt);border-color:var(--brass-lt)}
+/* city typeahead */
+.city{position:relative}
+.city-pop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;max-height:240px;overflow:auto;
+  background:#0c0c16;border:1px solid var(--hair-dark);border-radius:10px;box-shadow:0 18px 44px rgba(0,0,0,.6)}
+.city-opt{padding:9px 13px;font-size:14px;color:var(--cream);cursor:pointer}
+.city-opt:hover{background:rgba(214,182,119,.14);color:var(--brass-lt)}
+.city-opt.muted{color:var(--cream-faint);cursor:default}
+/* birth-chart diagrams (North / South / Western) */
+.charts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:6px 0 4px}
+@media(max-width:680px){.charts{grid-template-columns:1fr}}
+.charts figure{margin:0;text-align:center}
+.charts figcaption{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+.chart-svg{width:100%;height:auto;display:block}
+.chart-svg .cl{stroke:var(--line);stroke-width:1;fill:none}
+.chart-svg .ascd{stroke:var(--brass);stroke-width:1.4}
+.chart-svg .snum{fill:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:9px;text-anchor:middle}
+.chart-svg .pl{fill:var(--ink);font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;text-anchor:middle}
+.chart-svg .ascl{fill:var(--marigold);font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.06em;text-anchor:middle}
+.chart-svg .cmid{fill:var(--muted);font-family:"Cormorant Garamond",serif;font-size:15px;text-anchor:middle;dominant-baseline:middle}
 .kicker{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--brass);margin:0 0 14px}
 h1,h2{font-family:"Cormorant Garamond",serif;font-weight:500}
 label.fld{display:block;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}

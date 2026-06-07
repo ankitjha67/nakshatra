@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import Reading from "../components/Reading.jsx";
-import { apiPost, CITIES } from "../lib/api.js";
+import CityPicker from "../components/CityPicker.jsx";
+import { apiPost } from "../lib/api.js";
+import { tzOffsetForDate } from "../lib/geo.js";
 
 const EVENT_TYPES = ["marriage", "childbirth", "job change", "relocation", "father's death",
   "mother's death", "accident", "major illness", "promotion", "education milestone"];
@@ -11,7 +13,7 @@ export default function BtrTab() {
   const [name, setName] = useState("");
   const [date, setDate] = useState("1990-08-15");
   const [time, setTime] = useState("14:30");
-  const [cityIdx, setCityIdx] = useState("0");
+  const [city, setCity] = useState(null);
   const [gender, setGender] = useState("other");
   const [sunrise, setSunrise] = useState("06:00");
   const [events, setEvents] = useState([{ date: "", type: "" }, { date: "", type: "" }, { date: "", type: "" }]);
@@ -26,11 +28,12 @@ export default function BtrTab() {
   const rectify = async () => {
     const evs = events.filter((e) => e.date && e.type.trim());
     if (evs.length < 1) { setErr("Add at least one dated life event (3-5 ideal)."); return; }
+    if (!city) { setErr("Search and select the place of birth."); return; }
     setErr(""); setBusy(true); setData(null);
     try {
-      const c = CITIES[parseInt(cityIdx, 10)];
       const resp = await apiPost("/v1/btr", {
-        name: name.trim() || "Friend", date, time, tz: c[3], lat: c[1], lon: c[2],
+        name: name.trim() || "Friend", date, time,
+        tz: tzOffsetForDate(city.tz, date, time), lat: city.lat, lon: city.lon,
         gender, sunrise_time: sunrise, events: evs,
       });
       setData(resp);
@@ -47,7 +50,7 @@ export default function BtrTab() {
         across the classical methods. The result is a confident window, not a certainty.
       </p>
 
-      <div className="card">
+      <div className="card glass">
         <p className="kicker">Birth details</p>
         <div className="grid">
           <div className="full"><label className="fld">Name</label>
@@ -63,13 +66,11 @@ export default function BtrTab() {
           <div><label className="fld">Sunrise (approx)</label>
             <input type="time" value={sunrise} onChange={(e) => setSunrise(e.target.value)} /></div>
           <div className="full"><label className="fld">Place of birth</label>
-            <select value={cityIdx} onChange={(e) => setCityIdx(e.target.value)}>
-              {CITIES.map((c, i) => <option key={i} value={i}>{c[0]}</option>)}
-            </select></div>
+            <CityPicker value={city?.label} onSelect={setCity} /></div>
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
+      <div className="card glass" style={{ marginTop: 16 }}>
         <p className="kicker">Dated life events (3-5 ideal)</p>
         {events.map((e, i) => (
           <div className="grid" key={i} style={{ marginBottom: 10, alignItems: "end" }}>

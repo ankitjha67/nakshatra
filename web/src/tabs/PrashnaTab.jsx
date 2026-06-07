@@ -1,12 +1,14 @@
 import React, { useState } from "react";
 import Reading from "../components/Reading.jsx";
-import { apiPost, CITIES } from "../lib/api.js";
+import CityPicker from "../components/CityPicker.jsx";
+import { apiPost } from "../lib/api.js";
+import { tzOffsetForDate } from "../lib/geo.js";
 
 // Prashna / KP horary, a chart is cast for the moment of asking (not a birth time).
 // One clear question + where you're asking from; the verdict is grounded and premise-neutral.
 export default function PrashnaTab() {
   const [q, setQ] = useState("");
-  const [cityIdx, setCityIdx] = useState("0");
+  const [city, setCity] = useState(null);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -14,10 +16,12 @@ export default function PrashnaTab() {
   const ask = async () => {
     const question = q.trim();
     if (!question || busy) return;
+    if (!city) { setErr("Search and select where you are asking from."); return; }
     setErr(""); setBusy(true); setData(null);
     try {
-      const c = CITIES[parseInt(cityIdx, 10)];
-      const resp = await apiPost("/v1/prashna", { question, lat: c[1], lon: c[2], tz: c[3] });
+      const now = new Date();
+      const tz = tzOffsetForDate(city.tz, now.toISOString().slice(0, 10), now.toTimeString().slice(0, 5));
+      const resp = await apiPost("/v1/prashna", { question, lat: city.lat, lon: city.lon, tz });
       setData(resp);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
@@ -28,7 +32,7 @@ export default function PrashnaTab() {
         KP horary, a chart is cast for the moment you ask. Pose one clear question; the verdict is read
         from the relevant house's cuspal sub-lord, with a neutral “if-not” branch. No premise is assumed true.
       </p>
-      <div className="card">
+      <div className="card glass">
         <p className="kicker">Your question</p>
         <div className="grid">
           <div className="full">
@@ -39,9 +43,7 @@ export default function PrashnaTab() {
           </div>
           <div className="full">
             <label className="fld">Where you are asking from</label>
-            <select value={cityIdx} onChange={(e) => setCityIdx(e.target.value)}>
-              {CITIES.map((c, i) => <option key={i} value={i}>{c[0]}</option>)}
-            </select>
+            <CityPicker value={city?.label} onSelect={setCity} />
           </div>
         </div>
         <div className="actions">

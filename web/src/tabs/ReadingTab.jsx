@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import BirthForm from "../components/BirthForm.jsx";
 import Reading from "../components/Reading.jsx";
+import Charts from "../components/Charts.jsx";
 import { apiPost } from "../lib/api.js";
 
 const NOW_YEAR = new Date().getFullYear();
@@ -12,14 +13,20 @@ export default function ReadingTab({ reportType, blurb, extra, onCast }) {
   const isYearly = reportType === "yearly";
   const [year, setYear] = useState(NOW_YEAR);
   const [data, setData] = useState(null); const [birth, setBirth] = useState(null);
+  const [chart, setChart] = useState(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const cast = async (b) => {
-    setErr(""); setBusy(true); setData(null);
+    setErr(""); setBusy(true); setData(null); setChart(null);
     try {
       const body = { ...b, report_type: reportType };
       if (isYearly) body.year = year;
-      const resp = await apiPost("/v1/reading", body);
+      // reading prose + raw chart (for the diagrams) in parallel
+      const [resp, chartResp] = await Promise.all([
+        apiPost("/v1/reading", body),
+        apiPost("/v1/chart", b).catch(() => null),
+      ]);
       setBirth(b); setData(resp);
+      if (chartResp) setChart(chartResp.chart);
       onCast && onCast(b);          // share the cast chart so Chat can ground on it
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
@@ -36,6 +43,7 @@ export default function ReadingTab({ reportType, blurb, extra, onCast }) {
       {blurb && <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>{blurb}</p>}
       <BirthForm onSubmit={cast} busy={busy} extra={isYearly ? yearPicker : extra} />
       <p className="err">{err}</p>
+      <Charts chart={chart} />
       <Reading data={data} birth={birth} />
     </div>
   );
