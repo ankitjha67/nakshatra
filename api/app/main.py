@@ -41,6 +41,7 @@ from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
 from .payments import handle_razorpay_webhook, PaymentError, TOPUP_PACKS
 from .mock_razorpay import checkout_event as _mock_checkout_event, refund_event as _mock_refund_event
+from . import pricing
 
 
 def _payments_secret() -> str:
@@ -507,6 +508,23 @@ def admin_reject_refund(rid: str, _: None = Depends(require_admin)):
         raise HTTPException(404, "Unknown refund request")
     get_store().refund_request_set_status(rid, "rejected")
     return {"status": "rejected"}
+
+
+@app.get("/admin/economics")
+def admin_economics(utilization: float = 1.0, readings: int = 30, _: None = Depends(require_admin)):
+    """Live unit economics + monthly run-cost projection from current tiers + rates."""
+    tiers = [pricing.tier_economics(k, t.price_inr_month, t.monthly_tokens,
+                                    utilization=utilization, readings_per_month=readings).__dict__
+             for k, t in TIERS.items() if t.price_inr_month]
+    return {
+        "rates": {"usd_inr": pricing.USD_INR, "gemini_in_usd_per_1m": pricing.GEMINI_IN_USD_PER_1M,
+                  "gemini_out_usd_per_1m": pricing.GEMINI_OUT_USD_PER_1M,
+                  "razorpay_pct": pricing.RAZORPAY_FEE_PCT, "gst_pct": pricing.GST_PCT},
+        "reading_cost_inr": round(pricing.reading_cost_inr(), 2),
+        "chat_inr_per_1k_tokens": round(pricing.chat_inr_per_token() * 1000, 3),
+        "tiers": tiers,
+        "platform_cost_projection": [pricing.monthly_platform_cost(n) for n in (100, 1000, 10000)],
+    }
 
 
 @app.get("/admin/reconcile/{uid}")
