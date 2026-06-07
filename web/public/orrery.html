@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Nakshatra, The Navagraha in Motion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ---- Nakshatra tokens (mirror of web/src/styles.css per DESIGN.md) ---- */
+  :root{
+    --ink:#0c0c16; --ink-soft:#2a2a38;
+    --cream:#f4ecdb; --paper:#fbf7ec;
+    --brass:#b48a4c; --brass-lt:#d6b677; --marigold:#c4682b;
+    --line:#d9cdb0; --muted:#7a735d;
+    /* dark-surface variants for the celestial hero */
+    --void:#05050b; --void-2:#0a0a16;
+    --cream-dim:rgba(244,236,219,.62);
+    --cream-faint:rgba(244,236,219,.34);
+    --hair-dark:rgba(214,182,119,.30);
+    --display:"Cormorant Garamond",Georgia,serif;
+    --body:"Hanken Grotesk",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--void);
+    color:var(--cream);
+    font-family:var(--body);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  /* film grain + vignette over the whole celestial field */
+  .grain,.vignette{position:fixed;inset:0;pointer-events:none;z-index:40}
+  .grain{
+    opacity:.05;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .vignette{
+    background:radial-gradient(120% 120% at 50% 42%,transparent 52%,rgba(0,0,0,.55) 100%);
+  }
+
+  /* ---- the 3D stage ---- */
+  #scene{position:fixed;inset:0;z-index:1;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  #scene:active{cursor:grabbing}
+  /* fallback sky when WebGL/THREE is unavailable */
+  body.no3d{overflow:auto}
+  body.no3d #scene{display:none}
+  #fallbackSky{
+    display:none;position:fixed;inset:0;z-index:1;
+    background:
+      radial-gradient(1px 1px at 20% 30%,#fff,transparent),
+      radial-gradient(1px 1px at 70% 60%,#fff,transparent),
+      radial-gradient(1px 1px at 40% 80%,rgba(255,255,255,.7),transparent),
+      radial-gradient(2px 2px at 85% 22%,rgba(255,255,255,.8),transparent),
+      radial-gradient(1px 1px at 55% 15%,rgba(255,255,255,.6),transparent),
+      radial-gradient(60% 60% at 50% 40%,#10101f 0%,#070710 60%,#04040a 100%);
+  }
+  body.no3d #fallbackSky{display:block}
+
+  /* ---- overlay scaffold ---- */
+  .overlay{position:fixed;inset:0;z-index:20;pointer-events:none}
+  .overlay > *{pointer-events:auto}
+
+  /* masthead */
+  .masthead{position:absolute;top:clamp(18px,3.4vw,34px);left:clamp(18px,3.4vw,40px)}
+  .wordmark{font-family:var(--display);font-weight:500;font-size:clamp(22px,3vw,30px);letter-spacing:.14em;color:var(--cream);line-height:1}
+  .wordmark .dot{color:var(--brass-lt)}
+  .submark{font-family:var(--mono);font-size:10px;letter-spacing:.42em;text-transform:uppercase;color:var(--cream-dim);margin-top:7px}
+
+  /* hero title block, lower-left so the sky breathes */
+  .herotext{position:absolute;left:clamp(18px,3.4vw,40px);bottom:clamp(96px,12vh,128px);max-width:min(34rem,82vw)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--brass-lt);margin:0 0 14px}
+  .herotext h1{
+    font-family:var(--display);font-weight:500;
+    font-size:clamp(38px,6vw,68px);line-height:.98;letter-spacing:.005em;
+    margin:0;color:var(--cream);
+  }
+  .herotext h1 em{font-style:italic;color:var(--brass-lt)}
+  .herotext p{
+    font-size:clamp(14px,1.5vw,16px);line-height:1.62;color:var(--cream-dim);
+    margin:18px 0 0;max-width:30rem;
+  }
+  .cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+  .btn{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;
+    padding:13px 22px;border-radius:10px;border:1px solid;cursor:pointer;
+    transition:transform .25s ease,background .25s ease,color .25s ease,border-color .25s ease;
+    text-decoration:none;display:inline-flex;align-items:center;gap:9px;background:none;
+  }
+  .btn-primary{background:var(--cream);color:var(--ink);border-color:var(--cream)}
+  .btn-primary:hover{background:var(--brass-lt);border-color:var(--brass-lt);transform:translateY(-2px)}
+  .btn-ghost{color:var(--cream);border-color:var(--hair-dark)}
+  .btn-ghost:hover{border-color:var(--brass-lt);color:var(--brass-lt);transform:translateY(-2px)}
+
+  /* hint bar */
+  .hint{
+    position:absolute;left:50%;transform:translateX(-50%);
+    bottom:clamp(20px,3.2vh,30px);
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--cream-faint);display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center;
+    padding:0 14px;text-align:center;
+  }
+  .hint .sep{width:4px;height:4px;border-radius:50%;background:var(--brass);opacity:.6}
+  body.no3d .hint{display:none}
+
+  /* zoom controls */
+  .zoom{position:absolute;right:clamp(16px,2.4vw,26px);bottom:clamp(20px,3.2vh,30px);display:flex;flex-direction:column;gap:8px}
+  .zoom button{
+    width:38px;height:38px;border-radius:10px;border:1px solid var(--hair-dark);
+    background:rgba(10,10,22,.5);color:var(--cream-dim);font-family:var(--display);font-size:22px;line-height:1;
+    cursor:pointer;backdrop-filter:blur(6px);transition:border-color .2s,color .2s;
+  }
+  .zoom button:hover{border-color:var(--brass-lt);color:var(--brass-lt)}
+  body.no3d .zoom{display:none}
+
+  /* planet panel, right card on desktop, bottom sheet on mobile */
+  .panel{
+    position:absolute;top:50%;right:clamp(18px,2.4vw,30px);transform:translateY(-50%) translateX(18px);
+    width:min(340px,86vw);
+    background:var(--paper);color:var(--ink);
+    border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 24px 64px rgba(0,0,0,.45);
+    padding:26px 26px 24px;
+    opacity:0;visibility:hidden;transition:opacity .35s ease,transform .35s ease,visibility .35s;
+  }
+  .panel.open{opacity:1;visibility:visible;transform:translateY(-50%) translateX(0)}
+  .panel .pk{font-family:var(--mono);font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--brass);margin:0 0 10px}
+  .panel h2{font-family:var(--display);font-weight:500;font-size:34px;line-height:1;margin:0;color:var(--ink)}
+  .panel .eng{font-family:var(--body);font-size:12.5px;letter-spacing:.04em;color:var(--muted);margin-top:6px}
+  .panel .fact{font-family:var(--mono);font-size:11.5px;line-height:1.65;color:var(--ink-soft);margin:18px 0 0;padding-top:16px;border-top:1px solid var(--line)}
+  .panel .role{font-family:var(--display);font-size:18.5px;font-style:italic;line-height:1.45;color:var(--ink);margin:16px 0 0}
+  .panel .role b{font-style:normal;font-weight:600;color:var(--brass)}
+  .panel .close{
+    position:absolute;top:16px;right:16px;width:30px;height:30px;border:none;background:none;cursor:pointer;
+    color:var(--muted);display:grid;place-items:center;border-radius:8px;transition:color .2s,background .2s;
+  }
+  .panel .close:hover{color:var(--ink);background:rgba(12,12,22,.05)}
+
+  @media (max-width:720px){
+    .panel{
+      top:auto;bottom:0;right:0;left:0;width:100%;transform:translateY(110%);
+      border-radius:18px 18px 0 0;border-bottom:none;padding:24px 22px calc(22px + env(safe-area-inset-bottom));
+      max-width:none;
+    }
+    .panel.open{transform:translateY(0)}
+    .herotext{bottom:clamp(120px,18vh,150px)}
+    .zoom{bottom:auto;top:clamp(96px,16vh,140px)}
+    .hint{font-size:9.5px;gap:9px}
+  }
+
+  /* fallback note */
+  .fb-note{display:none;position:fixed;left:50%;bottom:34px;transform:translateX(-50%);z-index:30;
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--cream-faint);text-align:center;max-width:30rem;padding:0 16px}
+  body.no3d .fb-note{display:block}
+
+  /* background mode (?bg): pure quiet backdrop, no overlay, no interaction */
+  body.bg .overlay,body.bg .hint,body.bg .zoom,body.bg .fb-note{display:none!important}
+  body.bg #scene{pointer-events:none!important}
+
+  @media (prefers-reduced-motion:reduce){
+    .panel,.btn,.zoom button{transition:none}
+  }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="fallbackSky"></div>
+
+  <div class="overlay">
+    <div class="masthead">
+      <div class="wordmark">Nakshatra<span class="dot">.</span></div>
+      <div class="submark">Vedic Astrology</div>
+    </div>
+
+    <div class="herotext">
+      <p class="kicker">The Navagraha in Motion</p>
+      <h1>Nine lights, one <em>sky</em>.</h1>
+      <p>This is the whole of Nakshatra, the wandering lights the ancients read, turning as they truly turn. Drag the heavens; tap any graha to learn what it governs in a chart.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#" id="ctaChart">Cast your chart</a>
+        <button class="btn btn-ghost" id="ctaExplore">Explore the grahas</button>
+      </div>
+    </div>
+
+    <div class="hint" id="hint">
+      <span>Drag to orbit</span><span class="sep"></span>
+      <span>Scroll or pinch to zoom</span><span class="sep"></span>
+      <span>Tap a planet</span>
+    </div>
+
+    <div class="zoom" aria-label="Zoom">
+      <button id="zin" title="Zoom in">+</button>
+      <button id="zout" title="Zoom out">&minus;</button>
+    </div>
+
+    <aside class="panel" id="panel" aria-live="polite">
+      <button class="close" id="pclose" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <p class="pk" id="pk">Graha</p>
+      <h2 id="pname">-</h2>
+      <div class="eng" id="peng"></div>
+      <p class="fact" id="pfact"></p>
+      <p class="role" id="prole"></p>
+    </aside>
+  </div>
+
+  <div class="fb-note">Your browser couldn’t start the 3D sky, the rest of Nakshatra reads without it.</div>
+
+  <div class="grain"></div>
+  <div class="vignette"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onerror="window.__noTHREE=true"></script>
+<script>
+(function(){
+  "use strict";
+  if(/[?&]bg/.test(location.search)) document.body.classList.add("bg");
+  var REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------- planet data (stylized scale; honest Vedic notes) ----------
+  // Heliocentric view. Vedic jyotisha is read geocentrically, from Earth.
+  var BODIES = [
+    { id:"mercury", kind:"Graha · Budha", name:"Budha", eng:"Mercury",
+      size:0.30, orbit:6.0, speed:1.60, spin:0.9, tilt:0.03, color:0x9a958c,
+      fact:"Smallest planet; airless, cratered, an 88-day year.",
+      role:"Karaka of <b>intellect, speech and commerce</b> - the quick mind and how it reasons and trades." },
+    { id:"venus", kind:"Graha · Shukra", name:"Shukra", eng:"Venus",
+      size:0.50, orbit:8.3, speed:1.17, spin:-0.2, tilt:0.05, color:0xd8c08a,
+      fact:"Hottest world, wrapped in thick cloud; it spins backward.",
+      role:"Karaka of <b>love, beauty, art and comfort</b> - pleasure, refinement and union." },
+    { id:"earth", kind:"The Vantage", name:"Prithvi", eng:"Earth",
+      size:0.55, orbit:10.8, speed:1.00, spin:1.0, tilt:0.41, color:0x2e6f8e, hasMoon:true,
+      fact:"The only world known to hold life; tilted 23.4°, which gives the seasons.",
+      role:"Not a graha but the <b>place the chart is cast from</b> - Vedic astrology reads the sky as seen from here." },
+    { id:"mars", kind:"Graha · Mangala", name:"Mangala", eng:"Mars",
+      size:0.40, orbit:13.2, speed:0.81, spin:0.95, tilt:0.44, color:0xb24a2a,
+      fact:"Rust-red, two tiny moons, and the tallest volcano in the system.",
+      role:"Karaka of <b>energy, courage, conflict and property</b> - drive, edge and the will to act." },
+    { id:"jupiter", kind:"Graha · Guru", name:"Guru", eng:"Jupiter",
+      size:1.55, orbit:17.8, speed:0.435, spin:2.2, tilt:0.05, color:0xcBa37a, banded:true, spot:true,
+      fact:"Largest planet; the Great Red Spot is a storm older than the telescope.",
+      role:"The great benefic, karaka of <b>wisdom, dharma, fortune and children</b>; expansion and grace." },
+    { id:"saturn", kind:"Graha · Shani", name:"Shani", eng:"Saturn",
+      size:1.28, orbit:22.4, speed:0.32, spin:2.0, tilt:0.47, color:0xc9b487, banded:true, ring:true,
+      fact:"Ringed gas giant so light it would float on water.",
+      role:"The great teacher, karaka of <b>discipline, time, karma and longevity</b>; what is earned slowly." },
+    { id:"uranus", kind:"Outer Planet", name:"Uranus", eng:"Aruna",
+      size:0.86, orbit:26.4, speed:0.23, spin:-1.4, tilt:1.61, color:0x9fd3d6, faintRing:true,
+      fact:"Tilted near 98° - it rolls along its orbit on its side.",
+      role:"Beyond the classical seven grahas; unknown to the ancient seers, it carries no traditional rulership." },
+    { id:"neptune", kind:"Outer Planet", name:"Neptune", eng:"Varuna",
+      size:0.83, orbit:29.8, speed:0.18, spin:1.5, tilt:0.49, color:0x3a5bd0,
+      fact:"Deep methane-blue and the windiest world we know.",
+      role:"Also beyond the classical seven; a modern planet, outside the traditional Navagraha scheme." }
+  ];
+  var SUN = {
+    id:"sun", kind:"Graha · Surya", name:"Surya", eng:"The Sun",
+    fact:"Holds 99.8% of the system’s mass; everything here orbits it.",
+    role:"The soul, the <b>atman</b> - king of the grahas; karaka of self, vitality and the father."
+  };
+  var MOON = {
+    id:"moon", kind:"Graha · Chandra", name:"Chandra", eng:"The Moon",
+    fact:"Drives the tides; keeps one face always turned toward Earth.",
+    role:"The mind, the <b>manas</b> - karaka of emotion and the mother; its nodes are read as Rahu and Ketu." }
+  ;
+
+  var sceneCanvas = document.getElementById("scene");
+
+  // ---------- graceful fallback ----------
+  function goFallback(){ document.body.classList.add("no3d"); }
+  if (window.__noTHREE || typeof THREE === "undefined"){ goFallback(); wireStatic(); return; }
+  try { var __t = document.createElement("canvas"); if(!(__t.getContext("webgl")||__t.getContext("experimental-webgl"))) throw 0; }
+  catch(e){ goFallback(); wireStatic(); return; }
+
+  // ---------- procedural textures (equirectangular, sphere-appropriate) ----------
+  function cvs(w,h){ var c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
+  function hex(n){ return "#"+("000000"+n.toString(16)).slice(-6); }
+  function rnd(a,b){ return a+Math.random()*(b-a); }
+
+  function noiseFill(ctx,w,h,base,amp){
+    var img=ctx.createImageData(w,h), d=img.data, b=base;
+    for(var i=0;i<d.length;i+=4){
+      var n=(Math.random()-0.5)*amp;
+      d[i]=clamp(b.r+n); d[i+1]=clamp(b.g+n); d[i+2]=clamp(b.b+n); d[i+3]=255;
+    }
+    ctx.putImageData(img,0,0);
+  }
+  function clamp(v){ return v<0?0:v>255?255:v|0; }
+  function toRGB(n){ return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
+
+  function craters(ctx,w,h,count,sz){
+    for(var i=0;i<count;i++){
+      var x=rnd(0,w),y=rnd(h*0.08,h*0.92),r=rnd(sz*0.4,sz);
+      var g=ctx.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0,"rgba(0,0,0,0.28)"); g.addColorStop(0.7,"rgba(0,0,0,0.05)"); g.addColorStop(0.88,"rgba(255,255,255,0.16)"); g.addColorStop(1,"rgba(255,255,255,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+    }
+  }
+
+  function texRocky(color,opts){
+    opts=opts||{}; var w=512,h=256,c=cvs(w,h),ctx=c.getContext("2d");
+    noiseFill(ctx,w,h,toRGB(color),opts.amp||34);
+    // mottling
+    for(var i=0;i<70;i++){ ctx.fillStyle="rgba("+(opts.dark?"20,14,10":"40,34,28")+","+rnd(0.04,0.12)+")";
+      ctx.beginPath(); ctx.ellipse(rnd(0,w),rnd(0,h),rnd(12,46),rnd(8,24),rnd(0,3),0,7); ctx.fill(); }
+    if(opts.craters) craters(ctx,w,h,opts.craters,opts.csz||18);
+    if(opts.caps){ // polar caps
+      var cap=ctx.createLinearGradient(0,0,0,h*0.16); cap.addColorStop(0,"rgba(245,245,255,0.92)"); cap.addColorStop(1,"rgba(245,245,255,0)");
+      ctx.fillStyle=cap; ctx.fillRect(0,0,w,h*0.16);
+      var cap2=ctx.createLinearGradient(0,h,0,h*0.86); cap2.addColorStop(0,"rgba(245,245,255,0.92)"); cap2.addColorStop(1,"rgba(245,245,255,0)");
+      ctx.fillStyle=cap2; ctx.fillRect(0,h*0.86,w,h*0.14);
+    }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texEarth(){
+    var w=512,h=256,c=cvs(w,h),ctx=c.getContext("2d");
+    ctx.fillStyle="#123a55"; ctx.fillRect(0,0,w,h);
+    noiseFill(ctx,w,h,{r:18,g:58,b:85},22);
+    // continents
+    ctx.fillStyle="#3f6b3a";
+    var blobs=[[90,150,60,40],[160,120,55,55],[250,170,70,45],[330,110,50,60],[410,160,60,40],[60,90,40,30],[300,70,45,30]];
+    blobs.forEach(function(b){ ctx.beginPath(); ctx.ellipse(b[0],b[1],b[2],b[3],rnd(0,3),0,7); ctx.fill(); });
+    // sand edges
+    ctx.globalAlpha=0.5; ctx.fillStyle="#7a7a45";
+    blobs.forEach(function(b){ ctx.beginPath(); ctx.ellipse(b[0],b[1],b[2]*0.7,b[3]*0.7,rnd(0,3),0,7); ctx.fill(); });
+    ctx.globalAlpha=1;
+    // poles
+    var cap=ctx.createLinearGradient(0,0,0,h*0.14); cap.addColorStop(0,"rgba(255,255,255,0.95)"); cap.addColorStop(1,"rgba(255,255,255,0)");
+    ctx.fillStyle=cap; ctx.fillRect(0,0,w,h*0.14);
+    var cap2=ctx.createLinearGradient(0,h,0,h*0.88); cap2.addColorStop(0,"rgba(255,255,255,0.95)"); cap2.addColorStop(1,"rgba(255,255,255,0)");
+    ctx.fillStyle=cap2; ctx.fillRect(0,h*0.88,w,h*0.12);
+    // clouds
+    ctx.fillStyle="rgba(255,255,255,0.5)";
+    for(var i=0;i<22;i++){ ctx.beginPath(); ctx.ellipse(rnd(0,w),rnd(20,h-20),rnd(20,46),rnd(6,12),rnd(0,3),0,7); ctx.fill(); }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texVenus(){
+    var w=512,h=256,c=cvs(w,h),ctx=c.getContext("2d");
+    noiseFill(ctx,w,h,{r:214,g:188,b:138},18);
+    for(var i=0;i<40;i++){ ctx.strokeStyle="rgba(180,150,90,"+rnd(0.05,0.16)+")"; ctx.lineWidth=rnd(6,20);
+      ctx.beginPath(); var y=rnd(0,h); ctx.moveTo(0,y); ctx.bezierCurveTo(w*0.3,y+rnd(-14,14),w*0.7,y+rnd(-14,14),w,y+rnd(-10,10)); ctx.stroke(); }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texBanded(color,opts){
+    opts=opts||{}; var w=512,h=256,c=cvs(w,h),ctx=c.getContext("2d");
+    var base=toRGB(color);
+    for(var y=0;y<h;y++){
+      var t=y/h;
+      var band=Math.sin(t*Math.PI*(opts.bands||9))*0.5+0.5;
+      var sh=(band-0.5)*(opts.contrast||46);
+      var wob=Math.sin(t*Math.PI*28)*4;
+      ctx.fillStyle="rgb("+clamp(base.r+sh+wob)+","+clamp(base.g+sh*0.92)+","+clamp(base.b+sh*0.7-wob)+")";
+      ctx.fillRect(0,y,w,1);
+    }
+    // turbulence streaks
+    ctx.globalAlpha=0.18;
+    for(var i=0;i<60;i++){ ctx.fillStyle=Math.random()>0.5?"#fff":"#000";
+      var yy=rnd(0,h); ctx.beginPath(); ctx.ellipse(rnd(0,w),yy,rnd(20,60),rnd(2,5),0,0,7); ctx.fill(); }
+    ctx.globalAlpha=1;
+    if(opts.spot){ // Great Red Spot
+      ctx.fillStyle="rgba(168,74,42,0.85)";
+      ctx.beginPath(); ctx.ellipse(w*0.66,h*0.64,34,18,0,0,7); ctx.fill();
+      ctx.strokeStyle="rgba(120,50,28,0.6)"; ctx.lineWidth=3; ctx.stroke();
+    }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texIce(color,opts){
+    opts=opts||{}; var w=512,h=256,c=cvs(w,h),ctx=c.getContext("2d");
+    var base=toRGB(color);
+    var g=ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,hex(color)); g.addColorStop(0.5,"rgb("+clamp(base.r+16)+","+clamp(base.g+16)+","+clamp(base.b+18)+")"); g.addColorStop(1,hex(color));
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    ctx.globalAlpha=0.12;
+    for(var i=0;i<9;i++){ ctx.fillStyle="#fff"; ctx.fillRect(0,(i/9)*h+rnd(-4,4),w,rnd(2,5)); }
+    ctx.globalAlpha=1;
+    if(opts.spot){ ctx.fillStyle="rgba(20,30,90,0.6)"; ctx.beginPath(); ctx.ellipse(w*0.4,h*0.58,26,15,0,0,7); ctx.fill(); }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texSun(){
+    var w=512,h=512,c=cvs(w,h),ctx=c.getContext("2d");
+    var g=ctx.createRadialGradient(w/2,h/2,40,w/2,h/2,w/2);
+    g.addColorStop(0,"#fff6d8"); g.addColorStop(0.4,"#ffcf63"); g.addColorStop(0.75,"#f59324"); g.addColorStop(1,"#d2620f");
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    // granulation
+    for(var i=0;i<2600;i++){ ctx.fillStyle="rgba("+(Math.random()>0.5?"255,240,180":"210,110,30")+","+rnd(0.05,0.22)+")";
+      ctx.beginPath(); ctx.arc(rnd(0,w),rnd(0,h),rnd(1,5),0,7); ctx.fill(); }
+    // sunspots
+    for(var j=0;j<6;j++){ ctx.fillStyle="rgba(120,50,10,0.4)"; ctx.beginPath(); ctx.arc(rnd(0,w),rnd(0,h),rnd(6,16),0,7); ctx.fill(); }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texRing(){
+    var w=512,h=24,c=cvs(w,h),ctx=c.getContext("2d");
+    for(var x=0;x<w;x++){
+      var t=x/w;
+      var a=0.18+Math.sin(t*Math.PI*22)*0.10+Math.sin(t*Math.PI*60)*0.05;
+      if(t>0.42&&t<0.5) a*=0.22;          // Cassini division
+      if(t<0.06||t>0.97) a*=0.2;          // faded edges
+      var shade=210+Math.sin(t*Math.PI*40)*30;
+      ctx.fillStyle="rgba("+clamp(shade)+","+clamp(shade-22)+","+clamp(shade-70)+","+Math.max(0,a)+")";
+      ctx.fillRect(x,0,1,h);
+    }
+    var t2=new THREE.CanvasTexture(c); t2.wrapS=THREE.ClampToEdgeWrapping; return t2;
+  }
+  function texFaintRing(){
+    var w=256,h=12,c=cvs(w,h),ctx=c.getContext("2d");
+    for(var x=0;x<w;x++){ var t=x/w,a=0.10+Math.sin(t*Math.PI*8)*0.05; ctx.fillStyle="rgba(200,225,228,"+Math.max(0,a)+")"; ctx.fillRect(x,0,1,h); }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function textureFor(b){
+    if(b.id==="earth") return texEarth();
+    if(b.id==="venus") return texVenus();
+    if(b.banded) return texBanded(b.color,{bands:b.id==="saturn"?12:9,contrast:b.id==="saturn"?30:46,spot:b.spot});
+    if(b.id==="uranus") return texIce(b.color,{});
+    if(b.id==="neptune") return texIce(b.color,{spot:true});
+    if(b.id==="mercury") return texRocky(b.color,{craters:120,csz:14,amp:30,dark:true});
+    if(b.id==="mars") return texRocky(b.color,{caps:true,amp:30,craters:30,csz:10});
+    return texRocky(b.color,{amp:30});
+  }
+
+  // remap RingGeometry UVs so the texture runs radially across the ring width
+  function fixRingUV(geo,inner,outer){
+    var pos=geo.attributes.position, uv=geo.attributes.uv, v=new THREE.Vector3();
+    for(var i=0;i<pos.count;i++){
+      v.fromBufferAttribute(pos,i);
+      var d=Math.sqrt(v.x*v.x+v.y*v.y);
+      uv.setXY(i,(d-inner)/(outer-inner),(Math.atan2(v.y,v.x)/(Math.PI*2))+0.5);
+    }
+    uv.needsUpdate=true;
+  }
+
+  // ---------- scene ----------
+  var renderer=new THREE.WebGLRenderer({canvas:sceneCanvas,antialias:true,alpha:false});
+  renderer.setClearColor(0x05050b,1);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+
+  var scene=new THREE.Scene();
+  scene.fog=new THREE.FogExp2(0x05050b,0.0065);
+  var camera=new THREE.PerspectiveCamera(52,1,0.1,400);
+
+  var ambient=new THREE.AmbientLight(0x33415c,0.22); scene.add(ambient);
+  var sunLight=new THREE.PointLight(0xfff1d6,3.0,260,1.4); scene.add(sunLight);
+
+  // sun
+  var sunGroup=new THREE.Group(); scene.add(sunGroup);
+  var sunMesh=new THREE.Mesh(new THREE.SphereGeometry(3.2,48,48),
+    new THREE.MeshBasicMaterial({map:texSun()}));
+  sunMesh.userData=SUN; sunGroup.add(sunMesh);
+
+  function glowSprite(size,opacity){
+    var c=cvs(128,128),ctx=c.getContext("2d");
+    var g=ctx.createRadialGradient(64,64,0,64,64,64);
+    g.addColorStop(0,"rgba(255,224,150,"+opacity+")"); g.addColorStop(0.4,"rgba(255,170,70,"+(opacity*0.5)+")"); g.addColorStop(1,"rgba(255,150,60,0)");
+    ctx.fillStyle=g; ctx.fillRect(0,0,128,128);
+    var s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true}));
+    s.scale.set(size,size,1); return s;
+  }
+  sunGroup.add(glowSprite(11,0.9));
+  sunGroup.add(glowSprite(20,0.4));
+
+  // starfield
+  (function(){
+    var N=2600,g=new THREE.BufferGeometry(),p=new Float32Array(N*3);
+    for(var i=0;i<N;i++){
+      var r=rnd(90,200),th=rnd(0,Math.PI*2),ph=Math.acos(rnd(-1,1));
+      p[i*3]=r*Math.sin(ph)*Math.cos(th); p[i*3+1]=r*Math.cos(ph); p[i*3+2]=r*Math.sin(ph)*Math.sin(th);
+    }
+    g.setAttribute("position",new THREE.BufferAttribute(p,3));
+    scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0xf4ecdb,size:0.7,sizeAttenuation:true,transparent:true,opacity:0.85})));
+  })();
+
+  // planets
+  var pickables=[sunMesh];
+  var planets=[];
+  BODIES.forEach(function(b){
+    var group=new THREE.Group(); scene.add(group);
+    var tilt=new THREE.Group(); tilt.rotation.z=b.tilt; group.add(tilt);
+    var mat=new THREE.MeshStandardMaterial({map:textureFor(b),roughness:1,metalness:0});
+    var mesh=new THREE.Mesh(new THREE.SphereGeometry(b.size,40,40),mat);
+    mesh.userData=b; tilt.add(mesh); pickables.push(mesh);
+
+    if(b.ring){
+      var inner=b.size*1.35,outer=b.size*2.3;
+      var rg=new THREE.RingGeometry(inner,outer,80); fixRingUV(rg,inner,outer);
+      var ring=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({map:texRing(),side:THREE.DoubleSide,transparent:true,opacity:0.92,depthWrite:false}));
+      ring.rotation.x=Math.PI/2.05; tilt.add(ring);
+    }
+    if(b.faintRing){
+      var ri=b.size*1.6,ro=b.size*1.95;
+      var rg2=new THREE.RingGeometry(ri,ro,64); fixRingUV(rg2,ri,ro);
+      var ring2=new THREE.Mesh(rg2,new THREE.MeshBasicMaterial({map:texFaintRing(),side:THREE.DoubleSide,transparent:true,opacity:0.5,depthWrite:false}));
+      tilt.add(ring2); // Uranus rings are near-vertical because of the extreme tilt
+    }
+
+    var moonPivot=null,moonMesh=null;
+    if(b.hasMoon){
+      moonPivot=new THREE.Group(); group.add(moonPivot);
+      moonMesh=new THREE.Mesh(new THREE.SphereGeometry(0.16,28,28),
+        new THREE.MeshStandardMaterial({map:texRocky(0x9a948b,{craters:60,csz:8,amp:26,dark:true}),roughness:1,metalness:0}));
+      moonMesh.userData=MOON; moonMesh.position.set(b.size+0.9,0,0);
+      moonPivot.add(moonMesh); pickables.push(moonMesh);
+    }
+
+    // orbit line
+    var seg=160,og=new THREE.BufferGeometry(),op=new Float32Array(seg*3);
+    for(var i=0;i<seg;i++){ var a=i/seg*Math.PI*2; op[i*3]=Math.cos(a)*b.orbit; op[i*3+1]=0; op[i*3+2]=Math.sin(a)*b.orbit; }
+    og.setAttribute("position",new THREE.BufferAttribute(op,3));
+    scene.add(new THREE.LineLoop(og,new THREE.LineBasicMaterial({color:0xb48a4c,transparent:true,opacity:0.16})));
+
+    planets.push({b:b,group:group,mesh:mesh,moonPivot:moonPivot,moonMesh:moonMesh,angle:rnd(0,Math.PI*2)});
+  });
+
+  // selection halo
+  var halo=glowSprite(1,0.55); halo.visible=false; scene.add(halo);
+  var selected=null;
+
+  // ---------- camera controls (custom spherical orbit) ----------
+  var camR=34, camTheta=0.7, camPhi=1.12;
+  var R_MIN=9, R_MAX=70, PHI_MIN=0.28, PHI_MAX=1.46;
+  function applyCam(){
+    camera.position.set(
+      camR*Math.sin(camPhi)*Math.cos(camTheta),
+      camR*Math.cos(camPhi),
+      camR*Math.sin(camPhi)*Math.sin(camTheta)
+    );
+    camera.lookAt(0,0,0);
+  }
+
+  var pointers=new Map(), lastInteract=performance.now(), downInfo=null, pinchStart=0, pinchR=camR;
+  function pe(e){ return {x:e.clientX,y:e.clientY}; }
+
+  sceneCanvas.addEventListener("pointerdown",function(e){
+    sceneCanvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId,pe(e));
+    lastInteract=performance.now();
+    if(pointers.size===1) downInfo={x:e.clientX,y:e.clientY,t:performance.now()};
+    if(pointers.size===2){ pinchStart=pinchDist(); pinchR=camR; downInfo=null; }
+  });
+  sceneCanvas.addEventListener("pointermove",function(e){
+    if(!pointers.has(e.pointerId)) return;
+    var prev=pointers.get(e.pointerId); pointers.set(e.pointerId,pe(e));
+    lastInteract=performance.now();
+    if(pointers.size===1){
+      var dx=e.clientX-prev.x, dy=e.clientY-prev.y;
+      if(Math.abs(dx)+Math.abs(dy)>3 && downInfo) downInfo.moved=true;
+      camTheta-=dx*0.005;
+      camPhi=Math.max(PHI_MIN,Math.min(PHI_MAX,camPhi-dy*0.005));
+      applyCam(); if(REDUCED) render();
+    } else if(pointers.size===2){
+      var d=pinchDist();
+      if(pinchStart>0){ camR=Math.max(R_MIN,Math.min(R_MAX,pinchR*(pinchStart/d))); applyCam(); if(REDUCED) render(); }
+    }
+  });
+  function endPtr(e){
+    if(pointers.size===1 && downInfo && !downInfo.moved && (performance.now()-downInfo.t)<420){ tryPick(downInfo); }
+    pointers.delete(e.pointerId); downInfo=null;
+    if(pointers.size<2) pinchStart=0;
+  }
+  sceneCanvas.addEventListener("pointerup",endPtr);
+  sceneCanvas.addEventListener("pointercancel",endPtr);
+  function pinchDist(){ var a=Array.from(pointers.values()); var dx=a[0].x-a[1].x,dy=a[0].y-a[1].y; return Math.hypot(dx,dy)||1; }
+
+  sceneCanvas.addEventListener("wheel",function(e){
+    e.preventDefault();
+    camR=Math.max(R_MIN,Math.min(R_MAX,camR+e.deltaY*0.02));
+    lastInteract=performance.now(); applyCam(); if(REDUCED) render();
+  },{passive:false});
+
+  document.getElementById("zin").onclick=function(){ camR=Math.max(R_MIN,camR-4); lastInteract=performance.now(); applyCam(); if(REDUCED) render(); };
+  document.getElementById("zout").onclick=function(){ camR=Math.min(R_MAX,camR+4); lastInteract=performance.now(); applyCam(); if(REDUCED) render(); };
+
+  // ---------- picking + panel ----------
+  var ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+  function tryPick(info){
+    var rect=sceneCanvas.getBoundingClientRect();
+    ndc.x=((info.x-rect.left)/rect.width)*2-1;
+    ndc.y=-((info.y-rect.top)/rect.height)*2+1;
+    ray.setFromCamera(ndc,camera);
+    var hits=ray.intersectObjects(pickables,false);
+    if(hits.length){ selectMesh(hits[0].object); }
+    else { closePanel(); }
+  }
+  function selectMesh(m){
+    selected=m;
+    var d=m.userData;
+    document.getElementById("pk").textContent=d.kind;
+    document.getElementById("pname").textContent=d.name;
+    document.getElementById("peng").textContent=d.eng;
+    document.getElementById("pfact").textContent=d.fact;
+    document.getElementById("prole").innerHTML=d.role;
+    document.getElementById("panel").classList.add("open");
+    var s=(m.geometry.parameters.radius||3.2)*3.4;
+    halo.scale.set(s,s,1); halo.visible=true;
+  }
+  function closePanel(){ document.getElementById("panel").classList.remove("open"); selected=null; halo.visible=false; }
+  document.getElementById("pclose").onclick=closePanel;
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape") closePanel(); });
+
+  // ---------- resize ----------
+  function resize(){
+    var w=window.innerWidth,h=window.innerHeight;
+    renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+    if(REDUCED) render();
+  }
+  window.addEventListener("resize",resize); resize(); applyCam();
+
+  // ---------- render / animate ----------
+  var ORBIT=0.11, tmp=new THREE.Vector3();
+  function step(dt,now){
+    sunMesh.rotation.y+=dt*0.12;
+    planets.forEach(function(pl){
+      pl.angle+=pl.b.speed*dt*ORBIT;
+      var x=Math.cos(pl.angle)*pl.b.orbit, z=Math.sin(pl.angle)*pl.b.orbit;
+      pl.group.position.set(x,0,z);
+      pl.mesh.rotation.y+=pl.b.spin*dt;
+      if(pl.moonPivot){ pl.moonPivot.rotation.y+=dt*1.4; }
+    });
+    // idle auto-rotate
+    if(pointers.size===0 && (now-lastInteract)>2600){ camTheta+=dt*0.035; applyCam(); }
+    if(selected){ selected.getWorldPosition(tmp); halo.position.copy(tmp); }
+  }
+  function render(){ renderer.render(scene,camera); }
+
+  var running=true, last=performance.now();
+  function loop(now){
+    if(!running){ return; }
+    var dt=Math.min((now-last)/1000,0.05); last=now;
+    step(dt,now); render();
+    requestAnimationFrame(loop);
+  }
+
+  if(REDUCED){
+    // static sky: place planets once, allow dragging (handlers call render())
+    planets.forEach(function(pl){ var x=Math.cos(pl.angle)*pl.b.orbit,z=Math.sin(pl.angle)*pl.b.orbit; pl.group.position.set(x,0,z); });
+    render();
+  } else {
+    requestAnimationFrame(loop);
+    // pause when the stage scrolls out of view (matters when embedded as a section)
+    if("IntersectionObserver" in window){
+      new IntersectionObserver(function(es){
+        es.forEach(function(en){
+          if(en.isIntersecting && !running){ running=true; last=performance.now(); requestAnimationFrame(loop); }
+          else if(!en.isIntersecting){ running=false; }
+        });
+      },{threshold:0.02}).observe(sceneCanvas);
+    }
+    document.addEventListener("visibilitychange",function(){
+      if(document.hidden){ running=false; }
+      else if(!running){ running=true; last=performance.now(); requestAnimationFrame(loop); }
+    });
+  }
+
+  // CTA: explore -> open the Sun (Surya) as a starting point
+  document.getElementById("ctaExplore").onclick=function(){ selectMesh(sunMesh); };
+
+  // ---------- static-only wiring (shared) ----------
+  function wireStatic(){
+    var ex=document.getElementById("ctaExplore"); if(ex) ex.onclick=function(){};
+  }
+})();
+</script>
+</body>
+</html>

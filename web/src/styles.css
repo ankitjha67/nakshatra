@@ -12,7 +12,7 @@
 html{background:var(--void)}
 body{margin:0;background:transparent;color:var(--cream);font-family:"Hanken Grotesk",system-ui,sans-serif;line-height:1.6}
 /* original, code-rendered starfield + nebula (CelestialBackground.jsx) sits behind everything */
-.celestial{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:block;pointer-events:none}
+.celestial{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:block;pointer-events:none;border:0}
 /* film grain + vignette over the whole celestial field (subtle, pointer-transparent) */
 body::before,body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9999}
 body::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");opacity:.06;mix-blend-mode:overlay}
@@ -23,6 +23,8 @@ header.site{display:flex;align-items:baseline;justify-content:space-between;padd
 .brand{font-family:"Cormorant Garamond",serif;font-size:30px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--cream)}
 .who{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--cream-dim)}
 .who button{margin-left:10px}
+.who button.ghost{color:var(--cream-dim);border-color:var(--hair-dark)}
+.who button.ghost:hover{color:var(--brass-lt);border-color:var(--brass-lt)}
 .tabs{display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--hair-dark);padding:8px 0 0;margin-bottom:22px}
 .tab{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
   padding:9px 13px;border:1px solid transparent;border-bottom:none;border-radius:9px 9px 0 0;color:var(--cream-dim);background:transparent}
@@ -30,7 +32,7 @@ header.site{display:flex;align-items:baseline;justify-content:space-between;padd
 .tab.active{color:var(--ink);background:var(--paper);border-color:var(--line)}
 .tab .lock{margin-left:6px;color:var(--muted);display:inline-flex;vertical-align:middle}
 .tab .lock svg{display:block}
-.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.45)}
+.card{background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.45)}
 /* a cream "sheet" floating on the void: holds reading prose so ink text stays readable */
 .sheet{background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:14px;
   padding:24px 26px;box-shadow:0 24px 64px rgba(0,0,0,.45);margin-top:24px}
@@ -39,7 +41,7 @@ h1,h2{font-family:"Cormorant Garamond",serif;font-weight:500}
 label.fld{display:block;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid .full{grid-column:1/-1}
-input,select{width:100%;font:inherit;font-size:15px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+input,select,textarea{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px}
 input:focus,select:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(180,138,76,.18)}
 button{cursor:pointer;font:inherit;font-size:15px;border:1px solid var(--ink);background:var(--ink);color:var(--cream);padding:11px 18px;border-radius:10px}
 button.ghost{background:transparent;color:var(--ink)}
@@ -65,7 +67,7 @@ button:disabled{opacity:.5;cursor:default}
 /* Chat, a calm reading-room conversation (DESIGN.md): paper/cream bubbles,
    hairline, serif for the model's voice, mono for meta. */
 .chat{display:flex;flex-direction:column;gap:12px;margin:6px 0 16px;min-height:80px}
-.msg{max-width:85%;padding:12px 15px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+.msg{max-width:85%;padding:12px 15px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink)}
 .msg p{margin:0}
 .msg.user{align-self:flex-end;background:var(--cream);border-bottom-right-radius:4px}
 .msg.assistant{align-self:flex-start;border-bottom-left-radius:4px;font-family:"Cormorant Garamond",serif;font-size:19px;line-height:1.5;color:var(--ink)}
