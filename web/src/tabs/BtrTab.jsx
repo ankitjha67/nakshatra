@@ -93,7 +93,7 @@ export default function BtrTab() {
       <p className="err">{err}</p>
 
       {rec && (
-        <div style={{ marginTop: 24 }}>
+        <div className="sheet">
           <p className="kicker">Most likely birth time</p>
           <div className="meter">
             <div className="meter-track"><div className="meter-fill" style={{ width: `${rec.confidence || 0}%` }} /></div>

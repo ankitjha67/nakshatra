@@ -3,26 +3,37 @@
   --brass:#b48a4c; --marigold:#c4682b; --line:#d9cdb0; --muted:#7a735d;
   /* functional (non-palette) tokens, surfaces & states, not brand accents */
   --field:#fff; --err:#9a2b1f;
+  /* interstellar surfaces for the celestial field */
+  --void:#05050b; --brass-lt:#d6b677;
+  --cream-dim:rgba(244,236,219,.66); --cream-faint:rgba(244,236,219,.40);
+  --hair-dark:rgba(214,182,119,.28);
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--cream);color:var(--ink);font-family:"Hanken Grotesk",system-ui,sans-serif;line-height:1.6}
-/* Film grain + subtle vignette over the full-bleed "printed page" (DESIGN.md). Static, pointer-transparent. */
+html{background:var(--void)}
+body{margin:0;background:transparent;color:var(--cream);font-family:"Hanken Grotesk",system-ui,sans-serif;line-height:1.6}
+/* original, code-rendered starfield + nebula (CelestialBackground.jsx) sits behind everything */
+.celestial{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:block;pointer-events:none}
+/* film grain + vignette over the whole celestial field (subtle, pointer-transparent) */
 body::before,body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9999}
-body::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");opacity:.045}
-body::after{background:radial-gradient(120% 100% at 50% 0%,transparent 62%,color-mix(in srgb,var(--ink) 12%,transparent) 100%)}
+body::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");opacity:.06;mix-blend-mode:overlay}
+body::after{background:radial-gradient(120% 120% at 50% 40%,transparent 54%,rgba(0,0,0,.55) 100%)}
 .wrap{max-width:820px;margin:0 auto;padding:0 22px}
 a{color:var(--marigold);text-decoration:none}
 header.site{display:flex;align-items:baseline;justify-content:space-between;padding:26px 0 10px}
-.brand{font-family:"Cormorant Garamond",serif;font-size:30px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
-.who{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.brand{font-family:"Cormorant Garamond",serif;font-size:30px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--cream)}
+.who{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--cream-dim)}
 .who button{margin-left:10px}
-.tabs{display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--line);padding:8px 0 0;margin-bottom:22px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--hair-dark);padding:8px 0 0;margin-bottom:22px}
 .tab{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
-  padding:9px 13px;border:1px solid transparent;border-bottom:none;border-radius:9px 9px 0 0;color:var(--muted);background:transparent}
+  padding:9px 13px;border:1px solid transparent;border-bottom:none;border-radius:9px 9px 0 0;color:var(--cream-dim);background:transparent}
+.tab:hover{color:var(--brass-lt)}
 .tab.active{color:var(--ink);background:var(--paper);border-color:var(--line)}
 .tab .lock{margin-left:6px;color:var(--muted);display:inline-flex;vertical-align:middle}
 .tab .lock svg{display:block}
-.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 14px 40px rgba(12,12,22,.05)}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.45)}
+/* a cream "sheet" floating on the void: holds reading prose so ink text stays readable */
+.sheet{background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:14px;
+  padding:24px 26px;box-shadow:0 24px 64px rgba(0,0,0,.45);margin-top:24px}
 .kicker{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--brass);margin:0 0 14px}
 h1,h2{font-family:"Cormorant Garamond",serif;font-weight:500}
 label.fld{display:block;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
@@ -70,7 +81,7 @@ button:disabled{opacity:.5;cursor:default}
 /* Admin dashboard, stat cards + hairline table */
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 @media(max-width:640px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
-.stat{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.stat{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 16px 44px rgba(0,0,0,.4)}
 .stat-v{font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:600;color:var(--ink);line-height:1}
 .stat-k{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:7px}
 .admin-tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
@@ -78,4 +89,4 @@ button:disabled{opacity:.5;cursor:default}
 .admin-tbl td{border-bottom:1px solid var(--line);padding:9px 10px;color:var(--ink-soft);vertical-align:top}
 .admin-tbl .mono{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
 button.sm{padding:5px 11px;font-size:12px}
-footer.site{padding:28px 0;border-top:1px solid var(--line);color:var(--muted);font-size:12px;font-family:"IBM Plex Mono",monospace;margin-top:30px}
+footer.site{padding:28px 0;border-top:1px solid var(--hair-dark);color:var(--cream-faint);font-size:12px;font-family:"IBM Plex Mono",monospace;margin-top:30px}
