@@ -112,7 +112,8 @@ def test_new_balance_opens_with_monthly_grant():
 def test_store_first_balance_is_opening_grant_and_logs_it():
     s = MemoryStore()
     b = s.credit_balance("u1", TIERS["pro"], now=T0)
-    assert b["available"] == 500_000 and b["grant"] == 500_000 and b["topup"] == 0
+    g = TIERS["pro"].monthly_tokens
+    assert b["available"] == g and b["grant"] == g and b["topup"] == 0
     led = s.credit_ledger("u1")
     assert led and led[0]["type"] == "grant"
 
@@ -121,7 +122,7 @@ def test_store_debit_decrements_and_writes_ledger():
     s = MemoryStore()
     s.credit_balance("u1", TIERS["pro"], now=T0)              # init 500k
     b = s.credit_debit("u1", TIERS["pro"], 1234, reason="chat turn", ref="msg1", now=T0)
-    assert b["available"] == 500_000 - 1234
+    assert b["available"] == TIERS["pro"].monthly_tokens - 1234
     assert b["daily_used"] == 1234
     led = s.credit_ledger("u1")
     assert led[0]["type"] == "debit" and led[0]["tokens"] == 1234 and led[0]["ref"] == "msg1"
@@ -136,9 +137,10 @@ def test_store_debit_never_below_zero():
 
 def test_store_topup_then_debit_order():
     s = MemoryStore()
-    s.credit_balance("u1", TIERS["basic"], now=T0)            # grant 50k
+    g = TIERS["basic"].monthly_tokens
+    s.credit_balance("u1", TIERS["basic"], now=T0)            # opening grant
     s.credit_topup("u1", TIERS["basic"], 100_000, reason="pack", ref="pay1", now=T0)
-    b = s.credit_debit("u1", TIERS["basic"], 60_000, now=T0)  # spends 50k grant + 10k topup
+    b = s.credit_debit("u1", TIERS["basic"], g + 10_000, now=T0)  # exhaust grant + 10k from topup
     assert b["grant"] == 0 and b["topup"] == 90_000 and b["available"] == 90_000
 
 

@@ -70,6 +70,13 @@ def _prod_readiness():
     """Log loud warnings for risky prod config (dev defaults, open CORS, etc.)."""
     for msg in get_settings().startup_warnings():
         log.warning("PROD READINESS: %s", msg)
+    # Financial guardrail: every paid tier's grant must be profit-gated (>=50% margin
+    # at full utilization). A drift here means a tier could run at a loss.
+    for k, t in TIERS.items():
+        if t.monthly_tokens and not pricing.tier_is_gated(t.price_inr_month, t.monthly_tokens):
+            log.warning("PRICING GATE: tier '%s' grant %d exceeds its 50%%-margin gate (%d) — "
+                        "it can run at a loss at full utilization.",
+                        k, t.monthly_tokens, pricing.gated_grant_tokens(t.price_inr_month))
 
 
 @app.get("/health")
@@ -126,8 +133,15 @@ def reading(birth: BirthDetails, p: Principal = Depends(require_principal)):
         raise HTTPException(402, f"Readings are not included in the {p.tier.label} tier. Upgrade to Basic or higher.")
     enforce_quota(p)
     enforce_global_breaker()
+    store = get_store()
+    # readings draw on the same metered AI allowance as chat (the cost gate)
+    if p.tier.monthly_tokens and store.credit_balance(p.user_id, p.tier)["available"] <= 0:
+        raise HTTPException(402, "You're out of credits for this cycle — upgrade or add a top-up.")
     resp = get_reading(birth, p.tier)
-    get_store().record(p.key, resp.meta.tokens_in, resp.meta.tokens_out, reading=True)
+    cost = int(resp.meta.tokens_in) + int(resp.meta.tokens_out)
+    if cost:                                  # cache hits cost 0 tokens -> free
+        store.credit_debit(p.user_id, p.tier, cost, reason="reading", ref=resp.meta.chart_hash)
+    store.record(p.key, resp.meta.tokens_in, resp.meta.tokens_out, reading=True)
     return resp
 
 
@@ -516,7 +530,19 @@ def admin_economics(utilization: float = 1.0, readings: int = 30, _: None = Depe
     tiers = [pricing.tier_economics(k, t.price_inr_month, t.monthly_tokens,
                                     utilization=utilization, readings_per_month=readings).__dict__
              for k, t in TIERS.items() if t.price_inr_month]
+    gate = []
+    for k, t in TIERS.items():
+        if not t.monthly_tokens:
+            continue
+        net = t.price_inr_month / (1 + pricing.GST_PCT)
+        worst = t.monthly_tokens * pricing.PLAN_INR_PER_TOKEN
+        gate.append({"tier": k, "price_inr": t.price_inr_month, "grant": t.monthly_tokens,
+                     "gated_grant": pricing.gated_grant_tokens(t.price_inr_month),
+                     "is_gated": pricing.tier_is_gated(t.price_inr_month, t.monthly_tokens),
+                     "worst_case_margin_pct": round((net - worst - t.price_inr_month * pricing.RAZORPAY_FEE_PCT * (1 + pricing.GST_PCT)) / net * 100, 1)})
     return {
+        "gate": gate,
+        "plan_inr_per_token": pricing.PLAN_INR_PER_TOKEN,
         "rates": {"usd_inr": pricing.USD_INR, "gemini_in_usd_per_1m": pricing.GEMINI_IN_USD_PER_1M,
                   "gemini_out_usd_per_1m": pricing.GEMINI_OUT_USD_PER_1M,
                   "razorpay_pct": pricing.RAZORPAY_FEE_PCT, "gst_pct": pricing.GST_PCT},

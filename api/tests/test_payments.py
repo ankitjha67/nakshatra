@@ -55,7 +55,7 @@ def test_subscription_sets_tier_and_grants_tokens():
     res = handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
     assert res["status"] == "subscription" and res["tier"] == "pro"
     bal = s.credit_balance("u1", TIERS["pro"])
-    assert bal["grant"] == TIERS["pro"].monthly_tokens == 500_000
+    assert bal["grant"] == TIERS["pro"].monthly_tokens
     assert any(e["type"] in ("grant",) for e in s.credit_ledger("u1"))
 
 
@@ -102,7 +102,7 @@ def test_subscription_replay_no_double_grant():
     again = handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
     assert again["status"] == "duplicate"
     bal = s.credit_balance("u1", TIERS["basic"])
-    assert bal["grant"] == 50_000 and bal["topup"] == 5_000
+    assert bal["grant"] == TIERS["basic"].monthly_tokens and bal["topup"] == 5_000
 
 
 def _refund(payment_id, refund_id="rfnd_1"):
@@ -136,7 +136,7 @@ def test_refund_of_subscription_downgrades_to_free():
     s = MemoryStore()
     raw, sig = _signed(_sub("subscription.charged", "u1", "pro", sub_id="sub_R"))
     handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
-    assert s.get_user("u1")["tier"] == "pro" and s.credit_balance("u1", TIERS["pro"])["grant"] == 500_000
+    assert s.get_user("u1")["tier"] == "pro" and s.credit_balance("u1", TIERS["pro"])["grant"] == TIERS["pro"].monthly_tokens
     rraw, rsig = _signed(_refund("sub_R", refund_id="rfnd_3"))
     res = handle_razorpay_webhook(rraw, rsig, SECRET, s, TIERS)
     assert res["status"] == "refund"

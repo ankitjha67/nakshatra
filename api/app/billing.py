@@ -65,10 +65,13 @@ ALL_SECTIONS = frozenset({
 _PRO_SECTIONS = ALL_SECTIONS | frozenset({"yearly"})
 
 TIERS: dict[str, Tier] = {
+    # monthly_tokens are PROFIT-GATED: each is <= pricing.gated_grant_tokens(price) so
+    # that at full utilization (readings + chat both metered against this allowance)
+    # cost stays <= 50% of net revenue after GST + Razorpay. See docs/COST_MODEL.md.
     "free":  Tier("free",  "Free",        0,    frozenset(),                       False, 5,    3, monthly_tokens=0),
-    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing"}), True, 50, 10, monthly_tokens=50_000),
-    "pro":   Tier("pro",   "Pro",         999,  _PRO_SECTIONS,                     True,  500,  30, allow_async=True, monthly_tokens=500_000),
-    "enterprise": Tier("enterprise", "API / Business", 4999, _PRO_SECTIONS,        True,  10000, 120, allow_async=True, api_access=True, monthly_tokens=5_000_000),
+    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing"}), True, 50, 10, monthly_tokens=150_000),
+    "pro":   Tier("pro",   "Pro",         999,  _PRO_SECTIONS,                     True,  500,  30, allow_async=True, monthly_tokens=600_000),
+    "enterprise": Tier("enterprise", "API / Business", 4999, _PRO_SECTIONS,        True,  10000, 120, allow_async=True, api_access=True, monthly_tokens=3_000_000),
 }
 
 

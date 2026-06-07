@@ -75,6 +75,32 @@ def tier_economics(tier_key: str, price_inr: int, monthly_tokens: int,
                          round(price_for_target, 0))
 
 
+# Conservative, output-heavy PLANNING rate (₹/token) used to GATE tier grants so a
+# worst-case (full-utilization, output-skewed) cycle still clears the margin target.
+# Higher than the realistic blended rate on purpose — the gate must not under-protect.
+PLAN_INR_PER_TOKEN = 0.00062     # ~30% input / 70% output at $1.25/$10 per 1M, ₹/$ 84
+
+
+def monthly_llm_budget_inr(price_inr: int, target_margin: float = 0.5) -> float:
+    """Max LLM spend per cycle (readings + chat) that still leaves `target_margin`
+    after GST and Razorpay. This is the hard cost ceiling per paying user."""
+    net = price_inr / (1 + GST_PCT)
+    razorpay = price_inr * RAZORPAY_FEE_PCT * (1 + GST_PCT)
+    return net * (1 - target_margin) - razorpay
+
+
+def gated_grant_tokens(price_inr: int, target_margin: float = 0.5) -> int:
+    """The largest monthly token grant a tier can offer at `price_inr` and still
+    hold `target_margin` at full utilization (conservative planning rate)."""
+    budget = monthly_llm_budget_inr(price_inr, target_margin)
+    return int(max(0.0, budget) / PLAN_INR_PER_TOKEN)
+
+
+def tier_is_gated(price_inr: int, monthly_tokens: int, target_margin: float = 0.5) -> bool:
+    """True if this (price, grant) pair is guaranteed >= target_margin at worst case."""
+    return monthly_tokens <= gated_grant_tokens(price_inr, target_margin)
+
+
 def monthly_platform_cost(active_users: int, avg_utilization: float = 0.3,
                           avg_monthly_tokens: int = 500_000, avg_readings: int = 20) -> dict:
     """Projected monthly run cost (INR) at a given active-user count."""
