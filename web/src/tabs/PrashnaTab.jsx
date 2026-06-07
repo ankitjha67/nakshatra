@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import Reading from "../components/Reading.jsx";
 import { apiPost, CITIES } from "../lib/api.js";
 
-// Prashna / KP horary — a chart is cast for the moment of asking (not a birth time).
+// Prashna / KP horary, a chart is cast for the moment of asking (not a birth time).
 // One clear question + where you're asking from; the verdict is grounded and premise-neutral.
 export default function PrashnaTab() {
   const [q, setQ] = useState("");
@@ -25,7 +25,7 @@ export default function PrashnaTab() {
   return (
     <div>
       <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>
-        KP horary — a chart is cast for the moment you ask. Pose one clear question; the verdict is read
+        KP horary, a chart is cast for the moment you ask. Pose one clear question; the verdict is read
         from the relevant house's cuspal sub-lord, with a neutral “if-not” branch. No premise is assumed true.
       </p>
       <div className="card">

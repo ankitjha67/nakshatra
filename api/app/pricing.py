@@ -1,4 +1,4 @@
-"""Unit economics & cost model — configurable, so it stays correct as rates move.
+"""Unit economics & cost model, configurable, so it stays correct as rates move.
 
 All rates are overridable via env (Settings) but ship with mid-2026 defaults:
   - Gemini 2.5 Pro: $1.25 / 1M input tokens, $10 / 1M output tokens.
@@ -77,7 +77,7 @@ def tier_economics(tier_key: str, price_inr: int, monthly_tokens: int,
 
 # Conservative, output-heavy PLANNING rate (₹/token) used to GATE tier grants so a
 # worst-case (full-utilization, output-skewed) cycle still clears the margin target.
-# Higher than the realistic blended rate on purpose — the gate must not under-protect.
+# Higher than the realistic blended rate on purpose, the gate must not under-protect.
 PLAN_INR_PER_TOKEN = 0.00062     # ~30% input / 70% output at $1.25/$10 per 1M, ₹/$ 84
 
 

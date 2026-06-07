@@ -5,11 +5,11 @@ import React from "react";
 export default function CreditsWidget({ balance }) {
   const available = balance?.available;
   const title = balance
-    ? `AI tokens for readings & chat — grant ${(balance.grant ?? 0).toLocaleString()} · top-up ${(balance.topup ?? 0).toLocaleString()}`
+    ? `AI tokens for readings & chat, grant ${(balance.grant ?? 0).toLocaleString()} · top-up ${(balance.topup ?? 0).toLocaleString()}`
     : "";
   return (
     <span className="credits" title={title}>
-      credits: {available == null ? "—" : available.toLocaleString()}
+      credits: {available == null ? "-" : available.toLocaleString()}
     </span>
   );
 }

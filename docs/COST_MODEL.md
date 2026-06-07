@@ -10,7 +10,7 @@ never exceed revenue and that every paid tier holds **≥50% contribution margin
 100% utilization:
 
 1. **All LLM cost is metered against one per-cycle allowance.** Previously chat was metered
-   but **readings were not** — they cost Vertex tokens yet were bounded only by the daily
+   but **readings were not** - they cost Vertex tokens yet were bounded only by the daily
    call limit (e.g. Pro = 500 calls/day), an *unbounded* cost exposure. Now both readings
    and chat debit the same token allowance; **cached readings cost 0**. A user who exhausts
    the allowance gets `402` (upgrade / top-up). This caps per-user cost at the grant.
@@ -30,7 +30,7 @@ never exceed revenue and that every paid tier holds **≥50% contribution margin
 | Enterprise | ₹4999 | ₹4,236 | ₹118 | ₹2,000 | 3,226,199 | **3,000,000** | **53.3%** ✅ |
 
 Chosen grants sit **below** the gate (headroom), so worst-case cost (₹93 / ₹372 / ₹1,860)
-is well under both the budget and net revenue — **run-cost < revenue for every tier, always.**
+is well under both the budget and net revenue - **run-cost < revenue for every tier, always.**
 *(Change from the previous plan: Basic 50k→150k and Pro 500k→600k became more generous;
 Enterprise 5M→3M, because 5M exceeded its gate and could run at a loss.)*
 
@@ -40,8 +40,8 @@ blended chat rate). The gate holds if, at worst case, `grant × actual_rate ≤ 
 
 | shock | effect | still ≥50%? |
 |-------|--------|-------------|
-| Realistic blended use (~₹0.00032/tok) | cost ≈ half the planned | **Yes**, margins 70–80% |
-| USD→INR 84 → 92 (+10%) | token cost +10% | Yes — headroom absorbs it; if not, re-run the gate |
+| Realistic blended use (~₹0.00032/tok) | cost ≈ half the planned | **Yes**, margins 70-80% |
+| USD→INR 84 → 92 (+10%) | token cost +10% | Yes, headroom absorbs it; if not, re-run the gate |
 | Gemini output price +20% | planning rate rises | Re-run `gated_grant_tokens`; trim grants if a tier un-gates (CI catches it) |
 
 The single source of truth is `pricing.py`; bump the rate constants and the gate + tests
@@ -52,7 +52,7 @@ Fixed baseline ≈ **₹2,600/mo** (Cloud Run scales to zero; Firestore/Hosting 
 low volume; domain). Per-user **contribution** (net − Razorpay − worst-case LLM) is
 ≈ **₹153 (Basic) / ₹451 (Pro) / ₹2,258 (Enterprise)** at full use, higher at realistic use.
 So the platform covers its fixed cost at roughly **17 Basic / 6 Pro / 2 Enterprise** paying
-users — and every paying user beyond that is ≥50%-margin profit. Free users incur ~₹0 LLM
+users, and every paying user beyond that is ≥50%-margin profit. Free users incur ~₹0 LLM
 cost (chart-only, no LLM).
 
 ## Guardrails that keep it true

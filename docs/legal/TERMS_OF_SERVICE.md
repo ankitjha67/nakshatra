@@ -1,6 +1,6 @@
-# Terms of Service — Nakshatra
+# Terms of Service, Nakshatra
 
-> **TEMPLATE — NOT LEGAL ADVICE.** Drafted for review by a qualified lawyer in your
+> **TEMPLATE, NOT LEGAL ADVICE.** Drafted for review by a qualified lawyer in your
 > jurisdiction. Replace every `[bracketed]` placeholder and confirm compliance with
 > Indian law (incl. the DPDP Act 2023 and Consumer Protection Act) and any other
 > market you serve (e.g. EU GDPR). **Effective date:** `[DATE]`.
@@ -11,7 +11,7 @@ apps, and API (the "Service"), operated by `[COMPANY LEGAL NAME]`, `[ADDRESS]` (
 [Privacy Policy](PRIVACY_POLICY.md), [Refund & Cancellation Policy](REFUND_POLICY.md), and
 [Copyright & IP Notice](COPYRIGHT.md). If you do not agree, do not use the Service.
 
-## 1. Nature of the Service — important disclaimer
+## 1. Nature of the Service, important disclaimer
 Nakshatra generates Vedic-astrology readings and a chat experience grounded in a computed
 birth chart. **The Service is provided for personal reflection, cultural interest, and
 guidance only. It is NOT professional advice and is not a substitute for medical, legal,

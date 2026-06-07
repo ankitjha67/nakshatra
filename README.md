@@ -4,9 +4,9 @@ Tiered Vedic-astrology product. Precision engine → deterministic findings → 
 grounded, cited readings. Subscription tiers unlock more report types and sections; a metered LLM chat
 answers follow-ups about the user's own chart.
 
-- **`api/`** — FastAPI backend → Google Cloud Run.
-- **`web/`** — Vite + React frontend → Firebase Hosting.
-- **`docs/`** — design specs + the phased build plan.
+- **`api/`** - FastAPI backend → Google Cloud Run.
+- **`web/`** - Vite + React frontend → Firebase Hosting.
+- **`docs/`** - design specs + the phased build plan.
 
 **Start here:** [`CLAUDE.md`](./CLAUDE.md), then [`docs/BUILD_PLAN.md`](./docs/BUILD_PLAN.md).
 

@@ -22,11 +22,11 @@ const USER_TIER = "pro";
 // render(ctx) receives shared app state: { onCast, lastBirth, setBalance }.
 const TABS = [
   { key: "natal", label: "Natal", min: "basic",
-    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} blurb={"A focused natal reading — essence, mind, relationships, work, and timing. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} blurb={"A focused natal reading, essence, mind, relationships, work, and timing. " + ALLOWANCE_NOTE} /> },
   { key: "maha", label: "Maha-Kundali", min: "pro",
-    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} blurb={"The complete report — all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
   { key: "yearly", label: "Yearly", min: "pro",
-    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} blurb={"A year-scoped forecast (Varshphal) — your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
   { key: "prashna", label: "Prashna", min: "pro",
     render: () => <PrashnaTab /> },
   { key: "chat", label: "Chat", min: "basic",
@@ -85,7 +85,7 @@ export default function App() {
 
       {PREVIEW && (
         <p className="devbar">
-          Dev preview — no Firebase configured. Readings call the local API (<b>{USER_TIER}</b> tier). Add <b>web/.env</b> for real sign-in.
+          Dev preview, no Firebase configured. Readings call the local API (<b>{USER_TIER}</b> tier). Add <b>web/.env</b> for real sign-in.
         </p>
       )}
 
@@ -116,7 +116,7 @@ export default function App() {
   );
 }
 
-// Hand-drawn hairline lock (per DESIGN.md) — replaces the 🔒 emoji on locked tabs. Inherits --muted.
+// Hand-drawn hairline lock (per DESIGN.md), replaces the 🔒 emoji on locked tabs. Inherits --muted.
 function LockIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -126,7 +126,7 @@ function LockIcon() {
   );
 }
 
-// Paywall card for a locked tab — pricing and included sections come from /v1/tiers.
+// Paywall card for a locked tab, pricing and included sections come from /v1/tiers.
 function Paywall({ tab, tiers }) {
   const t = tiers.find((x) => x.key === tab.min);
   const name = t ? t.label : tab.min;

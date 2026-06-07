@@ -60,7 +60,7 @@ ALL_SECTIONS = frozenset({
 })
 
 # Pro+ also unlock the report-scoped "yearly" (Varshphal) section. It's kept OUT of
-# ALL_SECTIONS on purpose so maha_kundali (= ALL_SECTIONS) never renders it — only a
+# ALL_SECTIONS on purpose so maha_kundali (= ALL_SECTIONS) never renders it, only a
 # report_type="yearly" request, whose REPORT_TYPES set includes "yearly", does.
 _PRO_SECTIONS = ALL_SECTIONS | frozenset({"yearly"})
 
@@ -77,8 +77,8 @@ TIERS: dict[str, Tier] = {
 
 def _allowance_note(t: Tier) -> str:
     if t.monthly_tokens <= 0:
-        return "Birth chart only — no AI reading or chat."
-    return (f"{t.monthly_tokens:,} AI tokens / month — one allowance shared by readings "
+        return "Birth chart only, no AI reading or chat."
+    return (f"{t.monthly_tokens:,} AI tokens / month, one allowance shared by readings "
             f"and chat. Repeat (cached) readings are free.")
 
 
@@ -104,7 +104,7 @@ class ReportType:
 
 
 # "yearly" carries a (Phase 3) yearly section that isn't in ALL_SECTIONS yet, so it
-# is dropped by the tier intersection until then — the rest of its set still renders.
+# is dropped by the tier intersection until then, the rest of its set still renders.
 REPORT_TYPES: dict[str, ReportType] = {
     "natal":        ReportType("natal", "Natal", "basic",
                                frozenset({"essence", "mind", "relationships", "career", "timing", "spirit"})),
@@ -126,7 +126,7 @@ def report_type_catalog() -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# credit ledger — doc <-> Balance mapping + the shared mutation planner
+# credit ledger, doc <-> Balance mapping + the shared mutation planner
 # --------------------------------------------------------------------------- #
 def _as_dt(v, fallback: datetime) -> datetime:
     """Coerce a stored cycle timestamp to a tz-aware datetime. Firestore returns
@@ -223,7 +223,7 @@ class Store:
     # jobs
     def job_put(self, job_id: str, value: dict) -> None: ...
     def job_get(self, job_id: str) -> Optional[dict]: ...
-    # credit ledger (money path — server-side + atomic; see docs/CREDIT_LEDGER.md)
+    # credit ledger (money path, server-side + atomic; see docs/CREDIT_LEDGER.md)
     def credit_balance(self, uid: str, tier: "Tier", now: Optional[datetime] = None) -> dict: ...
     def credit_debit(self, uid: str, tier: "Tier", cost: int, reason: str = "chat turn",
                      ref: Optional[str] = None, now: Optional[datetime] = None) -> dict: ...
@@ -254,11 +254,11 @@ class Store:
     def list_bans(self) -> list: ...
     def list_users(self) -> list: ...
     def all_payments(self) -> list: ...
-    # chat persistence (NOT the money path — best-effort)
+    # chat persistence (NOT the money path, best-effort)
     def chat_save_turn(self, uid: str, chat_id: str, chart_hash: str, user_text: str,
                        assistant_text: str, tokens: int, msg_id: str,
                        now: Optional[datetime] = None) -> str: ...
-    # payment idempotency — True if this id is newly recorded, False if already seen
+    # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
     def global_tokens_today(self) -> int: ...
@@ -785,7 +785,7 @@ def get_store() -> Store:
     if s.store_backend == "postgres":
         raise NotImplementedError("PostgresStore: implement with SQLAlchemy/asyncpg (see ARCHITECTURE.md).")
     store = MemoryStore()
-    # dev keys so the API is usable out of the box (DO NOT ship these) — never in prod
+    # dev keys so the API is usable out of the box (DO NOT ship these), never in prod
     if s.app_env != "prod":
         store.create_key("free_dev_key", "u_free", "free")
         store.create_key("basic_dev_key", "u_basic", "basic")

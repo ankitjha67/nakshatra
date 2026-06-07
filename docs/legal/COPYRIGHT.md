@@ -1,13 +1,13 @@
-# Copyright & Intellectual Property Notice — Nakshatra
+# Copyright & Intellectual Property Notice, Nakshatra
 
-> **TEMPLATE — NOT LEGAL ADVICE.** Review with counsel. **Effective date:** `[DATE]`.
+> **TEMPLATE, NOT LEGAL ADVICE.** Review with counsel. **Effective date:** `[DATE]`.
 
 © `[YEAR]` `[COMPANY LEGAL NAME]`. All rights reserved.
 
 ## Ownership
-The Nakshatra Service — including the proprietary **calculation engine**, the rules/findings
+The Nakshatra Service, including the proprietary **calculation engine**, the rules/findings
 layer, prompts, software, source code, user interface, design, text, graphics, the
-"Nakshatra" name and logo, and all related intellectual property — is owned by
+"Nakshatra" name and logo, and all related intellectual property, is owned by
 `[COMPANY LEGAL NAME]` or its licensors and is protected by copyright, trademark, and other
 laws in India and internationally. The proprietary engine is confidential and is **not**
 licensed to you; reverse engineering or extraction is prohibited (see the Terms of Service).

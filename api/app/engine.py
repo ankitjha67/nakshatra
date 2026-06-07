@@ -7,7 +7,7 @@ This is the ONE place your calculation code plugs in. Set in the environment:
     ENGINE_VERSION=maha-jyotish-7.0
 
 Your callable receives a plain dict (the BirthDetails fields) and must return a
-JSON-serialisable dict — whatever your engine already emits. The rules layer is
+JSON-serialisable dict, whatever your engine already emits. The rules layer is
 written defensively, so it adapts to common shapes; see app/rules.py for the
 fields it looks for. If the import fails for any reason, the bundled mock engine
 runs instead so the service always boots (handy in CI and for the frontend).
@@ -38,7 +38,7 @@ def _load() -> None:
     _LOADED = True
     s = get_settings()
     if not s.engine_module:
-        log.warning("No ENGINE_MODULE set — using bundled mock engine.")
+        log.warning("No ENGINE_MODULE set, using bundled mock engine.")
         _ENGINE = compute_mock_chart
         _ENGINE_VERSION = s.engine_version or ENGINE_VERSION_FALLBACK
         return
@@ -48,7 +48,7 @@ def _load() -> None:
         _ENGINE = fn
         _ENGINE_VERSION = s.engine_version or getattr(mod, "__version__", "engine-unknown")
         log.info("Loaded engine %s.%s (v%s)", s.engine_module, s.engine_callable, _ENGINE_VERSION)
-    except Exception as exc:  # noqa: BLE001 — never let a bad import take the service down
+    except Exception as exc:  # noqa: BLE001, never let a bad import take the service down
         log.error("Engine import failed (%s); falling back to mock.", exc)
         _ENGINE = compute_mock_chart
         _ENGINE_VERSION = ENGINE_VERSION_FALLBACK

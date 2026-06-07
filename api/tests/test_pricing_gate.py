@@ -1,6 +1,6 @@
 """Profit gate: every paid tier must be guaranteed >=50% margin at full utilization.
 
-This is the financial invariant the FP&A model enforces — if someone edits a tier's
+This is the financial invariant the FP&A model enforces, if someone edits a tier's
 price or grant into a loss-making combination, CI fails here.
 """
 from app import pricing

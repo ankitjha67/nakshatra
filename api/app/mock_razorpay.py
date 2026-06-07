@@ -1,8 +1,8 @@
-"""Mock Razorpay gateway — DEV/TEST ONLY.
+"""Mock Razorpay gateway, DEV/TEST ONLY.
 
 Builds correctly-*signed* webhook payloads (subscription charge, one-time top-up,
-refund) so they flow through the real `handle_razorpay_webhook` path — signature
-verification, idempotency, crediting/reversal — without contacting Razorpay.
+refund) so they flow through the real `handle_razorpay_webhook` path, signature
+verification, idempotency, crediting/reversal, without contacting Razorpay.
 Gated to non-prod in main.py. Used by the /mock/razorpay/* endpoints and the
 payments stress test.
 """

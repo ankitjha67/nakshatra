@@ -1,6 +1,6 @@
-# Refund & Cancellation Policy — Nakshatra
+# Refund & Cancellation Policy, Nakshatra
 
-> **TEMPLATE — NOT LEGAL ADVICE.** Review with counsel; align with the Consumer Protection
+> **TEMPLATE, NOT LEGAL ADVICE.** Review with counsel; align with the Consumer Protection
 > Act and any mandatory rights. Razorpay requires a clear, published refund policy.
 > **Effective date:** `[DATE]`.
 
@@ -28,7 +28,7 @@
    credits/tier are reversed automatically when the refund is processed.
 
 ## Processing time
-Approved refunds are initiated within `[5–7]` business days; your bank/card issuer may take
+Approved refunds are initiated within `[5-7]` business days; your bank/card issuer may take
 additional time to post the credit.
 
 ## Fraud, abuse, and chargebacks

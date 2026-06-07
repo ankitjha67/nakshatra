@@ -6,7 +6,7 @@ topup, respects the daily ceiling, persists topups across a cycle reset, and
 writes ledger entries. Pure math is tested directly; persistence is tested
 through MemoryStore (single-threaded → same atomic semantics as the Firestore
 transaction). Firestore security rules are not unit-tested here (they need the
-emulator) — see docs/CREDIT_LEDGER.md and web/firestore.rules.
+emulator), see docs/CREDIT_LEDGER.md and web/firestore.rules.
 """
 from datetime import datetime, timezone
 

@@ -78,7 +78,7 @@ def test_topup_pack_adds_topup_balance():
 
 def test_topup_unknown_amount_ignored():
     s = MemoryStore()
-    raw, sig = _signed(_payment(12300, "u1"))            # ₹123 — no pack
+    raw, sig = _signed(_payment(12300, "u1"))            # ₹123, no pack
     assert handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)["status"] == "ignored"
 
 
@@ -172,7 +172,7 @@ def test_subscription_noncharge_events_do_not_grant():
 
 
 def test_subscription_charge_amount_equal_to_pack_is_not_a_topup():
-    # A Basic sub charge is ₹299 — same as the ₹299 top-up pack. invoice_id must prevent a topup.
+    # A Basic sub charge is ₹299, same as the ₹299 top-up pack. invoice_id must prevent a topup.
     s = MemoryStore()
     pay = {"event": "payment.captured", "payload": {"payment": {"entity": {
         "id": "pay_sub1", "amount": 29900, "invoice_id": "inv_1", "notes": {"user_id": "u1"}}}}}

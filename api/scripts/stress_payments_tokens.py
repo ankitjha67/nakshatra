@@ -2,9 +2,9 @@
 
 Run against a LOCAL dev server (mock engine/LLM/gateway). It does two things:
 
-  1. LOAD  — fires concurrent mixed traffic (readings, chat, mock checkout) and
+  1. LOAD, fires concurrent mixed traffic (readings, chat, mock checkout) and
      reports throughput + latency percentiles + error rates under peak load.
-  2. FRAUD — attempts the known payment/token modus operandi and asserts each is
+  2. FRAUD, attempts the known payment/token modus operandi and asserts each is
      blocked (signature forgery, replay, duplicate-event, amount tamper, IDOR,
      cross-user refund, auth bypass, refund double-reversal, unknown pack), and
      PROBES the known concurrency gaps (chat race / per-minute limit) and reports
@@ -102,7 +102,7 @@ RESULTS = []
 
 def check(name, passed, detail=""):
     RESULTS.append((name, passed, detail))
-    print(f"  [{'PASS' if passed else 'FAIL'}] {name} {('— ' + detail) if detail else ''}")
+    print(f"  [{'PASS' if passed else 'FAIL'}] {name} {('- ' + detail) if detail else ''}")
 
 
 def fraud_matrix():
@@ -167,7 +167,7 @@ def fraud_matrix():
 
 
 # --------------------------------------------------------------------------- #
-# 3. CONCURRENCY PROBES (known gaps — report, don't assert)
+# 3. CONCURRENCY PROBES (known gaps, report, don't assert)
 # --------------------------------------------------------------------------- #
 def concurrency_probes():
     print("\n=== CONCURRENCY PROBES (known gaps; informational) ===")
@@ -182,7 +182,7 @@ def concurrency_probes():
         res = list(ex.map(lambda _: req("POST", "/v1/chat", {"birth": BIRTH, "message": "hi"}, key="ent_dev_key")[0], range(20)))
     ok = sum(1 for c in res if c == 200)
     print(f"  chat race: 20 concurrent chats (ample balance) -> {ok} succeeded as expected; "
-          f"the check-then-debit race only risks overspend NEAR zero balance — tracked in SECURITY.md")
+          f"the check-then-debit race only risks overspend NEAR zero balance, tracked in SECURITY.md")
 
 
 if __name__ == "__main__":

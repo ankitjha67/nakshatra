@@ -1,8 +1,8 @@
-# docs/CREDIT_LEDGER.md — Token credits, metering, and grounded chat
+# docs/CREDIT_LEDGER.md, Token credits, metering, and grounded chat
 
 The chat is pay-as-you-go on a **token credit ledger**. Each tier grants a monthly token allowance;
 higher tiers grant more; users can buy top-up packs; every chat turn debits actual tokens used.
-**All metering is server-side and atomic.** This is a money path — see the guardrails.
+**All metering is server-side and atomic.** This is a money path, see the guardrails.
 
 ## Unit
 
@@ -63,7 +63,7 @@ chat_id?, message, history?}`:
 
 1. **Verify** the Firebase ID token → `uid` (reuse `auth.require_principal`). Load `users/{uid}`,
    running cycle-reset and daily-reset if due.
-2. **Pre-check (advisory):** if `available <= 0` → `402` `{detail:"You're out of chat credits — upgrade
+2. **Pre-check (advisory):** if `available <= 0` → `402` `{detail:"You're out of chat credits, upgrade
    or add a top-up."}`. If `daily_tokens_used >= DAILY_TOKEN_CEILING` → `429` (abuse ceiling).
    *Do not call the LLM if blocked.*
 3. **Build the grounded prompt:** load/compute the chart + `derive_findings(chart)` (reuse `pipeline`).

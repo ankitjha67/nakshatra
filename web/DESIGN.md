@@ -1,4 +1,4 @@
-# web/DESIGN.md — Nakshatra design system (binding)
+# web/DESIGN.md, Nakshatra design system (binding)
 
 This is the visual contract for everything in `web/`. Follow it from the first frontend commit.
 `web/src/styles.css` is the live source of the tokens; this file explains the *intent* and the rules so
@@ -7,7 +7,7 @@ the look stays coherent. **Do not introduce a different aesthetic.** When unsure
 
 ## The brand, in one line
 
-Nakshatra is **antiquarian-celestial editorial luxury** for Vedic astrology — a quiet, scholarly,
+Nakshatra is **antiquarian-celestial editorial luxury** for Vedic astrology, a quiet, scholarly,
 sacred-but-never-kitsch feel, like a finely printed old star atlas. It is *not* a generic SaaS dashboard,
 not a "mystical app" of neon purple gradients and crystal-ball clip-art, not a startup landing page.
 
@@ -17,7 +17,7 @@ Mood words: antiquarian, celestial, editorial, contemplative, literate, warm, re
 
 **Never:**
 - ❌ No emoji used as icons or decoration anywhere in the UI (no 🔮 ✨ 🌟 🔒 as graphics). Emoji are a tell
-  of generic AI design. *(Known fix: `App.jsx` currently uses a 🔒 emoji on locked tabs — replace it with
+  of generic AI design. *(Known fix: `App.jsx` currently uses a 🔒 emoji on locked tabs, replace it with
   the hand-drawn SVG lock below.)*
 - ❌ No "AI-sparkle" motifs, no generic purple→blue gradient blobs, no glassmorphism, no neon glow.
 - ❌ No stock clip-art, cartoon planets, or zodiac-cartoon mascots.
@@ -27,10 +27,10 @@ Mood words: antiquarian, celestial, editorial, contemplative, literate, warm, re
 
 **Always:**
 - ✅ Use the established type pairing and palette (below).
-- ✅ Hand-crafted inline **SVG** icons — thin, single-weight line icons (see the Google "G" in
+- ✅ Hand-crafted inline **SVG** icons, thin, single-weight line icons (see the Google "G" in
   `SignIn.jsx` for the level of craft). Geometric, celestial-leaning where natural (rings, orbits, stars
-  as fine strokes — not emoji stars).
-- ✅ Real **photography** when imagery is needed — astronomy/observatory/manuscript/night-sky textures,
+  as fine strokes, not emoji stars).
+- ✅ Real **photography** when imagery is needed, astronomy/observatory/manuscript/night-sky textures,
   not illustration. Source from Unsplash; prefer dark, grainy, archival-feeling images. Reuse the
   project's own assets first (the planet plates and poster in `web/public/`).
 - ✅ Film **grain** + subtle **vignette** on full-bleed/hero surfaces (the `body::before/::after` pattern
@@ -40,9 +40,9 @@ Mood words: antiquarian, celestial, editorial, contemplative, literate, warm, re
 - ✅ UI copy: warm, literate, second person, never breathless or salesy; no pet names; no exclamation
   spam. Readings are "for reflection, not fixed prediction."
 
-## Tokens (authoritative — mirror of `styles.css`)
+## Tokens (authoritative, mirror of `styles.css`)
 
-**Color** (CSS variables; never hardcode hexes — use the vars):
+**Color** (CSS variables; never hardcode hexes, use the vars):
 | var | hex | role |
 |-----|-----|------|
 | `--ink` | `#0c0c16` | primary text; near-black blue-black |
@@ -50,19 +50,19 @@ Mood words: antiquarian, celestial, editorial, contemplative, literate, warm, re
 | `--cream` | `#f4ecdb` | page background |
 | `--paper` | `#fbf7ec` | raised surfaces (cards) |
 | `--brass` | `#b48a4c` | accents, kickers, links (used sparingly), focus ring |
-| `--marigold` | `#c4682b` | rare hot accent / link hover — use lightly |
+| `--marigold` | `#c4682b` | rare hot accent / link hover, use lightly |
 | `--line` | `#d9cdb0` | hairline borders & dividers |
 | `--muted` | `#7a735d` | meta text, captions, mono labels |
 
 Usage: ink/ink-soft for text on cream/paper; brass for small accents and the focus ring; marigold only
 as an occasional emphasis. Brass/marigold must **not** be used for body text (contrast). A dark mode is
-out of scope unless explicitly requested — the identity is the warm cream/ink "printed page".
+out of scope unless explicitly requested, the identity is the warm cream/ink "printed page".
 
 **Type:**
 - Display / headings → **Cormorant Garamond** (serif), weights 400/500/600. Headlines are large and
-  set in 500–600.
+  set in 500-600.
 - Body / UI → **Hanken Grotesk** (sans), 400/500/600.
-- Labels / kickers / meta / numbers → **IBM Plex Mono**, 400/500, UPPERCASE, letter-spacing ~0.12–0.28em.
+- Labels / kickers / meta / numbers → **IBM Plex Mono**, 400/500, UPPERCASE, letter-spacing ~0.12-0.28em.
 - Kicker pattern: small mono, uppercase, wide tracking, `--brass`, sits above a headline.
 
 **Shape & depth:**
@@ -78,9 +78,9 @@ out of scope unless explicitly requested — the identity is the warm cream/ink 
 - **Card**: the `.card` surface for forms, paywalls, stubs.
 - **Birth form**: the `BirthForm` layout (2-col grid, mono field labels, city `<select>` + custom
   coords). Keep it.
-- **Reading**: `Reading.jsx` — Cormorant summary with a left brass rule, each section as serif H3 + body,
+- **Reading**: `Reading.jsx` - Cormorant summary with a left brass rule, each section as serif H3 + body,
   and the mono **"Drawn from: …"** footer listing cited finding titles in brass. This footer is a core
-  brand signal (it's how we *show* the anti-slop grounding) — keep it on every reading-type tab.
+  brand signal (it's how we *show* the anti-slop grounding), keep it on every reading-type tab.
 - **Tabs**: mono uppercase tab labels; active tab = paper surface with a hairline top border.
 - **Paywall card** (locked tab): kicker + Cormorant "Unlocks on a higher plan" + muted explanation +
   (later) a ₹-priced upgrade affordance. Calm, not pushy.
@@ -91,26 +91,26 @@ out of scope unless explicitly requested — the identity is the warm cream/ink 
 ## Imagery & the reference assets
 
 In `web/public/` (treat as the tone reference and reuse them):
-- `nakshatra-orrery.html` — the 3D Three.js orrery; this is the reference for a **hero/landing** moment
+- `nakshatra-orrery.html` - the 3D Three.js orrery; this is the reference for a **hero/landing** moment
   and the overall celestial mood. It can be embedded/linked as a landing route.
-- `planet-plates/*.png` — photoreal planet portraits (from NASA textures). Use as section/tab imagery
-  (e.g., a Saturn plate beside the Saturn-heavy timing section). Don't redraw planets — use these.
-- `the-wandering-lights-poster.png` — the editorial poster; reference for layout/typographic rhythm.
+- `planet-plates/*.png` - photoreal planet portraits (from NASA textures). Use as section/tab imagery
+  (e.g., a Saturn plate beside the Saturn-heavy timing section). Don't redraw planets, use these.
+- `the-wandering-lights-poster.png` - the editorial poster; reference for layout/typographic rhythm.
 
 When a surface needs new imagery and these don't fit, use real Unsplash photography matching the mood
-(observatories, star fields, old star charts, brass instruments) — dark, grainy, archival. Always favor
+(observatories, star fields, old star charts, brass instruments), dark, grainy, archival. Always favor
 photography or the existing plates over any illustration.
 
 ## Per-tab visual intent
 
 Keep one coherent system; vary tone subtly, not structure.
-- **Natal / Maha-Kundali** — the editorial reading layout (kicker, summary, sections, "Drawn from").
-  Maha is the "complete report" — it can feel a touch grander (more sections), same language.
-- **Yearly** — same reading layout + a restrained year picker; a forward/temporal feel.
-- **Prashna** — single question + location; quieter, oracular, focused; a clear verdict block.
-- **Chat** — a calm reading-room conversation; message bubbles must stay on-brand (paper/cream, hairline,
+- **Natal / Maha-Kundali** - the editorial reading layout (kicker, summary, sections, "Drawn from").
+  Maha is the "complete report" - it can feel a touch grander (more sections), same language.
+- **Yearly** - same reading layout + a restrained year picker; a forward/temporal feel.
+- **Prashna** - single question + location; quieter, oracular, focused; a clear verdict block.
+- **Chat** - a calm reading-room conversation; message bubbles must stay on-brand (paper/cream, hairline,
   serif for the model's voice is fine, mono for meta); a small mono credits indicator, not a loud meter.
-- **Birth-Time Rectification** — instrument-like, precise; a confidence meter rendered as a fine
+- **Birth-Time Rectification** - instrument-like, precise; a confidence meter rendered as a fine
   hairline/brass scale, never a chunky progress bar.
 
 ## Accessibility
@@ -121,6 +121,6 @@ Keep one coherent system; vary tone subtly, not structure.
 ## A limit worth knowing
 
 Claude Code can **match and extend** this system (reuse the tokens, the plates, the orrery, these rules)
-but it cannot regenerate the photoreal planet art or a new 3D scene from scratch — those were made in a
+but it cannot regenerate the photoreal planet art or a new 3D scene from scratch, those were made in a
 dedicated design session. If a phase needs *new* hero art or imagery, generate it in such a session and
 drop the output into `web/public/` for wiring in. Don't substitute generic AI-generated gradients/clip-art.

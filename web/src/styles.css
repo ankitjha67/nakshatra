@@ -1,7 +1,7 @@
 :root{
   --ink:#0c0c16; --ink-soft:#2a2a38; --cream:#f4ecdb; --paper:#fbf7ec;
   --brass:#b48a4c; --marigold:#c4682b; --line:#d9cdb0; --muted:#7a735d;
-  /* functional (non-palette) tokens — surfaces & states, not brand accents */
+  /* functional (non-palette) tokens, surfaces & states, not brand accents */
   --field:#fff; --err:#9a2b1f;
 }
 *{box-sizing:border-box}
@@ -38,7 +38,7 @@ button:disabled{opacity:.5;cursor:default}
 .actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:20px}
 .err{color:var(--err);font-size:14px;margin-top:12px;min-height:18px}
 .note{font-size:12px;color:var(--muted);margin-top:12px}
-/* Dev-preview system note — mono/brass hairline strip, not a colored alert bar */
+/* Dev-preview system note, mono/brass hairline strip, not a colored alert bar */
 .devbar{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.04em;color:var(--muted);
   background:var(--paper);border:1px solid var(--line);border-left:2px solid var(--brass);
   border-radius:0 8px 8px 0;padding:8px 12px;margin:0 0 18px}
@@ -51,7 +51,7 @@ button:disabled{opacity:.5;cursor:default}
 .drawn b{color:var(--brass);font-weight:500}
 .credits{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:9px;padding:6px 12px}
 .loader{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--muted)}
-/* Chat — a calm reading-room conversation (DESIGN.md): paper/cream bubbles,
+/* Chat, a calm reading-room conversation (DESIGN.md): paper/cream bubbles,
    hairline, serif for the model's voice, mono for meta. */
 .chat{display:flex;flex-direction:column;gap:12px;margin:6px 0 16px;min-height:80px}
 .msg{max-width:85%;padding:12px 15px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
@@ -61,13 +61,13 @@ button:disabled{opacity:.5;cursor:default}
 .msg .chat-meta{display:block;margin-top:7px;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .chat-input{display:flex;gap:10px}
 .chat-input input{flex:1}
-/* BTR confidence meter — a fine hairline/brass scale, never a chunky bar (DESIGN.md) */
+/* BTR confidence meter, a fine hairline/brass scale, never a chunky bar (DESIGN.md) */
 .meter{margin:10px 0 4px}
 .meter-track{height:3px;background:var(--line);border-radius:2px;overflow:hidden}
 .meter-fill{height:100%;background:var(--brass)}
 .meter-label{display:block;margin-top:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .meter-label b{color:var(--brass);font-weight:500;font-size:14px}
-/* Admin dashboard — stat cards + hairline table */
+/* Admin dashboard, stat cards + hairline table */
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 @media(max-width:640px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
 .stat{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px}

@@ -41,7 +41,7 @@ def _verify_bearer(token: str) -> dict:
     from firebase_admin import auth as fb_auth
     try:
         decoded = fb_auth.verify_id_token(token, check_revoked=get_settings().verify_token_revocation)
-    except Exception as exc:  # noqa: BLE001 — surface as 401, not 500
+    except Exception as exc:  # noqa: BLE001, surface as 401, not 500
         log.warning("Firebase token verification failed: %s", exc)
         raise HTTPException(401, "Invalid or expired sign-in token")
     if get_settings().require_email_verified and not decoded.get("email_verified", False):
@@ -80,7 +80,7 @@ async def require_user(authorization: str | None = Header(default=None)) -> Prin
 
 
 def _client_ip(request: Request) -> str:
-    """Caller IP — first hop of X-Forwarded-For (set by Cloud Run), else peer."""
+    """Caller IP, first hop of X-Forwarded-For (set by Cloud Run), else peer."""
     xff = request.headers.get("x-forwarded-for")
     if xff:
         return xff.split(",")[0].strip()
@@ -95,7 +95,7 @@ def _enforce_and_track(p: Principal, request: Request) -> None:
         raise HTTPException(403, f"Account suspended: {ban.get('reason') or 'policy violation'}")
     try:
         store.record_activity(p.user_id, _client_ip(request))
-    except Exception:  # noqa: BLE001 — never fail a request on activity logging
+    except Exception:  # noqa: BLE001, never fail a request on activity logging
         log.warning("activity logging failed uid=%s", p.user_id)
 
 

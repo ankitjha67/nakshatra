@@ -25,10 +25,10 @@ Birth details
 ```
 
 **Why this kills AI slop:** the interpretation lives in stage 2 (Python you can
-test and trust). Stage 3 is a *writer*, not an oracle — it gets a fixed list of
+test and trust). Stage 3 is a *writer*, not an oracle, it gets a fixed list of
 findings, must cite the finding code behind every section, and any sentence that
 cites nothing real is discarded after generation. No vague horoscope filler, no
-hallucinated planets, no fear-mongering — structurally, not by hoping.
+hallucinated planets, no fear-mongering, structurally, not by hoping.
 
 ## Run it locally (works with zero external services)
 
@@ -49,7 +49,7 @@ curl -X POST localhost:8000/v1/chart -H 'X-API-Key: free_dev_key' \
   -H 'content-type: application/json' \
   -d '{"date":"1992-08-14","time":"09:25","tz":"+05:30","lat":25.5941,"lon":85.1376}'
 
-# full reading (Pro) — note the cited sections in the response
+# full reading (Pro), note the cited sections in the response
 curl -X POST localhost:8000/v1/reading -H 'X-API-Key: pro_dev_key' \
   -H 'content-type: application/json' \
   -d '{"date":"1992-08-14","time":"09:25","tz":"+05:30","lat":25.5941,"lon":85.1376}'
@@ -92,16 +92,16 @@ The anti-slop prompt and citation validation apply to all of them.
 
 | Tier | Reading | Sections | Async | API | ₹/mo* |
 |------|---------|----------|-------|-----|-------|
-| Free | — (chart JSON only) | — | — | — | 0 |
-| Basic | yes | essence, mind | — | — | 299 |
-| Pro | yes | all six | yes | — | 999 |
+| Free | - (chart JSON only) | - | - | - | 0 |
+| Basic | yes | essence, mind | - | - | 299 |
+| Pro | yes | all six | yes | - | 999 |
 | API / Business | yes | all six | yes | yes | 4999 |
 
 \* illustrative; see `ARCHITECTURE.md` for the cost model behind pricing.
 
 ## Deploy
 
-GCP Cloud Run is the recommended target — see `deploy/gcp_deploy.sh`. AWS, Azure
+GCP Cloud Run is the recommended target, see `deploy/gcp_deploy.sh`. AWS, Azure
 and Oracle equivalents are in `deploy/CLOUD_NOTES.md`. A Terraform skeleton for
 the GCP resources is in `deploy/terraform/`.
 

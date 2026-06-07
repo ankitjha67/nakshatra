@@ -1,10 +1,10 @@
-"""LLM layer — a constrained *writer*, never an interpreter.
+"""LLM layer, a constrained *writer*, never an interpreter.
 
 The renderer hands the model a fixed set of computed findings and asks only for
 prose. The system prompt forbids new placements/predictions, requires a citation
 (finding code) behind every section, and bans horoscope filler, flattery, fear,
 and medical/financial/legal directives. After generation we validate every
-citation against the real finding codes and discard anything unsupported — so a
+citation against the real finding codes and discard anything unsupported, so a
 hallucinated claim cannot survive even if the model produces one.
 
 Providers are pluggable. `mock` composes the reading deterministically from the
@@ -26,8 +26,8 @@ log = logging.getLogger("llm")
 
 # ordered sections and which finding categories feed each
 SECTION_SPEC: list[tuple[str, str, list[str]]] = [
-    ("yearly",        "The Year — Varshphal",    ["yearly"]),
-    ("prashna",       "The Question — KP Verdict", ["prashna"]),
+    ("yearly",        "The Year, Varshphal",    ["yearly"]),
+    ("prashna",       "The Question, KP Verdict", ["prashna"]),
     ("btr",           "Birth-Time Rectification", ["btr"]),
     ("essence",       "Your Essence",            ["essence"]),
     ("mind",          "Mind & Emotions",         ["mind"]),
@@ -36,7 +36,7 @@ SECTION_SPEC: list[tuple[str, str, list[str]]] = [
     ("wealth",        "Wealth & Resources",      ["wealth"]),
     ("family",        "Home & Family",           ["family"]),
     ("health",        "Health & Vitality",       ["health"]),
-    ("timing",        "This Chapter — Timing",   ["timing"]),
+    ("timing",        "This Chapter, Timing",   ["timing"]),
     ("fortune",       "Fortune & Karma",         ["fortune"]),
     ("spirit",        "Inner Life",              ["spirit"]),
     ("strengths",     "Strengths & Stars",       ["strengths"]),
@@ -93,11 +93,11 @@ CHAT_SYSTEM_PROMPT = """You are a careful Vedic astrology (Jyotisha) assistant a
 You are given FINDINGS already computed from this user's chart, the recent conversation, and a new question.
 
 ABSOLUTE RULES
-- Answer ONLY from the FINDINGS. If the findings do not address the question, say so plainly — do not guess or invent.
+- Answer ONLY from the FINDINGS. If the findings do not address the question, say so plainly, do not guess or invent.
 - Never introduce a planet, sign, house, nakshatra, yoga, dasha, aspect, date, or prediction that is not in the findings.
 - No generic horoscope filler, no flattery, no fear or doom, no absolute predictions.
 - Never give medical, legal, financial, or psychological directives. Describe tendencies, not instructions.
-- Warm, literate, second person ("you"). Brief and specific — a few sentences. Do not use the person's name. No emojis. No headings."""
+- Warm, literate, second person ("you"). Brief and specific, a few sentences. Do not use the person's name. No emojis. No headings."""
 
 
 def _group(findings: list[Finding], allowed_keys: set[str]) -> list[dict[str, Any]]:
@@ -138,7 +138,7 @@ class Provider:
 
 
 class MockProvider(Provider):
-    """Deterministic, grounded composition — no external call, no slop."""
+    """Deterministic, grounded composition, no external call, no slop."""
     name = "mock"
     model = "mock-writer"
 
@@ -175,7 +175,7 @@ class MockProvider(Provider):
             answer = ("Your chart's findings don't directly speak to that. They do cover: "
                       f"{topics}. Ask about one of those and I can ground an answer in your chart.")
         else:
-            answer = "I don't have computed findings for your chart yet — cast a reading first."
+            answer = "I don't have computed findings for your chart yet, cast a reading first."
         ti = (len(system) + len(user)) // 4
         to = max(1, len(answer) // 4)
         return answer, ti, to
@@ -258,7 +258,7 @@ class VertexProvider(Provider):
         try:
             budget = 128 if "pro" in (self.model or "").lower() else 0
             cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=budget)
-        except Exception:  # SDK without ThinkingConfig — proceed without it
+        except Exception:  # SDK without ThinkingConfig, proceed without it
             pass
 
         r = self._c.models.generate_content(
@@ -325,7 +325,7 @@ def get_provider() -> Provider:
             _PROVIDER = VertexProvider(s.vertex_project, s.vertex_location, s.vertex_model, s.llm_temperature, s.llm_max_tokens)
         else:
             _PROVIDER = MockProvider()
-    except Exception as exc:  # noqa: BLE001 — never fail the request on provider init
+    except Exception as exc:  # noqa: BLE001, never fail the request on provider init
         log.error("LLM provider init failed (%s); using mock.", exc)
         _PROVIDER = MockProvider()
     log.info("LLM provider: %s (%s)", _PROVIDER.name, _PROVIDER.model)
@@ -372,7 +372,7 @@ def render_reading(chart: dict, findings: list[Finding], allowed_sections: set[s
 
 
 # --------------------------------------------------------------------------- #
-# grounded chat (Phase 5) — answers ONLY from the user's findings
+# grounded chat (Phase 5), answers ONLY from the user's findings
 # --------------------------------------------------------------------------- #
 def _chat_payload(findings: list[Finding], history: list[dict], message: str) -> str:
     return json.dumps({
@@ -389,7 +389,7 @@ def chat_answer(findings: list[Finding], history: list[dict], message: str,
     user = _chat_payload(findings, history, message)
     try:
         answer, ti, to = provider.chat(CHAT_SYSTEM_PROMPT, user, max_output)
-    except Exception as exc:  # noqa: BLE001 — never fail the request on provider error
+    except Exception as exc:  # noqa: BLE001, never fail the request on provider error
         log.error("chat render failed (%s); using deterministic mock.", exc)
         answer, ti, to = MockProvider().chat(CHAT_SYSTEM_PROMPT, user, max_output)
     return (answer or "").strip(), provider.model or provider.name, ti, to

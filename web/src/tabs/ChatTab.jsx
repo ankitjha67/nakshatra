@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { apiPost } from "../lib/api.js";
 
-// Grounded chat — answers come only from the user's last cast chart's findings,
+// Grounded chat, answers come only from the user's last cast chart's findings,
 // metered on the token credit ledger. Balance updates flow up via onBalance.
 export default function ChatTab({ lastBirth, onBalance }) {
   const [msgs, setMsgs] = useState([]);
@@ -42,11 +42,11 @@ export default function ChatTab({ lastBirth, onBalance }) {
   return (
     <div>
       <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>
-        Grounded in your last cast chart — each turn is metered in tokens against your balance.
+        Grounded in your last cast chart, each turn is metered in tokens against your balance.
       </p>
       <div className="chat">
         {msgs.length === 0 && (
-          <p className="note">Ask a question about your chart — e.g. “What does my chart say about career?”</p>
+          <p className="note">Ask a question about your chart, e.g. “What does my chart say about career?”</p>
         )}
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>

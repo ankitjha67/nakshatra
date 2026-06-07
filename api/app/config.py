@@ -92,17 +92,17 @@ class Settings(BaseSettings):
             return []
         w: list[str] = []
         if self.admin_api_key in ("", "admin_dev_key", "change-me"):
-            w.append("ADMIN_API_KEY is a default/placeholder — set a strong secret (Secret Manager).")
+            w.append("ADMIN_API_KEY is a default/placeholder, set a strong secret (Secret Manager).")
         if self.internal_token in ("", "internal_dev_token"):
-            w.append("INTERNAL_TOKEN is the dev default — set a strong secret.")
+            w.append("INTERNAL_TOKEN is the dev default, set a strong secret.")
         if self.cors_origins.strip() in ("", "*"):
-            w.append("CORS_ORIGINS is '*' — lock it to the web origin in prod.")
+            w.append("CORS_ORIGINS is '*' - lock it to the web origin in prod.")
         if self.store_backend == "memory":
-            w.append("STORE_BACKEND=memory in prod — data is not persisted; use firestore.")
+            w.append("STORE_BACKEND=memory in prod, data is not persisted; use firestore.")
         if self.payments_provider != "none" and not (self.razorpay_webhook_secret or self.stripe_webhook_secret):
-            w.append("payments enabled but no webhook secret set — signatures cannot be verified.")
+            w.append("payments enabled but no webhook secret set, signatures cannot be verified.")
         if self.llm_provider == "mock":
-            w.append("LLM_PROVIDER=mock in prod — readings would be deterministic stubs, not real LLM output.")
+            w.append("LLM_PROVIDER=mock in prod, readings would be deterministic stubs, not real LLM output.")
         return w
 
 

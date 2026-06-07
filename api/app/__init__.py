@@ -1,4 +1,4 @@
-"""Jyotish Cloud — a tiered, cloud-hosted Vedic astrology API.
+"""Jyotish Cloud, a tiered, cloud-hosted Vedic astrology API.
 
 Pipeline: birth details -> calculation engine (your code) -> deterministic
 rules/findings -> constrained LLM renderer -> grounded reading.

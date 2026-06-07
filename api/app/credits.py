@@ -1,4 +1,4 @@
-"""Credit-ledger math — PURE and deterministic (no I/O).
+"""Credit-ledger math, PURE and deterministic (no I/O).
 
 This is the money path. All the rules live here in one place so they can be
 read and unit-tested in isolation: lazy cycle reset (monthly grant refresh),
@@ -128,7 +128,7 @@ def topup(bal: Balance, tokens: int, reason: str, ref: str | None,
 
 def grant(bal: Balance, monthly_tokens: int, reason: str,
           now: datetime) -> tuple[Balance, dict]:
-    """Explicit monthly grant (e.g. on a subscription change) — resets the cycle
+    """Explicit monthly grant (e.g. on a subscription change), resets the cycle
     window now and sets grant_balance to the tier allowance. topup untouched."""
     monthly_tokens = max(0, int(monthly_tokens))
     bal = replace(bal,
@@ -139,7 +139,7 @@ def grant(bal: Balance, monthly_tokens: int, reason: str,
 
 def refund(bal: Balance, tokens: int, reason: str, ref: str | None,
            now: datetime) -> tuple[Balance, dict]:
-    """Reverse credited tokens after a refund — pull from topup first, then grant;
+    """Reverse credited tokens after a refund, pull from topup first, then grant;
     clamp each at 0 (a balance already spent simply can't go negative)."""
     tokens = max(0, int(tokens))
     from_topup = min(bal.topup_balance, tokens)

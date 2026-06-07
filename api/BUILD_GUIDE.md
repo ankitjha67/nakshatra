@@ -1,8 +1,8 @@
-# Nakshatra — Build Guide (step by step)
+# Nakshatra, Build Guide (step by step)
 
 A guided path from nothing to a working pipeline on your own domain, then to a
-paid product. Follow the phases in order. **Phases 0–4 are the MVP** ("website on
-a domain + GCP + DB + the pipeline works"). Phases 5–6 are the "then we add
+paid product. Follow the phases in order. **Phases 0-4 are the MVP** ("website on
+a domain + GCP + DB + the pipeline works"). Phases 5-6 are the "then we add
 payments / API / gateways" batch.
 
 ---
@@ -18,7 +18,7 @@ api.yourdomain  ──  FastAPI on Cloud Run (container)
    │   2. resolve user + tier from Firestore
    │   3. YOUR engine (monolith) → chart JSON
    │   4. rules layer → findings (deterministic interpretation)
-   │   5. Vertex AI (Gemini) renders the reading / answers chat — WRITER ONLY
+   │   5. Vertex AI (Gemini) renders the reading / answers chat, WRITER ONLY
    │   6. store chart + reading + messages in Firestore; meter usage
    ▼
 Firestore (users, charts, readings, chats, usage/credits)
@@ -74,7 +74,7 @@ The plan allowance resets monthly; top-ups (Phase 6) add to `topupMessages`.
 
 ---
 
-## 2. Phase 0 — Foundations
+## 2. Phase 0, Foundations
 
 **Goal:** project, services, domain, and an importable engine.
 
@@ -126,7 +126,7 @@ prints your JSON locally.
 
 ---
 
-## 3. Phase 1 — Backend reading slice on Cloud Run
+## 3. Phase 1, Backend reading slice on Cloud Run
 
 **Goal:** `curl api.../v1/reading` returns a grounded reading from YOUR engine.
 
@@ -162,7 +162,7 @@ whose content comes from your engine via Vertex.
 
 ---
 
-## 4. Phase 2 — Auth + Firestore
+## 4. Phase 2, Auth + Firestore
 
 **Goal:** logged-in users; readings + usage persisted per user.
 
@@ -198,7 +198,7 @@ Then set `STORE_BACKEND=firestore`. *(Ask me and I'll generate this file.)*
 
 ---
 
-## 5. Phase 3 — Website on your domain
+## 5. Phase 3, Website on your domain
 
 **Goal:** the Nakshatra site, with login + birth form, live on your domain.
 
@@ -236,19 +236,19 @@ reading rendered.
 
 ---
 
-## 6. Phase 4 — Chat + credits
+## 6. Phase 4, Chat + credits
 
 **Goal:** grounded follow-up Q&A, metered per user.
 
-**Backend — `/v1/chat`:**
+**Backend - `/v1/chat`:**
 
 ```python
-# sketch — grounding keeps it anti-slop; credits gate usage
+# sketch, grounding keeps it anti-slop; credits gate usage
 @app.post("/v1/chat")
 def chat(req: ChatRequest, user = Depends(current_user)):
     uid = user["uid"]
     if remaining_credits(uid) <= 0:
-        raise HTTPException(402, "Out of chat credits — upgrade or top up")
+        raise HTTPException(402, "Out of chat credits, upgrade or top up")
     grounding = load_grounding(uid, req.chart_hash)   # chart + findings + reading text
     reply, ti, to = llm_chat(grounding, req.history, req.message)
     debit_credit(uid)                                 # +1 chatMessages this month
@@ -259,13 +259,13 @@ def chat(req: ChatRequest, user = Depends(current_user)):
 Chat **system prompt** (same anti-slop spirit as the renderer):
 > You are a Jyotish guide answering questions about THIS person's chart. Use only
 > the chart facts and findings provided. If a question isn't supported by the
-> chart, say so — never invent placements, dates, or predictions. No medical,
+> chart, say so, never invent placements, dates, or predictions. No medical,
 > legal, or financial directives. Reference the relevant placement when you can.
 
 The grounding (chart + findings + reading) is injected every turn, so answers
 stay tied to the real chart. Bound `LLM_MAX_TOKENS` to cap per-message cost.
 
-**Credits/tiers for MVP** (no purchasing yet — fixed allowances):
+**Credits/tiers for MVP** (no purchasing yet, fixed allowances):
 
 | Tier | Reading sections | Chat messages / month |
 |---|---|---|
@@ -289,20 +289,20 @@ prompts upgrade.
 
 ---
 
-## 7. Phase 5 — Harden (still pre-payments)
+## 7. Phase 5, Harden (still pre-payments)
 
 - **Firestore security rules:** users can read/write only their own docs; all
   writes that matter go through the backend (Admin SDK bypasses rules).
 - **CORS** locked to `https://yourdomain.com`.
 - **Rate limits** per uid (the quota logic exists; key it by uid, back it with
   Firestore or Redis/Memorystore).
-- **Logging** without PII — never log birth data, tokens, or reading text at INFO.
+- **Logging** without PII, never log birth data, tokens, or reading text at INFO.
 - **"Delete my data"** endpoint (privacy; birth data is personal).
 - **Budget alert** + `--max-instances` on Cloud Run; keep `LLM_MAX_TOKENS` bounded.
 
 ---
 
-## 8. Phase 6+ — Payments, public API, gateway, more features
+## 8. Phase 6+ - Payments, public API, gateway, more features
 
 **Payments (Razorpay):**
 - Subscriptions for tiers + one-time **top-up packs** (e.g., +500 messages).
@@ -310,8 +310,7 @@ prompts upgrade.
   (signature-verified, stub already in `app/main.py`) → set `tier` /
   increment `credits.topupMessages` in Firestore.
 
-**Public API (B2B):** the API-key path in `app/billing.py` is already built —
-issue `jk_…` keys per the tier system, document the endpoints, sell programmatic
+**Public API (B2B):** the API-key path in `app/billing.py` is already built, issue `jk_…` keys per the tier system, document the endpoints, sell programmatic
 access. Optionally front it with **API Gateway / Apigee** for managed quotas.
 
 **More features → more sections/endpoints:** map each capability in your monolith
@@ -322,13 +321,13 @@ reading automatically once you emit findings for them.
 
 ---
 
-## Appendix A — wrapping a monolithic engine
+## Appendix A, wrapping a monolithic engine
 
-**Pattern 1 — import & call (best).** Refactor the entry point into a function
+**Pattern 1, import & call (best).** Refactor the entry point into a function
 that returns a dict; point `ENGINE_MODULE`/`ENGINE_CALLABLE` at it. No behaviour
 change, just expose a callable.
 
-**Pattern 2 — keep the script, wrap it.** If it does
+**Pattern 2, keep the script, wrap it.** If it does
 `if __name__ == "__main__": main()` and prints JSON, add a thin module:
 ```python
 # engine_app.py
@@ -341,7 +340,7 @@ def compute_chart(birth: dict) -> dict:
     return json.loads(buf.getvalue())
 ```
 
-**Pattern 3 — subprocess (last resort, no refactor).**
+**Pattern 3, subprocess (last resort, no refactor).**
 ```python
 import subprocess, json
 def compute_chart(birth: dict) -> dict:
@@ -357,11 +356,11 @@ engine expects. Build once; Cloud Run reuses the image.
 
 ---
 
-## Appendix B — cost levers (so chat stays cheap)
+## Appendix B, cost levers (so chat stays cheap)
 
-- **Cache** charts and readings by `chart_hash` (already in the app) — repeat
+- **Cache** charts and readings by `chart_hash` (already in the app), repeat
   views cost ₹0; a natal chart never changes.
-- **Bound `LLM_MAX_TOKENS`** — caps worst-case per message.
+- **Bound `LLM_MAX_TOKENS`** - caps worst-case per message.
 - **Cheaper model for chat than for the headline reading** if needed (set per
   call).
 - **Monthly allowances + paid top-ups** priced a healthy multiple over token
@@ -369,7 +368,7 @@ engine expects. Build once; Cloud Run reuses the image.
 
 ---
 
-## Appendix C — environment reference
+## Appendix C, environment reference
 
 See `.env.example` in the project. Key ones for this build:
 `ENGINE_MODULE`, `ENGINE_CALLABLE`, `ENGINE_VERSION`, `LLM_PROVIDER=vertex`,

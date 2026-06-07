@@ -25,7 +25,7 @@ export default function SignIn() {
 function friendly(e) {
   const c = (e && e.code) || "";
   if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found")) return "Email or password is incorrect.";
-  if (c.includes("email-already-in-use")) return "That email already has an account — use Sign in.";
+  if (c.includes("email-already-in-use")) return "That email already has an account, use Sign in.";
   if (c.includes("operation-not-allowed")) return "That sign-in method isn't enabled in Firebase.";
   return (e && e.message) || "Sign-in failed.";
 }

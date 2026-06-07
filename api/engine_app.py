@@ -1,4 +1,4 @@
-# engine_app.py — adapter between the API and your Maha-Jyotish v7 monolith.
+# engine_app.py, adapter between the API and your Maha-Jyotish v7 monolith.
 #
 # Place your engine file (maha_jyotish_cloud_engine.py) next to this file at the
 # project root so the import below resolves. Then set in .env:
@@ -18,10 +18,10 @@ from typing import Any
 # installable build is the community fork `pysweph`, which has TWO documented
 # breaking changes we must neutralise so the engine runs unchanged:
 #
-#   * v2.10.3.3 — calc(), calc_ut(), calc_pctr(), deltat_ex() return an EXTRA
+#   * v2.10.3.3, calc(), calc_ut(), calc_pctr(), deltat_ex() return an EXTRA
 #                 trailing error-string. Old code does `xx, ret = swe.calc_ut(...)`
 #                 (2 values); the fork returns 3 -> "too many values to unpack".
-#   * v2.10.3.4 — the houses() family returns cusps as a 13- (or 37-) item tuple
+#   * v2.10.3.4, the houses() family returns cusps as a 13- (or 37-) item tuple
 #                 with index 0 empty, instead of the classic 12 (or 36).
 #
 # We monkeypatch the `swisseph` module object once, BEFORE the engine uses it,
@@ -31,7 +31,7 @@ def _patch_swisseph() -> None:
     try:
         import swisseph as swe
     except Exception:
-        return  # not installed — the engine will raise its own clear error
+        return  # not installed, the engine will raise its own clear error
     if getattr(swe, "_jc_compat_patched", False):
         return
 

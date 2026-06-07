@@ -5,7 +5,7 @@ import { apiPost, CITIES } from "../lib/api.js";
 const EVENT_TYPES = ["marriage", "childbirth", "job change", "relocation", "father's death",
   "mother's death", "accident", "major illness", "promotion", "education milestone"];
 
-// Birth-Time Rectification (Enterprise) — narrow an uncertain birth time from
+// Birth-Time Rectification (Enterprise), narrow an uncertain birth time from
 // dated life events. Shows a fine hairline/brass confidence meter (DESIGN.md).
 export default function BtrTab() {
   const [name, setName] = useState("");
@@ -25,7 +25,7 @@ export default function BtrTab() {
 
   const rectify = async () => {
     const evs = events.filter((e) => e.date && e.type.trim());
-    if (evs.length < 1) { setErr("Add at least one dated life event (3–5 ideal)."); return; }
+    if (evs.length < 1) { setErr("Add at least one dated life event (3-5 ideal)."); return; }
     setErr(""); setBusy(true); setData(null);
     try {
       const c = CITIES[parseInt(cityIdx, 10)];
@@ -43,7 +43,7 @@ export default function BtrTab() {
   return (
     <div>
       <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>
-        Birth-Time Rectification — narrow an uncertain birth time from dated life events, triangulated
+        Birth-Time Rectification, narrow an uncertain birth time from dated life events, triangulated
         across the classical methods. The result is a confident window, not a certainty.
       </p>
 
@@ -70,7 +70,7 @@ export default function BtrTab() {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <p className="kicker">Dated life events (3–5 ideal)</p>
+        <p className="kicker">Dated life events (3-5 ideal)</p>
         {events.map((e, i) => (
           <div className="grid" key={i} style={{ marginBottom: 10, alignItems: "end" }}>
             <div><label className="fld">Date</label>
@@ -98,7 +98,7 @@ export default function BtrTab() {
           <div className="meter">
             <div className="meter-track"><div className="meter-fill" style={{ width: `${rec.confidence || 0}%` }} /></div>
             <span className="meter-label">
-              <b>{rec.time}</b> · {rec.confidence != null ? `${rec.confidence}% confidence` : "confidence —"}
+              <b>{rec.time}</b> · {rec.confidence != null ? `${rec.confidence}% confidence` : "confidence, "}
               {rec.ascendant_sign ? ` · ${rec.ascendant_sign} ascendant` : ""}
             </span>
           </div>

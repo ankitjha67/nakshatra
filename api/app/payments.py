@@ -1,4 +1,4 @@
-"""Payment webhook handling (Razorpay) — MONEY PATH, review carefully.
+"""Payment webhook handling (Razorpay), MONEY PATH, review carefully.
 
 The browser is never trusted with entitlements. A signed webhook from the
 provider is the only thing that changes a tier or adds top-up credits. This

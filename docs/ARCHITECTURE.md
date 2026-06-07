@@ -1,4 +1,4 @@
-# docs/ARCHITECTURE.md — Request flow & environment
+# docs/ARCHITECTURE.md, Request flow & environment
 
 See `CLAUDE.md` for the full picture; this is the request flow + the env reference.
 
@@ -22,7 +22,7 @@ Browser (web/)                         API (api/, Cloud Run)
 Chat (Phase 5) follows the same engine→findings path, then a grounded chat prompt, then a metered,
 transactional token debit (see `CREDIT_LEDGER.md`).
 
-## `api/.env` (local only — never commit)
+## `api/.env` (local only, never commit)
 
 ```
 APP_ENV=dev
@@ -40,7 +40,7 @@ DEFAULT_USER_TIER=pro
 CACHE_READINGS=true
 ADMIN_API_KEY=change-me
 CORS_ORIGINS=*
-# chat / credits (Phase 4–5)
+# chat / credits (Phase 4-5)
 CHAT_MAX_OUTPUT=800
 DAILY_TOKEN_CEILING=200000
 ```

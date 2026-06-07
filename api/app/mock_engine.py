@@ -2,10 +2,10 @@
 
 It emits a plausible, internally-consistent Vedic chart in the SAME nested JSON
 shape your real engine produces, so the whole pipeline (engine -> rules -> LLM)
-runs over the exact structure it will see in production — before the real engine
+runs over the exact structure it will see in production, before the real engine
 is connected. It is seeded by the birth-detail hash, so the same input always
 yields the same chart (which is what makes caching meaningful). It is NOT
-astronomically accurate — it is a faithful *shape* stand-in, not an ephemeris.
+astronomically accurate, it is a faithful *shape* stand-in, not an ephemeris.
 
 Shape emitted (subset of Maha-Jyotish v7 that the rules layer consumes):
 

@@ -24,9 +24,9 @@ async function handle(res) {
     let detail = "";
     try { detail = (await res.json()).detail || ""; } catch {}
     const map = {
-      401: "Session expired — sign out and back in.",
+      401: "Session expired, sign out and back in.",
       402: detail || "Your plan doesn't include this yet.",
-      429: detail || "Limit reached — try again shortly.",
+      429: detail || "Limit reached, try again shortly.",
     };
     const err = new Error(map[res.status] || detail || `Request failed (${res.status}).`);
     err.status = res.status;

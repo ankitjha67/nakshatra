@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../lib/api.js";
 
-// Admin dashboard — platform health + analytics + flagged users with ban controls.
+// Admin dashboard, platform health + analytics + flagged users with ban controls.
 // Authorized by the admin's Firebase `admin` custom claim (or X-Admin-Key in dev).
 export default function AdminTab() {
   const [stats, setStats] = useState(null);
@@ -25,7 +25,7 @@ export default function AdminTab() {
       <div className="card">
         <p className="kicker">Admin</p>
         <h2 style={{ marginTop: 0 }}>Admin access required</h2>
-        <p className="note">{err} — sign in with an account that has the <b>admin</b> claim.</p>
+        <p className="note">{err} - sign in with an account that has the <b>admin</b> claim.</p>
       </div>
     );
   }
@@ -63,7 +63,7 @@ export default function AdminTab() {
             {flagged.map((f) => (
               <tr key={f.uid}>
                 <td className="mono">{f.uid}</td>
-                <td className="mono">{f.last_ip || "—"}</td>
+                <td className="mono">{f.last_ip || "-"}</td>
                 <td>{(f.reasons || []).join("; ")}</td>
                 <td>{f.banned ? "banned" : "active"}</td>
                 <td>

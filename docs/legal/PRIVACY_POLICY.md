@@ -1,6 +1,6 @@
-# Privacy Policy — Nakshatra
+# Privacy Policy, Nakshatra
 
-> **TEMPLATE — NOT LEGAL ADVICE.** For review by a qualified privacy lawyer. Must be
+> **TEMPLATE, NOT LEGAL ADVICE.** For review by a qualified privacy lawyer. Must be
 > reconciled with the India DPDP Act 2023 (Data Principal rights, Consent, Grievance
 > Officer) and GDPR if you serve EU residents. **Effective date:** `[DATE]`.
 
@@ -17,7 +17,7 @@ we collect, why, how we share and protect it, and your rights.
   timestamps. Payments are processed by **Razorpay**; we receive payment status/ids, **not
   full card details**.
 - **Technical data:** IP address, approximate location derived from it, device/user-agent,
-  and logs — used for security, abuse prevention, and debugging.
+  and logs, used for security, abuse prevention, and debugging.
 
 ## 2. Why we use it (purposes & legal bases)
 To provide readings and chat (performance of contract); to meter and bill (contract / legal
@@ -57,7 +57,7 @@ Or contact our Grievance Officer below. We respond within the timeframe the law 
 
 ## 7. Cookies & local storage
 We use storage strictly necessary for authentication/session. We do not use third-party
-advertising trackers. `[Update if analytics/marketing cookies are added — add a consent banner.]`
+advertising trackers. `[Update if analytics/marketing cookies are added, add a consent banner.]`
 
 ## 8. Children
 The Service is not intended for anyone under 18, and we do not knowingly collect their data.

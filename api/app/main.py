@@ -74,7 +74,7 @@ def _prod_readiness():
     # at full utilization). A drift here means a tier could run at a loss.
     for k, t in TIERS.items():
         if t.monthly_tokens and not pricing.tier_is_gated(t.price_inr_month, t.monthly_tokens):
-            log.warning("PRICING GATE: tier '%s' grant %d exceeds its 50%%-margin gate (%d) — "
+            log.warning("PRICING GATE: tier '%s' grant %d exceeds its 50%%-margin gate (%d), "
                         "it can run at a loss at full utilization.",
                         k, t.monthly_tokens, pricing.gated_grant_tokens(t.price_inr_month))
 
@@ -106,13 +106,13 @@ def me(p: Principal = Depends(require_principal)):
 
 @app.get("/v1/me/export")
 def me_export(p: Principal = Depends(require_principal)):
-    """GDPR data portability — the user's own stored data (profile, ledger, chats)."""
+    """GDPR data portability, the user's own stored data (profile, ledger, chats)."""
     return get_store().export_user(p.user_id)
 
 
 @app.delete("/v1/me")
 def me_delete(p: Principal = Depends(require_principal)):
-    """GDPR right to erasure — delete the user's record, ledger, chats, API keys,
+    """GDPR right to erasure, delete the user's record, ledger, chats, API keys,
     and (best-effort) the Firebase Auth identity."""
     res = get_store().delete_user(p.user_id)
     res["firebase_identity"] = delete_firebase_user(p.user_id)
@@ -136,7 +136,7 @@ def reading(birth: BirthDetails, p: Principal = Depends(require_principal)):
     store = get_store()
     # readings draw on the same metered AI allowance as chat (the cost gate)
     if p.tier.monthly_tokens and store.credit_balance(p.user_id, p.tier)["available"] <= 0:
-        raise HTTPException(402, "You're out of credits for this cycle — upgrade or add a top-up.")
+        raise HTTPException(402, "You're out of credits for this cycle, upgrade or add a top-up.")
     resp = get_reading(birth, p.tier)
     cost = int(resp.meta.tokens_in) + int(resp.meta.tokens_out)
     if cost:                                  # cache hits cost 0 tokens -> free
@@ -177,9 +177,9 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     # --- credit pre-check (advisory; do NOT call the LLM if blocked) ---
     bal = store.credit_balance(p.user_id, p.tier)
     if bal["available"] <= 0:
-        raise HTTPException(402, "You're out of chat credits — upgrade or add a top-up.")
+        raise HTTPException(402, "You're out of chat credits, upgrade or add a top-up.")
     if bal["daily_used"] >= s.daily_token_ceiling:
-        raise HTTPException(429, "Daily chat limit reached — please try again tomorrow.")
+        raise HTTPException(429, "Daily chat limit reached, please try again tomorrow.")
 
     # --- grounded answer: only from THIS chart's findings ---
     chart = get_chart(req.birth).chart
@@ -198,7 +198,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
         try:
             store.chat_save_turn(p.user_id, chat_id, req.birth.chart_hash(),
                                  req.message, answer, cost, msg_id)
-        except Exception as exc:  # noqa: BLE001 — never log the message body (PII)
+        except Exception as exc:  # noqa: BLE001, never log the message body (PII)
             log.warning("chat persistence failed (non-fatal) uid=%s chat_id=%s err=%s",
                         p.user_id, chat_id, type(exc).__name__)
     store.record(p.key, ti, to, reading=False)
@@ -209,7 +209,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
 
 
 # --------------------------------------------------------------------------- #
-# Prashna / KP horary — a chart cast for the moment of asking (pro+)
+# Prashna / KP horary, a chart cast for the moment of asking (pro+)
 # --------------------------------------------------------------------------- #
 def _now_in_tz(tz: str) -> tuple[str, str]:
     """(YYYY-MM-DD, HH:MM) right now at a UTC offset like "+05:30" (UTC on parse fail)."""
@@ -251,7 +251,7 @@ def prashna(req: PrashnaRequest, p: Principal = Depends(require_principal)):
 
 
 # --------------------------------------------------------------------------- #
-# Birth-Time Rectification — wraps the engine's rectify_birth_time (enterprise)
+# Birth-Time Rectification, wraps the engine's rectify_birth_time (enterprise)
 # --------------------------------------------------------------------------- #
 class BtrEvent(BaseModel):
     date: str = Field(..., description="Event date, YYYY-MM-DD")
@@ -307,7 +307,7 @@ def btr(req: BtrRequest, p: Principal = Depends(require_principal)):
     if p.tier.key != "enterprise":
         raise HTTPException(402, "Birth-Time Rectification is an Enterprise mode.")
     if not req.events:
-        raise HTTPException(422, "Provide at least one dated life event (3–5 recommended) to rectify against.")
+        raise HTTPException(422, "Provide at least one dated life event (3-5 recommended) to rectify against.")
     enforce_quota(p)
     enforce_global_breaker()
     payload = req.model_dump()
@@ -442,7 +442,7 @@ async def payments_webhook(request: Request):
 
     MONEY PATH: the signature is verified over the RAW body and every entity is
     marked processed before crediting, so retries never double-credit. Client
-    "I paid" claims are never trusted — only this signed callback mutates credits.
+    "I paid" claims are never trusted, only this signed callback mutates credits.
     """
     s = get_settings()
     raw = await request.body()
