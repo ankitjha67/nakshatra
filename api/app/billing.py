@@ -75,13 +75,20 @@ TIERS: dict[str, Tier] = {
 }
 
 
+def _allowance_note(t: Tier) -> str:
+    if t.monthly_tokens <= 0:
+        return "Birth chart only — no AI reading or chat."
+    return (f"{t.monthly_tokens:,} AI tokens / month — one allowance shared by readings "
+            f"and chat. Repeat (cached) readings are free.")
+
+
 def tier_catalog() -> list[dict]:
     return [{
         "key": t.key, "label": t.label, "price_inr_month": t.price_inr_month,
         "reading": t.reading_allowed, "sections": sorted(t.sections),
         "daily_limit": t.daily_limit, "per_minute": t.per_minute,
         "async": t.allow_async, "api_access": t.api_access,
-        "monthly_tokens": t.monthly_tokens,
+        "monthly_tokens": t.monthly_tokens, "allowance_note": _allowance_note(t),
     } for t in TIERS.values()]
 
 

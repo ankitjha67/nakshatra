@@ -12,6 +12,9 @@ import AdminTab from "./tabs/AdminTab.jsx";
 
 const RANK = { free: 0, basic: 1, pro: 2, enterprise: 3 };
 
+// One metered AI allowance powers both readings and chat (cost-gated for >=50% margin).
+const ALLOWANCE_NOTE = "Readings draw on your monthly AI allowance (shared with chat); casting the same chart again is free.";
+
 // TODO(Phase 1/4): read the signed-in user's real tier from the user doc / a /v1/me endpoint.
 // The deploy currently sets DEFAULT_USER_TIER=pro, so we assume pro for the shell.
 const USER_TIER = "pro";
@@ -19,11 +22,11 @@ const USER_TIER = "pro";
 // render(ctx) receives shared app state: { onCast, lastBirth, setBalance }.
 const TABS = [
   { key: "natal", label: "Natal", min: "basic",
-    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} blurb="A focused natal reading — essence, mind, relationships, work, and timing." /> },
+    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} blurb={"A focused natal reading — essence, mind, relationships, work, and timing. " + ALLOWANCE_NOTE} /> },
   { key: "maha", label: "Maha-Kundali", min: "pro",
-    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} blurb="The complete report — all sections, grounded and cited." /> },
+    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} blurb={"The complete report — all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
   { key: "yearly", label: "Yearly", min: "pro",
-    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} blurb="A year-scoped forecast (Varshphal) — your dashas across the chosen year, with its timing and sensitive points." /> },
+    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} blurb={"A year-scoped forecast (Varshphal) — your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
   { key: "prashna", label: "Prashna", min: "pro",
     render: () => <PrashnaTab /> },
   { key: "chat", label: "Chat", min: "basic",
@@ -137,6 +140,7 @@ function Paywall({ tab, tiers }) {
       {t && t.sections && t.sections.length > 0 && (
         <p className="note">{name} includes: {t.sections.join(" · ")}</p>
       )}
+      {t && t.allowance_note && <p className="note">{t.allowance_note}</p>}
     </div>
   );
 }
