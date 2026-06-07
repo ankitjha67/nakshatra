@@ -57,4 +57,4 @@ VITE_FB_PROJECT_ID=nakshatra-prod-2026
 
 ## Deploy
 - API: `cd api && gcloud run deploy jyotish-api --source . --region asia-south1 --allow-unauthenticated`
-- web: `cd web && npm run build && firebase deploy --only hosting`
+- web: `cd web && npm run build && firebase deploy --only hosting,firestore:rules` (rules target is required)

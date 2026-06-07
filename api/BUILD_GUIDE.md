@@ -223,7 +223,7 @@ Then set `STORE_BACKEND=firestore`. *(Ask me and I'll generate this file.)*
 3. Deploy + domain:
    ```bash
    firebase init hosting          # public dir = where your index.html lives
-   firebase deploy --only hosting
+   firebase deploy --only hosting,firestore:rules   # rules target ships web/firestore.rules
    # Hosting → Add custom domain → yourdomain.com  (auto-SSL)
    # Point the API subdomain at Cloud Run:
    gcloud run domain-mappings create --service jyotish-api \

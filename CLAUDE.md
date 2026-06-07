@@ -23,7 +23,9 @@ Live today: API on Google Cloud Run, web on Firebase Hosting, Firebase Auth, Fir
 
 Two independent deploys:
 - **API** → `cd api && gcloud run deploy jyotish-api --source . --region asia-south1 --allow-unauthenticated`
-- **web** → `cd web && npm run build && firebase deploy --only hosting`
+- **web** → `cd web && npm run build && firebase deploy --only hosting,firestore:rules`
+  (the `firestore:rules` target is **required** — it ships `web/firestore.rules`, the deny-by-default
+  money/PII guard. Deploying `--only hosting` alone leaves the live DB on whatever ruleset it had.)
 
 ## The anti-slop architecture (the core idea — do not break this)
 

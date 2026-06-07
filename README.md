@@ -24,8 +24,9 @@ npm run dev
 
 ## Deploy
 ```
+# Prod API: use api/deploy/gcp_deploy.sh (sets APP_ENV=prod, CORS_ORIGINS, secrets). Bare command = dev only.
 cd api && gcloud run deploy jyotish-api --source . --region asia-south1 --allow-unauthenticated
-cd web && npm run build && firebase deploy --only hosting
+cd web && npm run build && firebase deploy --only hosting,firestore:rules   # firestore:rules ships the security rules
 ```
 
 > Public repo. The proprietary engine, `.env`, and all secrets are gitignored and must never be committed.
