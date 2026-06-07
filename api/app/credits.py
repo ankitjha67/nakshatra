@@ -137,6 +137,19 @@ def grant(bal: Balance, monthly_tokens: int, reason: str,
     return bal, _entry("grant", monthly_tokens, bal.available, reason, None, now)
 
 
+def refund(bal: Balance, tokens: int, reason: str, ref: str | None,
+           now: datetime) -> tuple[Balance, dict]:
+    """Reverse credited tokens after a refund — pull from topup first, then grant;
+    clamp each at 0 (a balance already spent simply can't go negative)."""
+    tokens = max(0, int(tokens))
+    from_topup = min(bal.topup_balance, tokens)
+    from_grant = min(bal.grant_balance, tokens - from_topup)
+    bal = replace(bal,
+                  topup_balance=bal.topup_balance - from_topup,
+                  grant_balance=bal.grant_balance - from_grant)
+    return bal, _entry("refund", tokens, bal.available, reason, ref, now)
+
+
 def exceeds_daily(bal: Balance, ceiling: int) -> bool:
     """True if the user has hit the per-day abuse ceiling (chat pre-check, Phase 5)."""
     return bal.daily_tokens_used >= max(0, int(ceiling))

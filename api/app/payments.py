@@ -59,6 +59,29 @@ def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
     event = str(payload.get("event") or "")
     payment = _entity(payload, "payment")
     sub = _entity(payload, "subscription")
+    refund = _entity(payload, "refund")
+
+    # --- refund → reverse credited tokens (and downgrade a refunded subscription) ---
+    if event.startswith("refund.") or refund.get("id"):
+        rid = refund.get("id") or ""
+        pay_id = refund.get("payment_id") or payment.get("id") or ""
+        if not (rid and pay_id):
+            return {"status": "ignored", "reason": "no refund/payment id"}
+        if not store.mark_payment_processed(f"refund:{rid}"):
+            return {"status": "duplicate", "id": rid}
+        rec = store.get_payment(pay_id) or {}
+        uid = rec.get("uid")
+        if not uid:
+            return {"status": "ignored", "reason": "refund for unknown payment"}
+        tokens = int(rec.get("tokens") or 0)
+        if rec.get("kind") == "subscription":
+            store.set_tier(uid, "free")                # refunded subscription → downgrade
+            tier = tiers["free"]
+        else:
+            tier = tiers.get((store.get_user(uid) or {}).get("tier", "free"), tiers["free"])
+        store.credit_refund(uid, tier, tokens, reason=f"refund {rid}", ref=pay_id)
+        store.set_payment_status(pay_id, "refunded")
+        return {"status": "refund", "uid": uid, "tokens": tokens, "payment_id": pay_id}
 
     # --- subscription: grant exactly once per CHARGE (not per lifecycle event) ---
     # Razorpay emits many subscription.* events (authenticated/activated/updated/...)
@@ -76,6 +99,10 @@ def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
             return {"status": "duplicate", "id": charge_id}
         store.set_tier(uid, tier)
         store.credit_grant(uid, tiers[tier], reason="subscription charged")
+        store.record_payment(charge_id, {
+            "uid": uid, "kind": "subscription", "tier": tier,
+            "tokens": tiers[tier].monthly_tokens,
+            "amount_inr": int(payment.get("amount") or 0) // 100, "status": "captured"})
         return {"status": "subscription", "uid": uid, "tier": tier}
 
     # --- one-time top-up: credit once per PAYMENT id (event-independent) ---
@@ -95,6 +122,9 @@ def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
         user = store.get_user(uid) or {}
         tier = tiers.get(user.get("tier", "free"), tiers["free"])
         store.credit_topup(uid, tier, tokens, reason=f"top-up ₹{amount_inr}", ref=pid)
+        store.record_payment(pid, {
+            "uid": uid, "kind": "topup", "tokens": tokens,
+            "amount_inr": amount_inr, "status": "captured"})
         return {"status": "topup", "uid": uid, "tokens": tokens}
 
     return {"status": "ignored", "reason": f"unhandled event {event}"}

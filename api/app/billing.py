@@ -178,6 +178,8 @@ def _plan(bal: Optional[credits.Balance], tier: "Tier", op: str, now: datetime,
         bal, e = credits.topup(bal, tokens, reason or "top-up", ref, now); entries.append(e)
     elif op == "grant":
         bal, e = credits.grant(bal, tier.monthly_tokens, reason or "monthly grant", now); entries.append(e)
+    elif op == "refund":
+        bal, e = credits.refund(bal, tokens, reason or "refund", ref, now); entries.append(e)
     # op == "read": resets/init only
     return bal, entries
 
@@ -219,7 +221,18 @@ class Store:
                      ref: Optional[str] = None, now: Optional[datetime] = None) -> dict: ...
     def credit_grant(self, uid: str, tier: "Tier", reason: str = "monthly grant",
                      now: Optional[datetime] = None) -> dict: ...
+    def credit_refund(self, uid: str, tier: "Tier", tokens: int, reason: str = "refund",
+                      ref: Optional[str] = None, now: Optional[datetime] = None) -> dict: ...
     def credit_ledger(self, uid: str, limit: int = 20) -> list: ...
+    # payment records + refund requests (reconciliation / "did they actually pay")
+    def record_payment(self, payment_id: str, data: dict) -> None: ...
+    def get_payment(self, payment_id: str) -> Optional[dict]: ...
+    def set_payment_status(self, payment_id: str, status: str) -> None: ...
+    def list_payments(self, uid: str) -> list: ...
+    def refund_request_create(self, req_id: str, data: dict) -> None: ...
+    def refund_request_get(self, req_id: str) -> Optional[dict]: ...
+    def refund_request_set_status(self, req_id: str, status: str) -> None: ...
+    def list_refund_requests(self, status: Optional[str] = None) -> list: ...
     # chat persistence (NOT the money path — best-effort)
     def chat_save_turn(self, uid: str, chat_id: str, chart_hash: str, user_text: str,
                        assistant_text: str, tokens: int, msg_id: str,
@@ -245,6 +258,8 @@ class MemoryStore(Store):
     chats: dict[str, dict] = field(default_factory=dict)
     processed_payments: set = field(default_factory=set)
     global_usage: dict = field(default_factory=dict)   # date -> total tokens
+    payments: dict = field(default_factory=dict)        # payment_id -> record
+    refund_requests: dict = field(default_factory=dict)  # req_id -> record
 
     def get_key(self, key):
         return self.keys.get(key)
@@ -335,8 +350,38 @@ class MemoryStore(Store):
     def credit_grant(self, uid, tier, reason="monthly grant", now=None):
         return self._credit_apply(uid, tier, "grant", now=now, reason=reason).as_public()
 
+    def credit_refund(self, uid, tier, tokens, reason="refund", ref=None, now=None):
+        return self._credit_apply(uid, tier, "refund", now=now, tokens=tokens, reason=reason, ref=ref).as_public()
+
     def credit_ledger(self, uid, limit=20):
         return list(reversed(self.ledger_entries.get(uid, [])))[:limit]
+
+    # --- payment records + refund requests ---
+    def record_payment(self, payment_id, data):
+        self.payments[payment_id] = {**data, "payment_id": payment_id}
+
+    def get_payment(self, payment_id):
+        return self.payments.get(payment_id)
+
+    def set_payment_status(self, payment_id, status):
+        if payment_id in self.payments:
+            self.payments[payment_id]["status"] = status
+
+    def list_payments(self, uid):
+        return [p for p in self.payments.values() if p.get("uid") == uid]
+
+    def refund_request_create(self, req_id, data):
+        self.refund_requests[req_id] = {**data, "id": req_id}
+
+    def refund_request_get(self, req_id):
+        return self.refund_requests.get(req_id)
+
+    def refund_request_set_status(self, req_id, status):
+        if req_id in self.refund_requests:
+            self.refund_requests[req_id]["status"] = status
+
+    def list_refund_requests(self, status=None):
+        return [r for r in self.refund_requests.values() if status is None or r.get("status") == status]
 
     def chat_save_turn(self, uid, chat_id, chart_hash, user_text, assistant_text, tokens, msg_id, now=None):
         now = now or _now()
@@ -538,9 +583,41 @@ class FirestoreStore(Store):
     def credit_grant(self, uid, tier, reason="monthly grant", now=None):
         return self._credit_apply(uid, tier, "grant", now=now, reason=reason).as_public()
 
+    def credit_refund(self, uid, tier, tokens, reason="refund", ref=None, now=None):
+        return self._credit_apply(uid, tier, "refund", now=now, tokens=tokens, reason=reason, ref=ref).as_public()
+
     def credit_ledger(self, uid, limit=20):
         q = (self._db.collection("users").document(uid).collection("ledger")
              .order_by("ts", direction=self._fs.Query.DESCENDING).limit(limit))
+        return [d.to_dict() for d in q.stream()]
+
+    # --- payment records + refund requests ---
+    def record_payment(self, payment_id, data):
+        self._db.collection("payments").document(payment_id).set({**data, "payment_id": payment_id}, merge=True)
+
+    def get_payment(self, payment_id):
+        snap = self._db.collection("payments").document(payment_id).get()
+        return snap.to_dict() if snap.exists else None
+
+    def set_payment_status(self, payment_id, status):
+        self._db.collection("payments").document(payment_id).set({"status": status}, merge=True)
+
+    def list_payments(self, uid):
+        return [d.to_dict() for d in self._db.collection("payments").where("uid", "==", uid).stream()]
+
+    def refund_request_create(self, req_id, data):
+        self._db.collection("refund_requests").document(req_id).set({**data, "id": req_id})
+
+    def refund_request_get(self, req_id):
+        snap = self._db.collection("refund_requests").document(req_id).get()
+        return snap.to_dict() if snap.exists else None
+
+    def refund_request_set_status(self, req_id, status):
+        self._db.collection("refund_requests").document(req_id).set({"status": status}, merge=True)
+
+    def list_refund_requests(self, status=None):
+        col = self._db.collection("refund_requests")
+        q = col.where("status", "==", status) if status else col
         return [d.to_dict() for d in q.stream()]
 
     def chat_save_turn(self, uid, chat_id, chart_hash, user_text, assistant_text, tokens, msg_id, now=None):

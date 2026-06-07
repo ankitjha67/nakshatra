@@ -105,6 +105,45 @@ def test_subscription_replay_no_double_grant():
     assert bal["grant"] == 50_000 and bal["topup"] == 5_000
 
 
+def _refund(payment_id, refund_id="rfnd_1"):
+    return {"event": "refund.processed", "payload": {"refund": {"entity": {"id": refund_id, "payment_id": payment_id}}}}
+
+
+# --- refunds reverse credits -------------------------------------------------- #
+def test_refund_reverses_topup_and_marks_payment():
+    s = MemoryStore()
+    cap, sig = _signed(_payment(29900, "u1", pay_id="pay_R"))    # ₹299 -> 350k
+    assert handle_razorpay_webhook(cap, sig, SECRET, s, TIERS)["status"] == "topup"
+    assert s.credit_balance("u1", TIERS["free"])["topup"] == 350_000
+    raw, sig2 = _signed(_refund("pay_R"))
+    res = handle_razorpay_webhook(raw, sig2, SECRET, s, TIERS)
+    assert res["status"] == "refund" and res["tokens"] == 350_000
+    assert s.credit_balance("u1", TIERS["free"])["topup"] == 0          # reversed
+    assert s.get_payment("pay_R")["status"] == "refunded"
+
+
+def test_refund_is_idempotent():
+    s = MemoryStore()
+    cap, sig = _signed(_payment(9900, "u1", pay_id="pay_R2"))
+    handle_razorpay_webhook(cap, sig, SECRET, s, TIERS)
+    raw, sig2 = _signed(_refund("pay_R2", refund_id="rfnd_2"))
+    assert handle_razorpay_webhook(raw, sig2, SECRET, s, TIERS)["status"] == "refund"
+    assert handle_razorpay_webhook(raw, sig2, SECRET, s, TIERS)["status"] == "duplicate"
+    assert s.credit_balance("u1", TIERS["free"])["topup"] == 0          # not over-reversed
+
+
+def test_refund_of_subscription_downgrades_to_free():
+    s = MemoryStore()
+    raw, sig = _signed(_sub("subscription.charged", "u1", "pro", sub_id="sub_R"))
+    handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
+    assert s.get_user("u1")["tier"] == "pro" and s.credit_balance("u1", TIERS["pro"])["grant"] == 500_000
+    rraw, rsig = _signed(_refund("sub_R", refund_id="rfnd_3"))
+    res = handle_razorpay_webhook(rraw, rsig, SECRET, s, TIERS)
+    assert res["status"] == "refund"
+    assert s.get_user("u1")["tier"] == "free"
+    assert s.credit_balance("u1", TIERS["free"])["grant"] == 0          # period grant reversed
+
+
 def test_unhandled_event_ignored():
     s = MemoryStore()
     raw, sig = _signed({"event": "payment.failed", "payload": {"payment": {"entity": {"id": "pay_z"}}}})

@@ -40,6 +40,17 @@ from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
 from .payments import handle_razorpay_webhook, PaymentError, TOPUP_PACKS
+from .mock_razorpay import checkout_event as _mock_checkout_event, refund_event as _mock_refund_event
+
+
+def _payments_secret() -> str:
+    """Webhook signing secret; falls back to a dev-only value for the mock gateway."""
+    s = get_settings()
+    if s.razorpay_webhook_secret:
+        return s.razorpay_webhook_secret
+    if s.is_prod:
+        raise HTTPException(503, "Payments not configured")
+    return "mock_secret"
 
 logging.basicConfig(level=get_settings().log_level)
 log = logging.getLogger("api")
@@ -431,3 +442,120 @@ async def payments_webhook(request: Request):
         )
     except PaymentError as e:
         raise HTTPException(e.code, e.detail)
+
+
+# --------------------------------------------------------------------------- #
+# payments: customer view, refund requests, admin approval, reconciliation
+# --------------------------------------------------------------------------- #
+@app.get("/v1/me/payments")
+def my_payments(p: Principal = Depends(require_principal)):
+    return {"payments": get_store().list_payments(p.user_id)}
+
+
+class RefundRequestIn(BaseModel):
+    payment_id: str = Field(..., max_length=64)
+    reason: str = Field("", max_length=500)
+
+
+@app.post("/v1/refunds")
+def request_refund(req: RefundRequestIn, p: Principal = Depends(require_principal)):
+    pay = get_store().get_payment(req.payment_id)
+    if not pay or pay.get("uid") != p.user_id:        # 404, don't reveal others' payments
+        raise HTTPException(404, "Payment not found")
+    if pay.get("status") == "refunded":
+        raise HTTPException(409, "This payment is already refunded")
+    rid = uuid.uuid4().hex
+    get_store().refund_request_create(rid, {
+        "uid": p.user_id, "payment_id": req.payment_id, "reason": req.reason, "status": "pending"})
+    return {"id": rid, "status": "pending"}
+
+
+@app.get("/v1/refunds")
+def my_refunds(p: Principal = Depends(require_principal)):
+    return {"requests": [r for r in get_store().list_refund_requests() if r.get("uid") == p.user_id]}
+
+
+@app.get("/admin/refunds")
+def admin_list_refunds(status: str = "pending", _: None = Depends(require_admin)):
+    return {"requests": get_store().list_refund_requests(status)}
+
+
+def _process_refund(payment_id: str) -> dict:
+    """Trigger a refund. In prod this calls the Razorpay refund API and the real
+    webhook reverses credits; here (dev) we fire the signed mock refund webhook."""
+    secret = _payments_secret()
+    _rid, raw, sig = _mock_refund_event(payment_id, secret)
+    return handle_razorpay_webhook(raw, sig, secret, get_store(), TIERS)
+
+
+@app.post("/admin/refunds/{rid}/approve")
+def admin_approve_refund(rid: str, _: None = Depends(require_admin)):
+    r = get_store().refund_request_get(rid)
+    if not r:
+        raise HTTPException(404, "Unknown refund request")
+    if r.get("status") != "pending":
+        raise HTTPException(409, f"Request already {r.get('status')}")
+    result = _process_refund(r["payment_id"])
+    get_store().refund_request_set_status(rid, "approved")
+    return {"status": "approved", "refund": result}
+
+
+@app.post("/admin/refunds/{rid}/reject")
+def admin_reject_refund(rid: str, _: None = Depends(require_admin)):
+    r = get_store().refund_request_get(rid)
+    if not r:
+        raise HTTPException(404, "Unknown refund request")
+    get_store().refund_request_set_status(rid, "rejected")
+    return {"status": "rejected"}
+
+
+@app.get("/admin/reconcile/{uid}")
+def admin_reconcile(uid: str, _: None = Depends(require_admin)):
+    """Money truth for a user: payments vs ledger ('did they actually pay')."""
+    store = get_store()
+    payments = store.list_payments(uid)
+    ledger = store.credit_ledger(uid, limit=1000)
+    captured = sum(int(p.get("amount_inr", 0)) for p in payments if p.get("status") == "captured")
+    refunded = sum(int(p.get("amount_inr", 0)) for p in payments if p.get("status") == "refunded")
+    credited_tokens = sum(int(e.get("tokens", 0)) for e in ledger if e.get("type") in ("grant", "topup"))
+    refunded_tokens = sum(int(e.get("tokens", 0)) for e in ledger if e.get("type") == "refund")
+    return {"uid": uid, "payments": payments, "ledger": ledger,
+            "summary": {"captured_inr": captured, "refunded_inr": refunded,
+                        "credited_tokens": credited_tokens, "refunded_tokens": refunded_tokens}}
+
+
+# --- mock Razorpay gateway (DEV ONLY) ---------------------------------------- #
+class MockCheckoutIn(BaseModel):
+    kind: Literal["subscription", "topup"]
+    tier: Optional[str] = None
+    amount_inr: Optional[int] = None
+    uid: Optional[str] = None          # dev override (e.g. stress tests); defaults to caller
+
+
+class MockRefundIn(BaseModel):
+    payment_id: str = Field(..., max_length=64)
+
+
+@app.post("/mock/razorpay/checkout")
+def mock_checkout(req: MockCheckoutIn, p: Principal = Depends(require_principal)):
+    if get_settings().is_prod:
+        raise HTTPException(404, "Not found")
+    uid = req.uid or p.user_id
+    amount = req.amount_inr
+    if req.kind == "subscription":
+        if req.tier not in TIERS:
+            raise HTTPException(422, "Unknown tier")
+        amount = amount or TIERS[req.tier].price_inr_month
+    elif amount not in TOPUP_PACKS:
+        raise HTTPException(422, f"amount_inr must be one of {sorted(TOPUP_PACKS)}")
+    secret = _payments_secret()
+    pid, raw, sig = _mock_checkout_event(req.kind, uid, secret, tier=req.tier, amount_inr=amount)
+    result = handle_razorpay_webhook(raw, sig, secret, get_store(), TIERS)
+    return {"payment_id": pid, **result}
+
+
+@app.post("/mock/razorpay/refund")
+def mock_refund(req: MockRefundIn, _: None = Depends(require_admin)):
+    if get_settings().is_prod:
+        raise HTTPException(404, "Not found")
+    return _process_refund(req.payment_id)
