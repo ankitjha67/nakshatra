@@ -1137,9 +1137,120 @@ def _section_sahams(chart) -> list[Finding]:
 
 
 # --------------------------------------------------------------------------- #
+# yearly (Varshphal) — a year-scoped, timing-forward set (report_type="yearly")
+# --------------------------------------------------------------------------- #
+def _overlaps_year(start: Any, end: Any, year: int) -> bool:
+    """True if an ISO-date window [start, end] intersects the calendar `year`."""
+    if not (start and end):
+        return False
+    return str(start)[:10] <= f"{year:04d}-12-31" and f"{year:04d}-01-01" <= str(end)[:10]
+
+
+def _yearly(chart, year: int) -> list[Finding]:
+    """Year-scoped findings: which dasha periods govern the year, plus the slow
+    Saturn/Jupiter activations (double transit, ingresses) when the engine surfaces
+    them. Reads `dasha_systems.vimshottari` (.sequence / .all_antardashas / .current),
+    `double_transit`, and `planetary_ingress` — all read defensively.
+    """
+    out: list[Finding] = []
+    cur = _dasha_current(chart)
+    vim = _d(_d(chart.get("dasha_systems")).get("vimshottari"))
+    ml, md_s, md_e = cur.get("mahadasha"), cur.get("md_start"), cur.get("md_end")
+    al, ad_s, ad_e = cur.get("antardasha"), cur.get("ad_start"), cur.get("ad_end")
+
+    # 1) Mahadasha(s) governing the year — prefer the full sequence, else the current window.
+    seq = [r for r in _l(vim.get("sequence")) if isinstance(r, dict)]
+    md_rows = [r for r in seq if _overlaps_year(r.get("start"), r.get("end"), year)]
+    if not md_rows and ml and _overlaps_year(md_s, md_e, year):
+        md_rows = [{"planet": ml, "start": md_s, "end": md_e}]
+
+    if md_rows:
+        lords = [r.get("planet") for r in md_rows if r.get("planet")]
+        lords = list(dict.fromkeys(lords))
+        if len(lords) == 1:
+            win = next((r for r in md_rows if r.get("planet") == lords[0]), {})
+            title = f"{year}: {lords[0]} major period"
+            detail = (f"Through {year}, the Vimshottari major period (Mahadasha) of {lords[0]} sets the "
+                      f"backdrop (running {win.get('start')} to {win.get('end')}); the year's longer themes "
+                      f"lean toward {_karaka(lords[0])}.")
+        else:
+            title = f"{year}: {' → '.join(lords)} handover"
+            detail = (f"{year} spans a handover in the Vimshottari major period — from {' to '.join(lords)} — "
+                      f"so the year's backdrop shifts from {_karaka(lords[0])} toward {_karaka(lords[-1])}.")
+        out.append(Finding(
+            code="YEAR.MAHADASHA", category="yearly", polarity="neutral", weight=8,
+            title=title, detail=detail,
+            evidence=["Mahadasha in %d: " % year + "; ".join(
+                f"{r.get('planet')} ({r.get('start')}–{r.get('end')})" for r in md_rows)],
+        ))
+    elif ml:
+        out.append(Finding(
+            code="YEAR.CONTEXT", category="yearly", polarity="neutral", weight=7,
+            title=f"{year}: read against the {ml} period",
+            detail=(f"The current Vimshottari major period is {ml} ({md_s} to {md_e}); {year} falls outside it, "
+                    f"so a precise Mahadasha for that year comes from the engine's full dasha sequence. Here {year} "
+                    f"is framed against the present {ml} chapter."),
+            evidence=[f"Current Mahadasha: {ml} ({md_s}–{md_e})"],
+        ))
+
+    # 2) Antardasha (sub-period) texture across the year.
+    ad_rows: list[tuple[str, Any, Any]] = []
+    for r in _l(vim.get("all_antardashas")):
+        if not isinstance(r, dict):
+            continue
+        p = r.get("planet") or r.get("antardasha") or r.get("lord")
+        s, e = r.get("start") or r.get("ad_start"), r.get("end") or r.get("ad_end")
+        if p and _overlaps_year(s, e, year):
+            ad_rows.append((p, s, e))
+    if not ad_rows and al and _overlaps_year(ad_s, ad_e, year):
+        ad_rows.append((al, ad_s, ad_e))
+    if ad_rows:
+        lords = list(dict.fromkeys(p for p, _, _ in ad_rows))
+        txt = "; ".join(f"{p} ({s} to {e})" for p, s, e in ad_rows[:4])
+        out.append(Finding(
+            code="YEAR.ANTARDASHA", category="yearly", polarity="neutral", weight=7,
+            title=f"{year}: sub-period — {', '.join(lords)}",
+            detail=(f"Within that backdrop, the sub-period (Antardasha) running through {year} is {txt}. "
+                    f"This sets the year's nearer rhythm, foregrounding {_karaka(lords[0])}."),
+            evidence=[f"Antardasha in {year}: {txt}"],
+        ))
+
+    # 3) Saturn–Jupiter double transit (only if the engine surfaces it).
+    dt = _d(chart.get("double_transit"))
+    dhouses = [h for h in _l(dt.get("houses")) if isinstance(h, int)]
+    if dt.get("active") and dhouses:
+        hs = ", ".join(_ord(h) for h in dhouses)
+        out.append(Finding(
+            code="YEAR.DBL", category="yearly", polarity="supportive", weight=6,
+            title=f"{year}: double transit on the {hs} house",
+            detail=(f"A Saturn–Jupiter double transit activates the {hs} house in this window — a recognised "
+                    f"time when those matters come forward for real development during {year}."),
+            evidence=[f"Double transit: {hs} house"],
+        ))
+
+    # 4) Slow-planet ingresses landing in the year (only if the engine surfaces it).
+    ing = _l(chart.get("planetary_ingress")) or _l(_d(chart.get("planetary_ingress")).get("ingresses"))
+    for ev in ing:
+        if not isinstance(ev, dict):
+            continue
+        p = ev.get("planet")
+        s = ev.get("to_sign") or ev.get("sign")
+        when = ev.get("date") or ev.get("when")
+        if p in ("Jupiter", "Saturn", "Rahu", "Ketu") and s and when and str(when)[:4] == f"{year:04d}":
+            out.append(Finding(
+                code=f"YEAR.INGRESS.{str(p).upper()}", category="yearly", polarity="neutral", weight=5,
+                title=f"{year}: {p} enters {s}",
+                detail=(f"{p} changes sign into {s} during {year} ({when}); its slower, structural influence "
+                        f"begins to be felt from {s} for the months that follow."),
+                evidence=[f"{p} ingress to {s} on {when}"],
+            ))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # public
 # --------------------------------------------------------------------------- #
-def derive_findings(chart: dict[str, Any]) -> list[Finding]:
+def derive_findings(chart: dict[str, Any], year: int | None = None) -> list[Finding]:
     planets = _planets(chart)
     by = _by_name(planets)
     asc_sign = _asc_sign(chart)
@@ -1180,6 +1291,222 @@ def derive_findings(chart: dict[str, Any]) -> list[Finding]:
     findings += _double_transit(chart)
     findings += _twelfth_spirit(chart, by, asc_sign)
     findings += _section_sahams(chart)
+    if year is not None:                       # report_type="yearly" (Varshphal)
+        findings += _yearly(chart, year)
 
     findings.sort(key=lambda f: (-f.weight, f.code))
     return findings
+
+
+# --------------------------------------------------------------------------- #
+# Prashna / KP horary (POST /v1/prashna) — a chart cast for the moment of asking
+# --------------------------------------------------------------------------- #
+# (keywords, house, label). First match wins; order matters where houses overlap.
+_QUESTION_MAP: list[tuple[tuple[str, ...], int, str]] = [
+    (("marri", "marry", "wed", "spouse", "wife", "husband", "partner", "relationship", "romance", "love"), 7, "marriage & partnership"),
+    (("child", "children", "progeny", "conceive", "pregnan", "baby"), 5, "children"),
+    (("education", "study", "studies", "exam", "degree", "admission", "college", "course"), 4, "education"),
+    (("property", "house", "home", "land", "flat", "vehicle", "car"), 4, "property & home"),
+    (("travel", "foreign", "abroad", "visa", "relocat", "immigrat"), 12, "travel & foreign matters"),
+    (("litigation", "court", "case", "dispute", "legal", "lawsuit", "enemy", "enemies"), 6, "disputes & litigation"),
+    (("money", "wealth", "finance", "loan", "debt", "gain", "income", "profit", "invest"), 11, "money & gains"),
+    (("career", "promotion", "business", "profession", "growth", "status"), 10, "career & status"),
+    (("job", "employment", "service", "interview", "hired", "appointment"), 6, "a job / employment"),
+    (("health", "illness", "disease", "recover", "surgery", "sick", "operation"), 6, "health & recovery"),
+]
+
+_BENEFIC = {"Jupiter", "Venus", "Mercury", "Moon"}
+# index % 3 of the sign: 0 movable (cardinal), 1 fixed, 2 dual (mutable)
+_MODALITY = {0: ("movable", "a relatively quick unfolding"),
+             1: ("fixed", "a slower, steady unfolding that rewards patience"),
+             2: ("dual", "an unfolding in phases, sometimes after some back-and-forth")}
+
+
+def _map_question(question: str, category: str | None) -> tuple[int, str]:
+    text = f"{category or ''} {question or ''}".lower()
+    for keys, house, label in _QUESTION_MAP:
+        if any(k in text for k in keys):
+            return house, label
+    return 1, "the matter as it stands"
+
+
+def _dignity_phrase(dignity: str | None) -> str:
+    d = (dignity or "").lower()
+    if "exalt" in d:
+        return " (exalted — strong)"
+    if "debil" in d:
+        return " (debilitated — under strain)"
+    if "own" in d:
+        return " (own sign — comfortable)"
+    return ""
+
+
+def derive_prashna(chart: dict[str, Any], question: str, category: str | None = None) -> list[Finding]:
+    """KP horary findings for a chart cast at the moment of asking. The verdict is
+    read from the relevant house's cuspal sub-lord (from `kp_significators.cusps`
+    when the engine provides it), else defensively from that house's ruler. Every
+    statement is grounded in real placements; nothing about the asker's premise is
+    assumed true (a neutral "if-not" branch is always given)."""
+    house, matter = _map_question(question, category)
+    asc = _asc_sign(chart)
+    by = _by_name(_planets(chart))
+    house_sign = _sign_in_house(asc, house)
+    ruler = _lord_of(house_sign)
+
+    # cuspal sub-lord from the engine's KP block, if present; else the house ruler
+    cusp = _d(_d(_d(chart.get("kp_significators")).get("cusps")).get(f"H{house}"))
+    csl = cusp.get("sub") or cusp.get("ssl")
+    if csl and csl in by:
+        sig, sig_kind = csl, "the cuspal sub-lord (KP)"
+    else:
+        sig, sig_kind = ruler, f"the {_ord(house)}-house ruler"
+
+    sp = by.get(sig) or {}
+    sig_sign = sp.get("sign")
+    if not (asc and sig and sig_sign):           # not enough to ground a verdict
+        return [Finding(
+            code="PRASHNA.HOUSE", category="prashna", polarity="neutral", weight=6,
+            title=f"Read from the {_ord(house)} house",
+            detail=(f"For {matter}, the question is read from the {_ord(house)} house "
+                    f"({HOUSE_MEANING.get(house, 'that area')}). The prashna chart did not expose "
+                    f"enough detail to ground a fuller KP verdict."),
+            evidence=[f"Question mapped to the {_ord(house)} house"],
+        )]
+
+    occ = _house_ws(sig_sign, asc)
+    owns = [h for h in range(1, 13) if _lord_of(_sign_in_house(asc, h)) == sig]
+    sig_houses = set(owns) | ({occ} if occ else set())
+
+    promising = {house, 11}                       # the matter's house + the 11th (fulfilment of desire)
+    twelfth_from = ((house - 2) % 12) + 1          # loss/negation of the matter
+    challenging = {6, 8, 12, twelfth_from}         # the trik houses + negation
+    p_hit = sorted(sig_houses & promising)
+    c_hit = sorted(sig_houses & challenging)
+    score = len(p_hit) - len(c_hit)
+    verdict = "favourable" if score > 0 else "challenging" if score < 0 else "mixed"
+
+    nature = "a natural benefic" if sig in _BENEFIC else "a natural malefic"
+    houses_txt = ", ".join(_ord(h) for h in sorted(sig_houses)) or "few clear houses"
+    out: list[Finding] = []
+
+    out.append(Finding(
+        code="PRASHNA.HOUSE", category="prashna", polarity="neutral", weight=6,
+        title=f"{matter.capitalize()} — read from the {_ord(house)} house",
+        detail=(f"Cast for the moment you asked (ascendant {asc}), {matter} is read from the "
+                f"{_ord(house)} house — {HOUSE_MEANING.get(house, 'that area of life')}. Its significator "
+                f"is {sig}, {sig_kind}, sitting in {sig_sign} in the {_ord(occ)} house{_dignity_phrase(sp.get('dignity'))}."),
+        evidence=[f"{matter}: {_ord(house)} house; significator {sig} in {sig_sign}, {_ord(occ)} house"],
+    ))
+
+    out.append(Finding(
+        code="PRASHNA.VERDICT", category="prashna",
+        polarity="supportive" if verdict == "favourable" else "challenging" if verdict == "challenging" else "mixed",
+        weight=9, title=f"KP indication: {verdict}",
+        detail=(f"{sig} ({nature}) connects to the {houses_txt} house(s). It "
+                f"{'touches the ' + ', '.join(_ord(h) for h in p_hit) + ' (supportive here)' if p_hit else 'does not clearly touch the supportive houses'}"
+                f", and {'touches the ' + ', '.join(_ord(h) for h in c_hit) + ' (obstructing here)' if c_hit else 'avoids the obstructing houses'} — "
+                f"so the indication for {matter} leans {verdict}. This is a focused KP read of the cusp's significator, not a guarantee."),
+        evidence=[f"Significator {sig} houses {sorted(sig_houses)}; promising∩={p_hit}, challenging∩={c_hit}"],
+    ))
+
+    if sig_sign in SIGNS:
+        mod, timing = _MODALITY[SIGNS.index(sig_sign) % 3]
+        out.append(Finding(
+            code="PRASHNA.TIMING", category="prashna", polarity="neutral", weight=7,
+            title="Timing by sign modality",
+            detail=(f"{sig} occupies a {mod} sign ({sig_sign}), which in KP timing points to {timing}."),
+            evidence=[f"{sig} in {sig_sign} ({mod})"],
+        ))
+
+    if verdict == "favourable":
+        alt = ("conditions tend to support it forming, especially as the timing above matures")
+    elif verdict == "challenging":
+        alt = ("conditions are not yet ripe, and pushing hard now is less likely to hold")
+    else:
+        alt = ("the matter stays genuinely open — it turns on the choices and effort you bring")
+    out.append(Finding(
+        code="PRASHNA.IFNOT", category="prashna", polarity="neutral", weight=8,
+        title="If the premise isn't settled",
+        detail=(f"Read this as guidance to weigh, not a fixed outcome. If the situation you describe "
+                f"has not actually settled, the same significator simply means {alt}. Nothing here assumes "
+                f"your premise is already true."),
+        evidence=["Premise-neutral horary branch"],
+    ))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Birth-Time Rectification (POST /v1/btr) — reads the engine's
+# birth_time_rectification block defensively into findings + a normalised dict.
+# --------------------------------------------------------------------------- #
+def _btr_candidate(c: Any) -> dict:
+    c = _d(c)
+    conf = c.get("confidence", c.get("score"))
+    return {
+        "time": c.get("time") or c.get("birth_time") or c.get("tob"),
+        "confidence": int(conf) if isinstance(conf, (int, float)) else None,
+        "ascendant_sign": c.get("ascendant_sign") or c.get("asc") or c.get("lagna"),
+    }
+
+
+def derive_btr(rect: dict, payload: dict) -> tuple[list[Finding], dict]:
+    """Return (findings, normalised_rectification). Reads candidates + the
+    recommended time + confidence + the methods used, all defensively so it
+    adapts to the real engine's shape; nothing is invented."""
+    rect = _d(rect)
+    cands_raw = _l(rect.get("candidates")) or _l(rect.get("results")) or _l(rect.get("times"))
+    cands = [nc for nc in (_btr_candidate(c) for c in cands_raw) if nc["time"]]
+    rec = _btr_candidate(rect.get("recommended") or rect.get("best") or (cands_raw[0] if cands_raw else {}))
+    if not rec["time"] and cands:
+        rec = cands[0]
+
+    m = rect.get("methods")
+    methods = list(m.keys()) if isinstance(m, dict) else [str(x) for x in m] if isinstance(m, list) else []
+    input_time = rect.get("input_time") or payload.get("time")
+    n_ev = rect.get("events_used")
+    if not isinstance(n_ev, int):
+        n_ev = len(_l(payload.get("events")))
+
+    norm = {"recommended": rec, "candidates": cands, "methods": methods,
+            "input_time": input_time, "events_used": n_ev, "window": rect.get("window")}
+
+    out: list[Finding] = []
+    if rec.get("time"):
+        conf = rec.get("confidence")
+        conf_txt = f" (confidence {conf}%)" if isinstance(conf, int) else ""
+        asc_txt = f", giving a {rec['ascendant_sign']} ascendant" if rec.get("ascendant_sign") else ""
+        out.append(Finding(
+            code="BTR.RECOMMENDED", category="btr", polarity="neutral", weight=9,
+            title=f"Most likely birth time: {rec['time']}",
+            detail=(f"Across the classical rectification methods, the most likely birth time is "
+                    f"{rec['time']}{conf_txt}{asc_txt}. The time you provided was {input_time}."),
+            evidence=[f"Recommended {rec['time']}{conf_txt}; input {input_time}"],
+        ))
+    if cands:
+        listed = "; ".join(
+            f"{c['time']}" + (f" ({c['confidence']}%)" if isinstance(c.get("confidence"), int) else "")
+            for c in cands)
+        out.append(Finding(
+            code="BTR.CANDIDATES", category="btr", polarity="neutral", weight=7,
+            title="Candidate times considered",
+            detail=(f"The methods converged on these candidate times: {listed}. The spread is small, "
+                    f"so the ascendant and house cusps stay close across them."),
+            evidence=[f"Candidates: {listed}"],
+        ))
+    if methods:
+        out.append(Finding(
+            code="BTR.METHODS", category="btr", polarity="neutral", weight=6,
+            title="Methods triangulated",
+            detail=(f"This estimate triangulates {', '.join(methods)} against the {n_ev} life "
+                    f"event(s) you supplied — agreement across methods is what raises the confidence."),
+            evidence=[f"Methods: {', '.join(methods)}; events: {n_ev}"],
+        ))
+    out.append(Finding(
+        code="BTR.NOTE", category="btr", polarity="neutral", weight=8,
+        title="How to read this",
+        detail=("Rectification narrows a likely window; it is not a certainty. Confirm it against further "
+                "well-dated life events — even a few minutes can shift the ascendant degree and the house "
+                "cusps, so treat the recommended time as a strong working hypothesis, not a fixed fact."),
+        evidence=["Rectification is probabilistic"],
+    ))
+    return out, norm

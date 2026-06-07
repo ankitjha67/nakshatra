@@ -19,15 +19,22 @@ from pydantic import BaseModel, Field, field_validator
 # Input
 # --------------------------------------------------------------------------- #
 class BirthDetails(BaseModel):
-    name: Optional[str] = Field(None, description="For greeting only; not used in the reading body")
+    name: Optional[str] = Field(None, max_length=80, description="For greeting only; not used in the reading body")
     date: str = Field(..., description="Birth date, YYYY-MM-DD")
     time: str = Field(..., description="Birth time 24h, HH:MM (local to tz)")
-    tz: str = Field("+05:30", description="UTC offset like +05:30 or IANA zone")
+    tz: str = Field("+05:30", max_length=40, description="UTC offset like +05:30 or IANA zone")
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
-    place: Optional[str] = Field(None, description="Human-readable place (optional)")
+    place: Optional[str] = Field(None, max_length=120, description="Human-readable place (optional)")
     ayanamsa: str = Field("lahiri", description="Ayanamsa system")
     house_system: str = Field("whole_sign", description="House system")
+    # Reading-only: which report to render. Deliberately excluded from chart_hash
+    # (it doesn't change the sky) but it IS part of the reading cache key.
+    # /v1/chart ignores it.
+    report_type: Literal["natal", "maha_kundali", "yearly"] = "maha_kundali"
+    # Target calendar year for report_type="yearly" (Varshphal). Ignored otherwise.
+    # Also excluded from chart_hash; added to the reading cache key for yearly.
+    year: Optional[int] = Field(None, ge=1900, le=2200, description="Year for report_type=yearly")
 
     @field_validator("date")
     @classmethod
@@ -63,6 +70,8 @@ class Meta(BaseModel):
     renderer_version: Optional[str] = None
     model: Optional[str] = None
     tier: Optional[str] = None
+    report_type: Optional[str] = None
+    year: Optional[int] = None
     cache_hit: bool = False
     tokens_in: int = 0
     tokens_out: int = 0

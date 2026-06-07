@@ -7,11 +7,13 @@ any stage safely busts the cache.
 """
 from __future__ import annotations
 
+from datetime import date
+
 from .engine import compute_chart, engine_version
 from .rules import derive_findings
 from .llm import render_reading, get_provider, DISCLAIMERS
 from .models import BirthDetails, ChartResponse, ReadingResponse, Meta
-from .billing import Tier, get_store
+from .billing import Tier, get_store, report_sections
 from . import RULES_VERSION, RENDERER_VERSION
 
 
@@ -35,8 +37,15 @@ def get_reading(birth: BirthDetails, tier: Tier) -> ReadingResponse:
     store = get_store()
     ev = engine_version()
     model = get_provider().model or get_provider().name
-    secs = sorted(tier.sections)
-    ck = f"read:{birth.chart_hash()}:{ev}:{RULES_VERSION}:{RENDERER_VERSION}:{model}:{'|'.join(secs)}"
+    # Effective sections = what this report asks for ∩ what the tier unlocks. So a
+    # Basic user requesting maha_kundali still only gets their unlocked sections.
+    report_type = birth.report_type
+    # Yearly (Varshphal) is scoped to a calendar year; default to the current year.
+    year = (birth.year or date.today().year) if report_type == "yearly" else None
+    eff_sections = report_sections(report_type) & set(tier.sections)
+    secs = sorted(eff_sections)
+    ck = (f"read:{birth.chart_hash()}:{ev}:{RULES_VERSION}:{RENDERER_VERSION}:"
+          f"{model}:{report_type}" + (f":{year}" if year is not None else "") + f":{'|'.join(secs)}")
 
     if tier.cache:
         cached = store.cache_get(ck)
@@ -49,10 +58,10 @@ def get_reading(birth: BirthDetails, tier: Tier) -> ReadingResponse:
                                    disclaimers=cached["disclaimers"], meta=meta)
 
     chart = compute_chart(birth)
-    findings = derive_findings(chart)
-    summary, sections, model_name, ti, to = render_reading(chart, findings, set(tier.sections))
+    findings = derive_findings(chart, year=year)
+    summary, sections, model_name, ti, to = render_reading(chart, findings, eff_sections)
     meta = Meta(engine_version=ev, rules_version=RULES_VERSION, renderer_version=RENDERER_VERSION,
-                model=model_name, tier=tier.key, cache_hit=False,
+                model=model_name, tier=tier.key, report_type=report_type, year=year, cache_hit=False,
                 tokens_in=ti, tokens_out=to, chart_hash=birth.chart_hash())
     resp = ReadingResponse(summary=summary, sections=sections, findings=findings,
                            disclaimers=DISCLAIMERS, meta=meta)
