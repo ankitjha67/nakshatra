@@ -1,7 +1,15 @@
 import React from "react";
 
-// STUB until Phase 4–5 (credit ledger). Will read users/{uid} balance or the /v1/chat response.
+// Small mono credits indicator (DESIGN.md). Shows available tokens; grant/topup
+// breakdown on hover. Balance is lifted in App (from /v1/credits + chat responses).
 export default function CreditsWidget({ balance }) {
   const available = balance?.available;
-  return <span className="credits">credits: {available == null ? "—" : available.toLocaleString()}</span>;
+  const title = balance
+    ? `grant ${(balance.grant ?? 0).toLocaleString()} · top-up ${(balance.topup ?? 0).toLocaleString()}`
+    : "";
+  return (
+    <span className="credits" title={title}>
+      credits: {available == null ? "—" : available.toLocaleString()}
+    </span>
+  );
 }
