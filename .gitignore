@@ -1,0 +1,28 @@
+# ── Proprietary engine — NEVER commit (public repo). Kept local in api/, shipped to Cloud Build only.
+maha_jyotish_cloud_engine.py
+mj_engine.py
+
+# ── Secrets
+.env
+.env.*
+*serviceAccount*.json
+*-key.json
+firebase-adminsdk*.json
+
+# ── Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / web build
+node_modules/
+web/dist/
+web/.firebase/
+.firebase/
+
+# ── Misc
+*_backup.py
+.DS_Store

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.zip
+*backup*.py
+patch_llm.py
+setup_jyotish.py
+.env
+.git/
