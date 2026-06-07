@@ -34,7 +34,7 @@ from .billing import (
     Principal, Tier, TIERS, tier_catalog, report_type_catalog, get_store,
     require_admin, enforce_quota, enforce_global_breaker, _ct_eq, _WEAK_INTERNAL_TOKENS,
 )
-from .auth import require_principal
+from .auth import require_principal, delete_firebase_user
 from .pipeline import get_chart, get_reading
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
@@ -76,6 +76,28 @@ def tiers():
 def credits_balance(p: Principal = Depends(require_principal)):
     """The signed-in user's chat-credit balance (read-only; runs lazy resets)."""
     return get_store().credit_balance(p.user_id, p.tier)
+
+
+@app.get("/v1/me")
+def me(p: Principal = Depends(require_principal)):
+    """The signed-in user's profile + entitlements + balance (frontend reads its real tier here)."""
+    return {"user_id": p.user_id, "tier": p.tier.key,
+            "sections": sorted(p.tier.sections), "balance": get_store().credit_balance(p.user_id, p.tier)}
+
+
+@app.get("/v1/me/export")
+def me_export(p: Principal = Depends(require_principal)):
+    """GDPR data portability — the user's own stored data (profile, ledger, chats)."""
+    return get_store().export_user(p.user_id)
+
+
+@app.delete("/v1/me")
+def me_delete(p: Principal = Depends(require_principal)):
+    """GDPR right to erasure — delete the user's record, ledger, chats, API keys,
+    and (best-effort) the Firebase Auth identity."""
+    res = get_store().delete_user(p.user_id)
+    res["firebase_identity"] = delete_firebase_user(p.user_id)
+    return {"status": "deleted", **res}
 
 
 @app.post("/v1/chart", response_model=ChartResponse)
@@ -144,14 +166,15 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     msg_id = uuid.uuid4().hex
     bal2 = store.credit_debit(p.user_id, p.tier, cost, reason="chat turn", ref=msg_id)
 
-    # --- persist the turn (best-effort; messages are not the money path) ---
+    # --- persist the turn (best-effort, opt-out via PERSIST_CHAT; not the money path) ---
     chat_id = req.chat_id or uuid.uuid4().hex
-    try:
-        store.chat_save_turn(p.user_id, chat_id, req.birth.chart_hash(),
-                             req.message, answer, cost, msg_id)
-    except Exception as exc:  # noqa: BLE001 — never log the message body (PII)
-        log.warning("chat persistence failed (non-fatal) uid=%s chat_id=%s err=%s",
-                    p.user_id, chat_id, type(exc).__name__)
+    if s.persist_chat:
+        try:
+            store.chat_save_turn(p.user_id, chat_id, req.birth.chart_hash(),
+                                 req.message, answer, cost, msg_id)
+        except Exception as exc:  # noqa: BLE001 — never log the message body (PII)
+            log.warning("chat persistence failed (non-fatal) uid=%s chat_id=%s err=%s",
+                        p.user_id, chat_id, type(exc).__name__)
     store.record(p.key, ti, to, reading=False)
 
     return ChatResponse(answer=answer, tokens_used=cost, chat_id=chat_id,

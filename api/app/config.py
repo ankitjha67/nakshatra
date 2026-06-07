@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     firestore_project: str = ""
     database_url: str = ""           # postgres dsn when store_backend=postgres
     cache_readings: bool = True
+    api_key_pepper: str = ""         # server pepper; B2B keys are stored hashed at rest
+    persist_chat: bool = True        # store chat transcripts (set False to keep none)
+    chat_retention_days: int = 0     # >0 stamps an expireAt for a Firestore TTL policy (0 = keep)
 
     # --- credits / chat metering (see docs/CREDIT_LEDGER.md) ---
     chat_max_output: int = 800             # hard per-turn output cap (bounded turn size)

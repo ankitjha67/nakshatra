@@ -58,6 +58,19 @@ def _principal_from_uid(uid: str, email: str | None) -> Principal:
     return Principal(user_id=uid, key=uid, tier=tier)
 
 
+def delete_firebase_user(uid: str) -> bool:
+    """Best-effort deletion of the Firebase Auth identity (GDPR erasure). No-op for
+    non-Firebase principals (e.g. B2B API keys) or when Admin SDK is unavailable."""
+    try:
+        _ensure_firebase()
+        from firebase_admin import auth as fb_auth
+        fb_auth.delete_user(uid)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log.warning("firebase identity delete skipped uid=%s err=%s", uid, type(exc).__name__)
+        return False
+
+
 async def require_user(authorization: str | None = Header(default=None)) -> Principal:
     """Firebase-only dependency (used where an app login is mandatory)."""
     if not authorization or not authorization.lower().startswith("bearer "):

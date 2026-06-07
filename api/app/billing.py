@@ -7,10 +7,11 @@ immediately; the Firestore backend persists all of it for production.
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Header, HTTPException
@@ -21,6 +22,13 @@ from .config import get_settings
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _chat_expire_at(now: datetime) -> Optional[datetime]:
+    """Expiry stamp for chat messages when a retention window is configured
+    (drives a Firestore TTL policy). None = keep indefinitely."""
+    days = get_settings().chat_retention_days
+    return now + timedelta(days=days) if days and days > 0 else None
 
 
 # --------------------------------------------------------------------------- #
@@ -220,6 +228,9 @@ class Store:
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
     def global_tokens_today(self) -> int: ...
+    # GDPR data-subject rights
+    def export_user(self, uid: str) -> dict: ...
+    def delete_user(self, uid: str) -> dict: ...
 
 
 @dataclass
@@ -329,12 +340,27 @@ class MemoryStore(Store):
 
     def chat_save_turn(self, uid, chat_id, chart_hash, user_text, assistant_text, tokens, msg_id, now=None):
         now = now or _now()
+        exp = _chat_expire_at(now)
         c = self.chats.setdefault(uid, {}).setdefault(
             chat_id, {"chart_hash": chart_hash, "created_at": now, "messages": []})
-        c["messages"].append({"role": "user", "text": user_text, "tokens": None, "ts": now})
+        c["messages"].append({"role": "user", "text": user_text, "tokens": None, "ts": now, "expireAt": exp})
         c["messages"].append({"role": "assistant", "text": assistant_text,
-                              "tokens": int(tokens), "ts": now, "id": msg_id})
+                              "tokens": int(tokens), "ts": now, "id": msg_id, "expireAt": exp})
         return chat_id
+
+    def export_user(self, uid):
+        return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
+                "chats": self.chats.get(uid, {})}
+
+    def delete_user(self, uid):
+        api_keys = [k for k, r in self.keys.items() if r.user_id == uid]
+        for k in api_keys:
+            self.keys.pop(k, None)
+        return {"deleted": True,
+                "user": self.users.pop(uid, None) is not None,
+                "ledger_entries": len(self.ledger_entries.pop(uid, [])),
+                "chats": len(self.chats.pop(uid, {})),
+                "api_keys": len(api_keys)}
 
     def mark_payment_processed(self, payment_id):
         if payment_id in self.processed_payments:
@@ -359,9 +385,13 @@ class FirestoreStore(Store):
         self._db = firestore.Client(project=project) if project else firestore.Client()
         self._rate: dict[str, list[float]] = {}
 
-    # --- api keys ---
+    # --- api keys (stored HASHED at rest; the raw key is never persisted) ---
+    def _key_hash(self, key: str) -> str:
+        pepper = get_settings().api_key_pepper or ""
+        return hashlib.sha256((pepper + key).encode("utf-8")).hexdigest()
+
     def get_key(self, key):
-        snap = self._db.collection("api_keys").document(key).get()
+        snap = self._db.collection("api_keys").document(self._key_hash(key)).get()
         if not snap.exists:
             return None
         d = snap.to_dict()
@@ -369,8 +399,8 @@ class FirestoreStore(Store):
                             tier=d.get("tier", "free"), disabled=d.get("disabled", False))
 
     def create_key(self, key, user_id, tier):
-        self._db.collection("api_keys").document(key).set(
-            {"user_id": user_id, "tier": tier, "disabled": False})
+        self._db.collection("api_keys").document(self._key_hash(key)).set(
+            {"user_id": user_id, "tier": tier, "disabled": False, "prefix": key[:8]})
         return ApiKeyRecord(key=key, user_id=user_id, tier=tier)
 
     def set_tier(self, user_id, tier):
@@ -434,6 +464,29 @@ class FirestoreStore(Store):
         snap = self._db.collection("global_usage").document(date.today().isoformat()).get()
         return int((snap.to_dict() or {}).get("tokens", 0)) if snap.exists else 0
 
+    def export_user(self, uid):
+        uref = self._db.collection("users").document(uid)
+        chats = []
+        for c in uref.collection("chats").stream():
+            msgs = [m.to_dict() for m in c.reference.collection("messages").stream()]
+            chats.append({"id": c.id, **(c.to_dict() or {}), "messages": msgs})
+        return {"user": self.get_user(uid), "ledger": self.credit_ledger(uid, limit=10000), "chats": chats}
+
+    def delete_user(self, uid):
+        uref = self._db.collection("users").document(uid)
+        for entry in uref.collection("ledger").stream():
+            entry.reference.delete()
+        for c in uref.collection("chats").stream():
+            for m in c.reference.collection("messages").stream():
+                m.reference.delete()
+            c.reference.delete()
+        uref.delete()
+        n = 0
+        for doc in self._db.collection("api_keys").where("user_id", "==", uid).stream():
+            doc.reference.delete()
+            n += 1
+        return {"deleted": True, "api_keys": n}
+
     # --- reading cache ---
     def _ck_id(self, ck):
         import hashlib
@@ -496,9 +549,14 @@ class FirestoreStore(Store):
                     .collection("chats").document(chat_id))
         chat_ref.set({"chart_hash": chart_hash, "created_at": now}, merge=True)
         msgs = chat_ref.collection("messages")
-        msgs.document().set({"role": "user", "text": user_text, "tokens": None, "ts": now})
-        msgs.document().set({"role": "assistant", "text": assistant_text,
-                             "tokens": int(tokens), "ts": now, "id": msg_id})
+        exp = _chat_expire_at(now)   # set a Firestore TTL policy on `expireAt` to auto-purge
+        u = {"role": "user", "text": user_text, "tokens": None, "ts": now}
+        a = {"role": "assistant", "text": assistant_text, "tokens": int(tokens), "ts": now, "id": msg_id}
+        if exp:
+            u["expireAt"] = exp
+            a["expireAt"] = exp
+        msgs.document().set(u)
+        msgs.document().set(a)
         return chat_id
 
     def mark_payment_processed(self, payment_id):
