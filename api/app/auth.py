@@ -40,10 +40,13 @@ def _verify_bearer(token: str) -> dict:
     _ensure_firebase()
     from firebase_admin import auth as fb_auth
     try:
-        return fb_auth.verify_id_token(token)
+        decoded = fb_auth.verify_id_token(token, check_revoked=get_settings().verify_token_revocation)
     except Exception as exc:  # noqa: BLE001 — surface as 401, not 500
         log.warning("Firebase token verification failed: %s", exc)
         raise HTTPException(401, "Invalid or expired sign-in token")
+    if get_settings().require_email_verified and not decoded.get("email_verified", False):
+        raise HTTPException(403, "Please verify your email address to continue.")
+    return decoded
 
 
 def _principal_from_uid(uid: str, email: str | None) -> Principal:

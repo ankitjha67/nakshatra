@@ -1,0 +1,100 @@
+"""Payment webhook handling (Razorpay) — MONEY PATH, review carefully.
+
+The browser is never trusted with entitlements. A signed webhook from the
+provider is the only thing that changes a tier or adds top-up credits. This
+module:
+  * verifies the Razorpay HMAC-SHA256 signature over the RAW body,
+  * routes subscription events → tier change + monthly grant,
+  * routes one-time payments → a top-up pack (by INR amount),
+  * is idempotent: every entity is marked processed first, so webhook retries
+    (Razorpay redelivers) never double-credit.
+
+All persistence is the store's job; this stays pure/testable (the store and a
+settings-like object are injected).
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+from typing import Any
+
+# One-time top-up packs: INR (rupees) -> tokens. Server-authoritative; the amount
+# on the verified payment selects the pack (never a client-sent token count).
+TOPUP_PACKS: dict[int, int] = {99: 100_000, 299: 350_000, 799: 1_000_000}
+
+
+class PaymentError(Exception):
+    def __init__(self, code: int, detail: str):
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+
+
+def verify_razorpay_signature(raw: bytes, signature: str | None, secret: str) -> bool:
+    """True iff HMAC-SHA256(raw, secret) matches the X-Razorpay-Signature header."""
+    if not (signature and secret):
+        return False
+    digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, signature)
+
+
+def _entity(payload: dict, key: str) -> dict:
+    ent = (((payload.get("payload") or {}).get(key) or {}).get("entity")) or {}
+    return ent if isinstance(ent, dict) else {}
+
+
+def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
+                            store: Any, tiers: dict) -> dict:
+    """Verify + route a Razorpay webhook. Returns a small status dict.
+    Raises PaymentError(400) on a bad signature."""
+    if not verify_razorpay_signature(raw, signature, secret):
+        raise PaymentError(400, "Invalid webhook signature")
+
+    try:
+        payload = json.loads(raw or b"{}")
+    except (ValueError, TypeError):
+        raise PaymentError(400, "Malformed webhook body")
+
+    event = str(payload.get("event") or "")
+    payment = _entity(payload, "payment")
+    sub = _entity(payload, "subscription")
+
+    # --- subscription: grant exactly once per CHARGE (not per lifecycle event) ---
+    # Razorpay emits many subscription.* events (authenticated/activated/updated/...)
+    # with the same subscription id; only `subscription.charged` is a real paid period.
+    if event == "subscription.charged":
+        notes = sub.get("notes") or payment.get("notes") or {}
+        uid = notes.get("user_id") or notes.get("uid")
+        tier = notes.get("tier")
+        if not (uid and tier in tiers):
+            return {"status": "ignored", "reason": "missing uid/tier in subscription notes"}
+        charge_id = payment.get("id") or sub.get("id") or ""
+        if not charge_id:
+            return {"status": "ignored", "reason": "no charge id"}
+        if not store.mark_payment_processed(f"subgrant:{charge_id}"):
+            return {"status": "duplicate", "id": charge_id}
+        store.set_tier(uid, tier)
+        store.credit_grant(uid, tiers[tier], reason="subscription charged")
+        return {"status": "subscription", "uid": uid, "tier": tier}
+
+    # --- one-time top-up: credit once per PAYMENT id (event-independent) ---
+    # `invoice_id` is present on subscription charges; require it absent so a
+    # subscription payment can never be mistaken for a top-up pack of equal amount.
+    if event == "payment.captured" and not payment.get("invoice_id"):
+        pid = payment.get("id") or ""
+        notes = payment.get("notes") or {}
+        uid = notes.get("user_id") or notes.get("uid")
+        amount_inr = int(payment.get("amount") or 0) // 100       # paise -> rupees
+        tokens = TOPUP_PACKS.get(amount_inr)
+        if not (pid and uid and tokens):
+            return {"status": "ignored", "reason": "no matching pack or uid"}
+        # Key on the payment id ALONE so payment.captured + order.paid (same id) can't double-credit.
+        if not store.mark_payment_processed(f"topup:{pid}"):
+            return {"status": "duplicate", "id": pid}
+        user = store.get_user(uid) or {}
+        tier = tiers.get(user.get("tier", "free"), tiers["free"])
+        store.credit_topup(uid, tier, tokens, reason=f"top-up ₹{amount_inr}", ref=pid)
+        return {"status": "topup", "uid": uid, "tokens": tokens}
+
+    return {"status": "ignored", "reason": f"unhandled event {event}"}
