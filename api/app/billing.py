@@ -233,6 +233,17 @@ class Store:
     def refund_request_get(self, req_id: str) -> Optional[dict]: ...
     def refund_request_set_status(self, req_id: str, status: str) -> None: ...
     def list_refund_requests(self, status: Optional[str] = None) -> list: ...
+    # abuse controls: activity/IP capture, bans, admin scans
+    def record_activity(self, uid: str, ip: str, now: Optional[datetime] = None) -> None: ...
+    def get_activity(self, uid: str) -> Optional[dict]: ...
+    def set_ban(self, uid: str, kind: str, reason: str,
+                until: Optional[datetime], by: str) -> None: ...
+    def get_ban(self, uid: str) -> Optional[dict]: ...
+    def clear_ban(self, uid: str) -> None: ...
+    def is_banned(self, uid: str, now: Optional[datetime] = None) -> Optional[dict]: ...
+    def list_bans(self) -> list: ...
+    def list_users(self) -> list: ...
+    def all_payments(self) -> list: ...
     # chat persistence (NOT the money path — best-effort)
     def chat_save_turn(self, uid: str, chat_id: str, chart_hash: str, user_text: str,
                        assistant_text: str, tokens: int, msg_id: str,
@@ -260,6 +271,8 @@ class MemoryStore(Store):
     global_usage: dict = field(default_factory=dict)   # date -> total tokens
     payments: dict = field(default_factory=dict)        # payment_id -> record
     refund_requests: dict = field(default_factory=dict)  # req_id -> record
+    activity: dict = field(default_factory=dict)         # uid -> {last_ip, ips, last_seen, requests}
+    bans: dict = field(default_factory=dict)             # uid -> ban record
 
     def get_key(self, key):
         return self.keys.get(key)
@@ -382,6 +395,49 @@ class MemoryStore(Store):
 
     def list_refund_requests(self, status=None):
         return [r for r in self.refund_requests.values() if status is None or r.get("status") == status]
+
+    # --- abuse controls ---
+    def record_activity(self, uid, ip, now=None):
+        now = now or _now()
+        a = self.activity.setdefault(uid, {"uid": uid, "ips": [], "requests": 0})
+        a["last_ip"] = ip
+        a["last_seen"] = now
+        a["requests"] += 1
+        if ip and ip not in a["ips"]:
+            a["ips"] = ([ip] + a["ips"])[:10]
+
+    def get_activity(self, uid):
+        return self.activity.get(uid)
+
+    def set_ban(self, uid, kind, reason, until, by):
+        self.bans[uid] = {"uid": uid, "kind": kind, "reason": reason, "until": until, "by": by, "ts": _now()}
+
+    def get_ban(self, uid):
+        return self.bans.get(uid)
+
+    def clear_ban(self, uid):
+        self.bans.pop(uid, None)
+
+    def is_banned(self, uid, now=None):
+        now = now or _now()
+        b = self.bans.get(uid)
+        if not b:
+            return None
+        if b.get("kind") == "permanent":
+            return b
+        if b.get("until") and now < b["until"]:
+            return b
+        self.bans.pop(uid, None)          # temp ban expired
+        return None
+
+    def list_bans(self):
+        return list(self.bans.values())
+
+    def list_users(self):
+        return [{"uid": u, **v} for u, v in self.users.items()]
+
+    def all_payments(self):
+        return list(self.payments.values())
 
     def chat_save_turn(self, uid, chat_id, chart_hash, user_text, assistant_text, tokens, msg_id, now=None):
         now = now or _now()
@@ -619,6 +675,52 @@ class FirestoreStore(Store):
         col = self._db.collection("refund_requests")
         q = col.where("status", "==", status) if status else col
         return [d.to_dict() for d in q.stream()]
+
+    # --- abuse controls ---
+    def record_activity(self, uid, ip, now=None):
+        now = now or _now()
+        data = {"uid": uid, "last_seen": now, "requests": self._fs.Increment(1)}
+        if ip:
+            data["last_ip"] = ip
+            data["ips"] = self._fs.ArrayUnion([ip])
+        self._db.collection("activity").document(uid).set(data, merge=True)
+
+    def get_activity(self, uid):
+        snap = self._db.collection("activity").document(uid).get()
+        return snap.to_dict() if snap.exists else None
+
+    def set_ban(self, uid, kind, reason, until, by):
+        self._db.collection("bans").document(uid).set(
+            {"uid": uid, "kind": kind, "reason": reason, "until": until, "by": by, "ts": _now()})
+
+    def get_ban(self, uid):
+        snap = self._db.collection("bans").document(uid).get()
+        return snap.to_dict() if snap.exists else None
+
+    def clear_ban(self, uid):
+        self._db.collection("bans").document(uid).delete()
+
+    def is_banned(self, uid, now=None):
+        now = now or _now()
+        b = self.get_ban(uid)
+        if not b:
+            return None
+        if b.get("kind") == "permanent":
+            return b
+        if b.get("until") and now < b["until"]:
+            return b
+        if b.get("until"):
+            self.clear_ban(uid)
+        return None
+
+    def list_bans(self):
+        return [d.to_dict() for d in self._db.collection("bans").stream()]
+
+    def list_users(self):
+        return [{"uid": d.id, **(d.to_dict() or {})} for d in self._db.collection("users").stream()]
+
+    def all_payments(self):
+        return [d.to_dict() for d in self._db.collection("payments").stream()]
 
     def chat_save_turn(self, uid, chat_id, chart_hash, user_text, assistant_text, tokens, msg_id, now=None):
         now = now or _now()

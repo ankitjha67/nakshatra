@@ -3,11 +3,17 @@ import { auth, PREVIEW } from "./firebase.js";
 // In preview (no Firebase config), talk to the local API with the seeded dev key.
 const BASE = import.meta.env.VITE_API_BASE || (PREVIEW ? "http://127.0.0.1:8099" : "");
 const PREVIEW_KEY = "pro_dev_key";
+const PREVIEW_ADMIN_KEY = "test-admin-secret";   // dev-only; matches a locally-booted API
 
 // Real users send a Firebase ID token (never an API key in the browser); the dev
-// preview sends the seeded local dev key instead.
-async function authHeaders() {
-  if (PREVIEW) return { "X-API-Key": PREVIEW_KEY };
+// preview sends the seeded local dev key instead. In prod, admin endpoints are
+// authorized by an `admin` custom claim on the same Firebase token.
+async function authHeaders(path = "") {
+  if (PREVIEW) {
+    const h = { "X-API-Key": PREVIEW_KEY };
+    if (path.startsWith("/admin") || path.startsWith("/mock")) h["X-Admin-Key"] = PREVIEW_ADMIN_KEY;
+    return h;
+  }
   const user = auth?.currentUser;
   if (!user) throw new Error("Not signed in.");
   return { Authorization: `Bearer ${await user.getIdToken(true)}` };
@@ -30,12 +36,12 @@ async function handle(res) {
 }
 
 export async function apiPost(path, body) {
-  const headers = { "Content-Type": "application/json", ...(await authHeaders()) };
+  const headers = { "Content-Type": "application/json", ...(await authHeaders(path)) };
   return handle(await fetch(`${BASE}${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
 }
 
 export async function apiGet(path) {
-  return handle(await fetch(`${BASE}${path}`, { headers: await authHeaders() }));
+  return handle(await fetch(`${BASE}${path}`, { headers: await authHeaders(path) }));
 }
 
 export async function getTiers() {

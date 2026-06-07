@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     chat_max_output: int = 800             # hard per-turn output cap (bounded turn size)
     daily_token_ceiling: int = 200_000     # per-user/day abuse ceiling (independent of balance)
     daily_global_token_breaker: int = 0    # optional global daily Vertex spend breaker (0 = off)
+    # abuse / anomaly thresholds (admin flagging)
+    anomaly_token_day_flag: int = 1_000_000   # tokens/day above this flags a user
+    anomaly_refund_flag: int = 3              # >= this many refund requests flags a user
+    anomaly_ip_accounts_flag: int = 5         # >= this many accounts on one IP flags them
 
     # --- auth / billing ---
     # No usable default: admin/internal endpoints stay disabled until a real

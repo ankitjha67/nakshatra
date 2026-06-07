@@ -67,4 +67,15 @@ button:disabled{opacity:.5;cursor:default}
 .meter-fill{height:100%;background:var(--brass)}
 .meter-label{display:block;margin-top:9px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .meter-label b{color:var(--brass);font-weight:500;font-size:14px}
+/* Admin dashboard — stat cards + hairline table */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:640px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.stat-v{font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:600;color:var(--ink);line-height:1}
+.stat-k{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:7px}
+.admin-tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.admin-tbl th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding:8px 10px}
+.admin-tbl td{border-bottom:1px solid var(--line);padding:9px 10px;color:var(--ink-soft);vertical-align:top}
+.admin-tbl .mono{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
+button.sm{padding:5px 11px;font-size:12px}
 footer.site{padding:28px 0;border-top:1px solid var(--line);color:var(--muted);font-size:12px;font-family:"IBM Plex Mono",monospace;margin-top:30px}

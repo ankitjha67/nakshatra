@@ -8,6 +8,7 @@ import ReadingTab from "./tabs/ReadingTab.jsx";
 import ChatTab from "./tabs/ChatTab.jsx";
 import PrashnaTab from "./tabs/PrashnaTab.jsx";
 import BtrTab from "./tabs/BtrTab.jsx";
+import AdminTab from "./tabs/AdminTab.jsx";
 
 const RANK = { free: 0, basic: 1, pro: 2, enterprise: 3 };
 
@@ -31,12 +32,16 @@ const TABS = [
     render: () => <BtrTab /> },
 ];
 
+// Shown only to admins (gated by /admin/ping).
+const ADMIN_TAB = { key: "admin", label: "Admin", min: "free", render: () => <AdminTab /> };
+
 export default function App() {
   const [user, setUser] = useState(undefined);
   const [tab, setTab] = useState("natal");
   const [tiers, setTiers] = useState([]);
   const [lastBirth, setLastBirth] = useState(null);   // last cast chart → grounds Chat
   const [balance, setBalance] = useState(null);       // chat credit balance (CreditsWidget)
+  const [isAdmin, setIsAdmin] = useState(false);      // shows the Admin tab when true
 
   useEffect(() => {
     if (PREVIEW) { setUser({ email: "preview@local" }); return; }
@@ -49,13 +54,16 @@ export default function App() {
 
   // Load the credit balance once signed in (chat turns then keep it live).
   useEffect(() => { if (user) apiGet("/v1/credits").then(setBalance).catch(() => {}); }, [user]);
+  // Reveal the Admin tab only if this account is authorized.
+  useEffect(() => { if (user) apiGet("/admin/ping").then(() => setIsAdmin(true)).catch(() => setIsAdmin(false)); }, [user]);
 
   if (user === undefined) return <div className="wrap"><p className="loader" style={{ paddingTop: 40 }}>Loading…</p></div>;
 
   const ctx = { onCast: setLastBirth, lastBirth, setBalance };
+  const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
 
   const locked = (min) => RANK[USER_TIER] < RANK[min];
-  const active = TABS.find((t) => t.key === tab) || TABS[0];
+  const active = tabs.find((t) => t.key === tab) || tabs[0];
 
   return (
     <div className="wrap">
@@ -89,7 +97,7 @@ export default function App() {
       ) : (
         <>
           <nav className="tabs">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button key={t.key} className={`tab ${tab === t.key ? "active" : ""}`} onClick={() => setTab(t.key)}>
                 {t.label}{locked(t.min) ? <span className="lock"><LockIcon /></span> : null}
               </button>

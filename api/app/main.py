@@ -32,9 +32,9 @@ from .config import get_settings
 from .models import BirthDetails, ChartResponse, ReadingResponse, JobResponse, Meta
 from .billing import (
     Principal, Tier, TIERS, tier_catalog, report_type_catalog, get_store,
-    require_admin, enforce_quota, enforce_global_breaker, _ct_eq, _WEAK_INTERNAL_TOKENS,
+    enforce_quota, enforce_global_breaker, _ct_eq, _WEAK_INTERNAL_TOKENS,
 )
-from .auth import require_principal, delete_firebase_user
+from .auth import require_principal, delete_firebase_user, require_admin
 from .pipeline import get_chart, get_reading
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
@@ -540,6 +540,92 @@ def admin_reconcile(uid: str, _: None = Depends(require_admin)):
     return {"uid": uid, "payments": payments, "ledger": ledger,
             "summary": {"captured_inr": captured, "refunded_inr": refunded,
                         "credited_tokens": credited_tokens, "refunded_tokens": refunded_tokens}}
+
+
+# --------------------------------------------------------------------------- #
+# admin: abuse controls (bans), anomaly flagging, analytics
+# --------------------------------------------------------------------------- #
+class BanIn(BaseModel):
+    kind: Literal["temporary", "permanent"] = "temporary"
+    reason: str = Field("policy violation", max_length=200)
+    days: int = Field(7, ge=1, le=3650)
+
+
+@app.post("/admin/users/{uid}/ban")
+def admin_ban(uid: str, req: BanIn, _: None = Depends(require_admin)):
+    until = (datetime.now(timezone.utc) + timedelta(days=req.days)) if req.kind == "temporary" else None
+    get_store().set_ban(uid, req.kind, req.reason, until, by="admin")
+    return {"uid": uid, "kind": req.kind, "reason": req.reason,
+            "until": until.isoformat() if until else None}
+
+
+@app.post("/admin/users/{uid}/unban")
+def admin_unban(uid: str, _: None = Depends(require_admin)):
+    get_store().clear_ban(uid)
+    return {"uid": uid, "status": "unbanned"}
+
+
+def _iso(v):
+    return v.isoformat() if hasattr(v, "isoformat") else v
+
+
+def _scan_anomalies() -> list[dict]:
+    """Flag users on token velocity, refund abuse, and accounts sharing an IP."""
+    s = get_settings()
+    store = get_store()
+    users = store.list_users()
+    refund_counts: dict = {}
+    for r in store.list_refund_requests():
+        refund_counts[r.get("uid")] = refund_counts.get(r.get("uid"), 0) + 1
+    acts, ip_map = {}, {}
+    for u in users:
+        a = store.get_activity(u["uid"]) or {}
+        acts[u["uid"]] = a
+        if a.get("last_ip"):
+            ip_map.setdefault(a["last_ip"], []).append(u["uid"])
+    flagged = []
+    for u in users:
+        uid = u["uid"]
+        a = acts.get(uid, {})
+        usage = store.usage_today(uid) or {}
+        tokens = int(usage.get("tokens_in", 0)) + int(usage.get("tokens_out", 0))
+        reasons = []
+        if tokens >= s.anomaly_token_day_flag:
+            reasons.append(f"high token use today ({tokens:,})")
+        if refund_counts.get(uid, 0) >= s.anomaly_refund_flag:
+            reasons.append(f"refund abuse ({refund_counts[uid]} requests)")
+        ip = a.get("last_ip")
+        if ip and len(ip_map.get(ip, [])) >= s.anomaly_ip_accounts_flag:
+            reasons.append(f"{len(ip_map[ip])} accounts share IP {ip}")
+        if reasons:
+            flagged.append({"uid": uid, "reasons": reasons, "last_ip": ip,
+                            "last_seen": _iso(a.get("last_seen")), "tier": u.get("tier"),
+                            "banned": bool(store.get_ban(uid))})
+    return flagged
+
+
+@app.get("/admin/ping")
+def admin_ping(_: None = Depends(require_admin)):
+    return {"admin": True}
+
+
+@app.get("/admin/anomalies")
+def admin_anomalies(_: None = Depends(require_admin)):
+    return {"flagged": _scan_anomalies()}
+
+
+@app.get("/admin/stats")
+def admin_stats(_: None = Depends(require_admin)):
+    """One-stop analytics: users, traffic, tokens, revenue, refunds, run-cost."""
+    store = get_store()
+    users = store.list_users()
+    pays = store.all_payments()
+    revenue = sum(int(p.get("amount_inr", 0)) for p in pays if p.get("status") == "captured")
+    refunded = sum(int(p.get("amount_inr", 0)) for p in pays if p.get("status") == "refunded")
+    return {"users_total": len(users), "banned": len(store.list_bans()),
+            "flagged": len(_scan_anomalies()), "tokens_today": store.global_tokens_today(),
+            "revenue_inr": revenue, "refunded_inr": refunded, "net_inr": revenue - refunded,
+            "platform_cost": pricing.monthly_platform_cost(max(len(users), 1))}
 
 
 # --- mock Razorpay gateway (DEV ONLY) ---------------------------------------- #
