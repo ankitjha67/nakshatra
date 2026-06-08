@@ -313,6 +313,12 @@ class Store:
     def clear_birth_lock(self, uid: str) -> None: ...
     # active recurring subscription id (for cancel)
     def set_subscription(self, uid: str, subscription_id: Optional[str]) -> None: ...
+    # birth-details change requests (user asks -> admin approves the unlock)
+    def create_change_request(self, req: dict) -> str: ...
+    def list_change_requests(self, status: Optional[str] = None) -> list: ...
+    def get_change_request(self, rid: str) -> Optional[dict]: ...
+    def update_change_request(self, rid: str, fields: dict) -> None: ...
+    def user_open_change_request(self, uid: str) -> Optional[dict]: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -335,6 +341,7 @@ class MemoryStore(Store):
     processed_payments: set = field(default_factory=set)
     global_usage: dict = field(default_factory=dict)   # date -> total tokens
     codes: dict[str, dict] = field(default_factory=dict)   # code_hash -> meta (beta/discount)
+    change_requests: dict[str, dict] = field(default_factory=dict)   # rid -> birth-change request
     payments: dict = field(default_factory=dict)        # payment_id -> record
     refund_requests: dict = field(default_factory=dict)  # req_id -> record
     activity: dict = field(default_factory=dict)         # uid -> {last_ip, ips, last_seen, requests}
@@ -564,6 +571,24 @@ class MemoryStore(Store):
 
     def set_subscription(self, uid, subscription_id):
         self.users.setdefault(uid, {"email": "", "tier": "free"})["subscription_id"] = subscription_id
+
+    def create_change_request(self, req):
+        self.change_requests[req["id"]] = dict(req)
+        return req["id"]
+
+    def list_change_requests(self, status=None):
+        return [r for r in self.change_requests.values() if status is None or r.get("status") == status]
+
+    def get_change_request(self, rid):
+        return self.change_requests.get(rid)
+
+    def update_change_request(self, rid, fields):
+        if rid in self.change_requests:
+            self.change_requests[rid].update(fields)
+
+    def user_open_change_request(self, uid):
+        return next((r for r in self.change_requests.values()
+                     if r.get("uid") == uid and r.get("status") == "pending"), None)
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -943,6 +968,30 @@ class FirestoreStore(Store):
     def set_subscription(self, uid, subscription_id):
         self._db.collection("users").document(uid).set(
             {"subscription_id": subscription_id}, merge=True)
+
+    def create_change_request(self, req):
+        self._db.collection("change_requests").document(req["id"]).set(dict(req))
+        return req["id"]
+
+    def list_change_requests(self, status=None):
+        q = self._db.collection("change_requests")
+        if status:
+            q = q.where("status", "==", status)
+        return [d.to_dict() for d in q.stream()]
+
+    def get_change_request(self, rid):
+        snap = self._db.collection("change_requests").document(rid).get()
+        return snap.to_dict() if snap.exists else None
+
+    def update_change_request(self, rid, fields):
+        self._db.collection("change_requests").document(rid).set(fields, merge=True)
+
+    def user_open_change_request(self, uid):
+        for d in self._db.collection("change_requests").where("uid", "==", uid).stream():
+            r = d.to_dict()
+            if r.get("status") == "pending":
+                return r
+        return None
 
     def mark_payment_processed(self, payment_id):
         # Atomic check-and-set so concurrent webhook retries can't double-credit.

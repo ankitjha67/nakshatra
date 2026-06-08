@@ -16,6 +16,7 @@ export default function AdminTab() {
   const [tierVal, setTierVal] = useState("enterprise");
   const [betaUid, setBetaUid] = useState("");
   const [codes, setCodes] = useState([]);
+  const [changeReqs, setChangeReqs] = useState([]);
   const [generated, setGenerated] = useState([]);     // plaintext, shown once
   const [cKind, setCKind] = useState("beta");
   const [cCount, setCCount] = useState(20);
@@ -30,6 +31,7 @@ export default function AdminTab() {
     apiGet("/admin/anomalies").then((d) => setFlagged(d.flagged || [])).catch(() => {});
     apiGet("/admin/beta").then(setBeta).catch(() => {});
     apiGet("/admin/codes").then((d) => setCodes(d.codes || [])).catch(() => {});
+    apiGet("/admin/birth-change-requests").then((d) => setChangeReqs(d.requests || [])).catch(() => {});
   };
   useEffect(load, []);
 
@@ -50,6 +52,8 @@ export default function AdminTab() {
     if (!window.confirm(`Revoke ALL ${beta.count} beta users back to free? Paying users are not affected.`)) return;
     act(() => apiPost("/admin/beta/revoke", {}), (r) => `Revoked ${r.revoked} beta user(s).`);
   };
+  const approveChange = (rid) => act(() => apiPost(`/admin/birth-change-requests/${rid}/approve`, {}), () => "Approved, the user can re-enter their details.");
+  const rejectChange = (rid) => act(() => apiPost(`/admin/birth-change-requests/${rid}/reject`, {}), () => "Request rejected.");
   const deactivateCode = (id) => act(() => apiPost(`/admin/codes/${id}/deactivate`, {}), () => "Code deactivated.");
   const reactivateCode = (id) => act(() => apiPost(`/admin/codes/${id}/reactivate`, {}), () => "Code reactivated.");
   const genCodes = () => act(async () => {
@@ -129,6 +133,28 @@ export default function AdminTab() {
           ) : <p className="note">No beta users yet. Grant access by Firebase uid; revoke all in one click before going live.</p>}
         </div>
       </div>
+
+      <p className="kicker" style={{ marginTop: 26 }}>Birth-detail change requests ({changeReqs.length})</p>
+      {changeReqs.length === 0 ? (
+        <p className="note">No pending requests.</p>
+      ) : (
+        <table className="admin-tbl">
+          <thead><tr><th>User</th><th>Current</th><th>Reason</th><th></th></tr></thead>
+          <tbody>
+            {changeReqs.map((r) => (
+              <tr key={r.id}>
+                <td className="mono">{r.uid}</td>
+                <td>{r.current ? `${r.current.name || "—"} · ${r.current.date} · ${r.current.place || ""}` : "—"}</td>
+                <td>{r.reason}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button className="sm" disabled={busy} onClick={() => approveChange(r.id)}>Approve</button>{" "}
+                  <button className="ghost sm" disabled={busy} onClick={() => rejectChange(r.id)}>Reject</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <p className="kicker" style={{ marginTop: 26 }}>Access codes</p>
       <div className="admin-panel">

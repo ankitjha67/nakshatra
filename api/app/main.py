@@ -111,6 +111,7 @@ def me(p: Principal = Depends(require_principal)):
             "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
             "discount_pct": int(user.get("discount_pct") or 0),
             "birth_lock": user.get("birth_lock"),
+            "birth_change_pending": bool(store.user_open_change_request(p.user_id)),
             "has_subscription": bool(user.get("subscription_id")),
             "balance": store.credit_balance(p.user_id, p.tier)}
 
@@ -619,6 +620,62 @@ def admin_reset_birth(uid: str, _: None = Depends(require_admin)):
     re-assignment). The next birth-based call re-locks to the new person."""
     get_store().clear_birth_lock(uid)
     return {"uid": uid, "birth_lock": None}
+
+
+# --------------------------------------------------------------------------- #
+# birth-details change requests: user asks (with a reason) -> admin approves the
+# unlock. Self-serve alternative to "contact support".
+# --------------------------------------------------------------------------- #
+class BirthChangeRequestIn(BaseModel):
+    reason: str = Field(..., min_length=5, max_length=500)
+
+
+@app.post("/v1/birth-change-request")
+def birth_change_request(req: BirthChangeRequestIn, p: Principal = Depends(require_principal)):
+    enforce_quota(p)
+    store = get_store()
+    lock = store.get_birth_lock(p.user_id)
+    if not lock:
+        raise HTTPException(400, "There are no saved birth details to change.")
+    if store.user_open_change_request(p.user_id):
+        raise HTTPException(409, "You already have a change request awaiting review.")
+    rid = uuid.uuid4().hex
+    store.create_change_request({
+        "id": rid, "uid": p.user_id, "reason": req.reason, "status": "pending",
+        "current": {"name": lock.get("name"), "date": lock.get("date"),
+                    "time": lock.get("time"), "place": lock.get("place")},
+        "created_at": datetime.now(timezone.utc).isoformat()})
+    return {"id": rid, "status": "pending",
+            "message": "Your change request has been submitted for review."}
+
+
+@app.get("/admin/birth-change-requests")
+def admin_list_change_requests(_: None = Depends(require_admin)):
+    return {"requests": get_store().list_change_requests(status="pending")}
+
+
+def _resolve_change_request(rid: str, decision: str) -> dict:
+    store = get_store()
+    r = store.get_change_request(rid)
+    if not r:
+        raise HTTPException(404, "Unknown request")
+    if r.get("status") != "pending":
+        raise HTTPException(409, f"Request already {r.get('status')}.")
+    if decision == "approved":
+        store.clear_birth_lock(r["uid"])     # unlock so the user can re-enter details
+    store.update_change_request(rid, {"status": decision,
+                                      "resolved_at": datetime.now(timezone.utc).isoformat()})
+    return {"id": rid, "uid": r["uid"], "status": decision}
+
+
+@app.post("/admin/birth-change-requests/{rid}/approve")
+def admin_approve_change(rid: str, _: None = Depends(require_admin)):
+    return _resolve_change_request(rid, "approved")
+
+
+@app.post("/admin/birth-change-requests/{rid}/reject")
+def admin_reject_change(rid: str, _: None = Depends(require_admin)):
+    return _resolve_change_request(rid, "rejected")
 
 
 @app.post("/admin/codes/{code_id}/deactivate")
