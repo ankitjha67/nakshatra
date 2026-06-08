@@ -16,15 +16,23 @@ import re
 
 # Destructive / hacking intent (DB wipes, shell rm, SQLi, DoS). These NEVER occur in
 # a genuine birth-chart question, so matching is high-precision -> block + escalate.
+# determiners that can sit between a destructive verb and its object
+# ("drop THE database", "delete ALL THE data", "destroy MY ENTIRE schema")
+_DET = r"(?:(?:all|the|this|that|my|our|your|its|entire|whole|every|a)\s+)*"
+_OBJ = r"(?:tables?|databases?|db|schemas?|datasets?|data|records?|rows?|collections?|everything|indexes|backups?)"
 _MALICIOUS_RE = re.compile(
-    r"\bdrop\s+(?:all\s+(?:the\s+)?)?(?:table|tables|database|databases|schema)\b"
-    r"|\b(?:delete|truncate)\s+(?:from\s+\w+|all\s+(?:the\s+)?(?:data|tables|records|rows|users))\b"
-    r"|\bdelete\s+(?:the\s+)?(?:whole\s+|entire\s+|all\s+(?:the\s+)?)?(?:database|data|records)\b"
-    r"|\brm\s+-rf\b|\bformat\s+(?:the\s+)?(?:disk|drive|database|db)\b"
-    r"|\b(?:shut\s*down|destroy|wipe|erase|nuke)\s+(?:the\s+)?(?:server|database|db|system|everything|all\s+data)\b"
+    # destructive data ops: <verb> [determiners] <object>  -> catches "drop the database completely"
+    rf"\b(?:drop|delete|truncate|wipe|erase|destroy|nuke|purge|obliterate|clear)\s+{_DET}{_OBJ}\b"
+    r"|\bdelete\s+from\s+\w+"
+    # shell / filesystem destruction
+    r"|\brm\s+-rf\b|\bformat\s+(?:the\s+)?(?:disk|drive|database|db|partition)\b"
+    r"|\b(?:shut\s*down|take\s*down|bring\s+down)\s+(?:the\s+)?(?:server|database|db|system|site|service|backend)\b"
+    # SQL injection / web attacks
     r"|(?:;|--)\s*drop\s+|\bunion\s+select\b|\bor\s+1\s*=\s*1\b|\b1\s*=\s*1\s*--"
-    r"|\bsql\s*injection\b|\bxss\b|\bddos\b|\bransomware\b|\bmalware\b|\bkeylogger\b"
-    r"|\b(?:hack|exploit|breach|compromise|pwn|takeover)\s+(?:the\s+)?(?:server|database|db|system|site|website|account|admin)\b",
+    r"|\bsql\s*injection\b|\bxss\b|\bd?dos\b|\bransomware\b|\bmalware\b|\bkeylogger\b|\bbackdoor\b"
+    # hacking intent against infrastructure
+    r"|\b(?:hack|exploit|breach|compromise|pwn|takeover|brute\s*force|gain\s+access\s+to)\s+"
+    r"(?:into\s+)?(?:the\s+)?(?:server|database|db|system|site|website|account|admin|network|backend|infra)",
     re.IGNORECASE,
 )
 

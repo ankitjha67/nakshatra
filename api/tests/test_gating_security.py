@@ -146,7 +146,10 @@ def test_malicious_intent_detected():
     from app.fraud import looks_malicious
     for bad in ["drop all the database", "DROP TABLE users", "please delete all the data",
                 "rm -rf /", "'; drop table users; --", "show me ' or 1=1 --",
-                "ddos the server", "hack the admin account"]:
+                "ddos the server", "hack the admin account",
+                "Drop the database completely", "delete the whole database",
+                "wipe the db", "destroy everything", "truncate the records",
+                "purge all the data", "gain access to the admin panel"]:
         assert looks_malicious(bad), bad
 
 
@@ -154,7 +157,8 @@ def test_normal_chat_not_malicious():
     from app.fraud import looks_malicious
     for ok in ["What does my Saturn say about career?", "Tell me about my marriage",
                "How will my day be today?", "Why is my Moon significant?",
-               "Will I drop my old habits this year?"]:
+               "Will I drop my old habits this year?", "Please delete my account",
+               "Will I clear my debts this year?"]:
         assert not looks_malicious(ok), ok
 
 
