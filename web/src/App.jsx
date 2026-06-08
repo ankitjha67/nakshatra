@@ -15,18 +15,16 @@ const RANK = { free: 0, basic: 1, pro: 2, enterprise: 3 };
 // One metered AI allowance powers both readings and chat (cost-gated for >=50% margin).
 const ALLOWANCE_NOTE = "Readings draw on your monthly AI allowance (shared with chat); casting the same chart again is free.";
 
-// TODO(Phase 1/4): read the signed-in user's real tier from the user doc / a /v1/me endpoint.
-// The deploy currently sets DEFAULT_USER_TIER=pro, so we assume pro for the shell.
-const USER_TIER = "pro";
-
-// render(ctx) receives shared app state: { onCast, lastBirth, setBalance }.
+// render(ctx) receives shared app state: { onCast, lastBirth, setBalance, features }.
+// Natal is open from "free" (free = anchor + D1 charts only; the written reading
+// and richer data unlock by tier, gated inside ReadingTab/Charts/ChartData).
 const TABS = [
-  { key: "natal", label: "Natal", min: "basic",
-    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} blurb={"A focused natal reading, essence, mind, relationships, work, and timing. " + ALLOWANCE_NOTE} /> },
+  { key: "natal", label: "Natal", min: "free",
+    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} features={ctx.features} blurb={"Your birth chart + a focused natal reading. " + ALLOWANCE_NOTE} /> },
   { key: "maha", label: "Maha-Kundali", min: "pro",
-    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} features={ctx.features} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
   { key: "yearly", label: "Yearly", min: "pro",
-    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} features={ctx.features} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
   { key: "prashna", label: "Prashna", min: "pro",
     render: () => <PrashnaTab /> },
   { key: "chat", label: "Chat", min: "basic",
@@ -45,6 +43,7 @@ export default function App() {
   const [lastBirth, setLastBirth] = useState(null);   // last cast chart → grounds Chat
   const [balance, setBalance] = useState(null);       // chat credit balance (CreditsWidget)
   const [isAdmin, setIsAdmin] = useState(false);      // shows the Admin tab when true
+  const [me, setMe] = useState(null);                 // real tier + feature entitlements (/v1/me)
 
   useEffect(() => {
     if (PREVIEW) { setUser({ email: "preview@local" }); return; }
@@ -57,15 +56,19 @@ export default function App() {
 
   // Load the credit balance once signed in (chat turns then keep it live).
   useEffect(() => { if (user) apiGet("/v1/credits").then(setBalance).catch(() => {}); }, [user]);
+  // The user's real tier + feature entitlements drive paywalls and feature gating.
+  useEffect(() => { if (user) apiGet("/v1/me").then(setMe).catch(() => setMe(null)); }, [user]);
   // Reveal the Admin tab only if this account is authorized.
   useEffect(() => { if (user) apiGet("/admin/ping").then(() => setIsAdmin(true)).catch(() => setIsAdmin(false)); }, [user]);
 
   if (user === undefined) return <div className="wrap"><p className="loader" style={{ paddingTop: 40 }}>Loading…</p></div>;
 
-  const ctx = { onCast: setLastBirth, lastBirth, setBalance };
+  const userTier = me?.tier || "free";                // real tier (falls back to free until /v1/me loads)
+  const features = me?.features || [];
+  const ctx = { onCast: setLastBirth, lastBirth, setBalance, features };
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
 
-  const locked = (min) => RANK[USER_TIER] < RANK[min];
+  const locked = (min) => RANK[userTier] < RANK[min];
   const active = tabs.find((t) => t.key === tab) || tabs[0];
 
   return (
@@ -85,7 +88,7 @@ export default function App() {
 
       {PREVIEW && (
         <p className="devbar">
-          Dev preview, no Firebase configured. Readings call the local API (<b>{USER_TIER}</b> tier). Add <b>web/.env</b> for real sign-in.
+          Dev preview, no Firebase configured. Readings call the local API (<b>{userTier}</b> tier). Add <b>web/.env</b> for real sign-in.
         </p>
       )}
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -47,6 +48,7 @@ class Tier:
     api_access: bool = False        # programmatic/B2B
     cache: bool = True
     monthly_tokens: int = 0         # chat token grant refreshed each cycle (CREDIT_LEDGER.md)
+    features: frozenset[str] = frozenset()   # chart/data capabilities (gate non-section blocks)
 
     @property
     def reading_allowed(self) -> bool:
@@ -64,14 +66,24 @@ ALL_SECTIONS = frozenset({
 # report_type="yearly" request, whose REPORT_TYPES set includes "yearly", does.
 _PRO_SECTIONS = ALL_SECTIONS | frozenset({"yearly"})
 
+# Chart/data feature capabilities (the non-section blocks), the confirmed ladder:
+#   free        anchor + D1 charts
+#   basic       + planetary table + Vimshottari dasha (tables_basic)
+#   pro         + divisional charts (D9/D10/D24) + ALL data tables + Varshphal
+#   enterprise  + Birth-Time Rectification (+ API access via api_access flag)
+_FREE_FEATURES = frozenset({"anchor", "charts"})
+_BASIC_FEATURES = _FREE_FEATURES | frozenset({"tables_basic"})
+_PRO_FEATURES = _BASIC_FEATURES | frozenset({"divisional", "tables_full", "varshphal"})
+_ENT_FEATURES = _PRO_FEATURES | frozenset({"btr"})
+
 TIERS: dict[str, Tier] = {
     # monthly_tokens are PROFIT-GATED: each is <= pricing.gated_grant_tokens(price) so
     # that at full utilization (readings + chat both metered against this allowance)
     # cost stays <= 50% of net revenue after GST + Razorpay. See docs/COST_MODEL.md.
-    "free":  Tier("free",  "Free",        0,    frozenset(),                       False, 5,    3, monthly_tokens=0),
-    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing"}), True, 50, 10, monthly_tokens=150_000),
-    "pro":   Tier("pro",   "Pro",         999,  _PRO_SECTIONS,                     True,  500,  30, allow_async=True, monthly_tokens=600_000),
-    "enterprise": Tier("enterprise", "API / Business", 4999, _PRO_SECTIONS,        True,  10000, 120, allow_async=True, api_access=True, monthly_tokens=3_000_000),
+    "free":  Tier("free",  "Free",        0,    frozenset(),                       False, 5,    3, monthly_tokens=0, features=_FREE_FEATURES),
+    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing"}), True, 50, 10, monthly_tokens=150_000, features=_BASIC_FEATURES),
+    "pro":   Tier("pro",   "Pro",         999,  _PRO_SECTIONS,                     True,  500,  30, allow_async=True, monthly_tokens=600_000, features=_PRO_FEATURES),
+    "enterprise": Tier("enterprise", "API / Business", 4999, _PRO_SECTIONS,        True,  10000, 120, allow_async=True, api_access=True, monthly_tokens=3_000_000, features=_ENT_FEATURES),
 }
 
 
@@ -89,6 +101,7 @@ def tier_catalog() -> list[dict]:
         "daily_limit": t.daily_limit, "per_minute": t.per_minute,
         "async": t.allow_async, "api_access": t.api_access,
         "monthly_tokens": t.monthly_tokens, "allowance_note": _allowance_note(t),
+        "features": sorted(t.features),
     } for t in TIERS.values()]
 
 
@@ -605,10 +618,29 @@ class FirestoreStore(Store):
 
     def cache_get(self, ck):
         snap = self._db.collection("cache").document(self._ck_id(ck)).get()
-        return snap.to_dict().get("value") if snap.exists else None
+        if not snap.exists:
+            return None
+        d = snap.to_dict()
+        raw = d.get("json")
+        if raw is not None:
+            try:
+                return json.loads(raw)
+            except Exception:  # noqa: BLE001, a bad cache entry should miss, not 500
+                return None
+        return d.get("value")            # back-compat for entries written before JSON encoding
 
     def cache_put(self, ck, value):
-        self._db.collection("cache").document(self._ck_id(ck)).set({"value": value})
+        # Store as a JSON string: Firestore forbids directly-nested arrays (e.g. the
+        # engine's numerology.name_calculation = [["A",1],...]), which a native map
+        # write rejects with "invalid nested entity". A string sidesteps that and is
+        # robust to any engine JSON shape. (default=str handles dates etc.)
+        try:
+            blob = json.dumps(value, default=str)
+        except Exception:  # noqa: BLE001, never let caching break the request
+            return
+        if len(blob) > 1_000_000:        # Firestore 1 MiB/field cap, skip oversized charts
+            return
+        self._db.collection("cache").document(self._ck_id(ck)).set({"json": blob})
 
     # --- jobs ---
     def job_put(self, job_id, value):
