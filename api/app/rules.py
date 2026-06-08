@@ -54,6 +54,9 @@ def _planets(chart: dict) -> list[dict]:
                 "name": name,
                 "sign": p.get("sign"),
                 "nakshatra": p.get("nakshatra"),
+                "pada": p.get("pada"),                       # nakshatra quarter (1-4)
+                "deg": p.get("deg"),                         # absolute longitude
+                "fmt": p.get("fmt"),                         # e.g. "12°34' Taurus" (exact degree)
                 "dignity": str(st.get("dignity") or p.get("dignity") or "Normal"),
                 "retrograde": bool(st.get("retrograde", p.get("retrograde", False))),
                 "combust": bool(st.get("combust", False)),
@@ -112,6 +115,53 @@ def _karaka(p: str) -> str:
     return KARAKA.get(p, "its themes")
 
 
+# --- fine-grained fact accessors (exact degree, pada, navamsa, KP sub-lord) ----
+def _deg(p: dict | None) -> str:
+    """Exact-degree string for a planet dict: prefer the engine's fmt, else deg."""
+    if not isinstance(p, dict):
+        return ""
+    f = p.get("fmt")
+    if f:
+        return str(f)
+    d = p.get("deg")
+    return f"{float(d):.2f}deg" if isinstance(d, (int, float)) else ""
+
+
+def _at(p: dict | None) -> str:
+    """' at 12deg34 Taurus, pada 2' suffix when available, else ''."""
+    if not isinstance(p, dict):
+        return ""
+    d = _deg(p)
+    pada = p.get("pada")
+    bits = []
+    if d:
+        bits.append(f"at {d}")
+    if pada:
+        bits.append(f"pada {pada}")
+    return (" " + ", ".join(bits)) if bits else ""
+
+
+def _varga_sign(chart: dict, varga: str, name: str) -> str | None:
+    """Divisional-chart sign for a planet (e.g. D9 navamsa, D10 dasamsa)."""
+    v = _d(_d(chart.get("vargas")).get(varga))
+    return _d(v.get(name)).get("sign")
+
+
+def _vargottama(chart: dict, name: str, rasi_sign: str | None) -> bool:
+    return bool(rasi_sign) and _varga_sign(chart, "D9", name) == rasi_sign
+
+
+def _kp_sub(chart: dict, house: int) -> str | None:
+    """KP cuspal sub-lord for a house (1-12): the decisive significator in KP."""
+    cusps = _d(_d(chart.get("kp_significators")).get("cusps"))
+    return _d(cusps.get(f"H{house}")).get("sub")
+
+
+def _asc_full(chart: dict) -> dict:
+    a = _cb(chart).get("asc") or _cb(chart).get("ascendant") or _cb(chart).get("lagna") or {}
+    return a if isinstance(a, dict) else {}
+
+
 def _sign_in_house(asc_sign: str | None, house: int) -> str | None:
     a = _sidx(asc_sign)
     if a is None:
@@ -144,12 +194,21 @@ def _lagna(chart, by, asc_sign) -> list[Finding]:
     if not asc_sign:
         return out
     lord = _lord_of(asc_sign)
+    asc = _asc_full(chart)
+    asc_ev = f"Ascendant: {asc_sign} (lord {lord})"
+    if asc.get("fmt"):
+        asc_ev += f", lagna at {asc['fmt']}"
+    if asc.get("nakshatra"):
+        asc_ev += f", nakshatra {asc['nakshatra']}"
+    sub1 = _kp_sub(chart, 1)
+    if sub1:
+        asc_ev += f"; KP 1st-cusp sub-lord {sub1}"
     out.append(Finding(
         code="LAGNA.SIGN", category="essence", polarity="neutral", weight=8,
         title=f"{asc_sign} ascendant",
         detail=(f"The ascendant is {asc_sign}, ruled by {lord}. This sets the lens of the whole "
                 f"chart: the condition and placement of {lord} colours the overall direction of life."),
-        evidence=[f"Ascendant: {asc_sign} (lord {lord})"],
+        evidence=[asc_ev],
     ))
     lp = by.get(lord) if lord else None
     if lp and lp.get("sign"):
@@ -157,13 +216,20 @@ def _lagna(chart, by, asc_sign) -> list[Finding]:
         dig = lp.get("dignity", "Normal")
         strength = f" and is {dig.lower()} there" if dig and dig.lower() in (
             "exalted", "own sign", "moolatrikona") else ""
+        nav = _varga_sign(chart, "D9", lord)
+        vgt = " (vargottama)" if nav and nav == lp.get("sign") else ""
+        ev = f"{lord} (lagna lord) in {lp['sign']}{_at(lp)}, {_ord(h)} house, dignity {dig}"
+        if lp.get("nakshatra"):
+            ev += f", nakshatra {lp['nakshatra']}"
+        if nav:
+            ev += f"; navamsa {nav}{vgt}"
         out.append(Finding(
             code="LAGNA.LORD", category="essence", polarity="neutral", weight=9,
             title=f"Chart ruler {lord} in the {_ord(h)} house",
             detail=(f"{lord}, ruler of the {asc_sign} ascendant, sits in the {_ord(h)} house "
                     f"in {lp['sign']}{strength} - so the themes of {HOUSE_MEANING.get(h,'that house')} "
                     f"are central to how this life unfolds."),
-            evidence=[f"{lord} (lagna lord) in {lp['sign']}, {_ord(h)} house"],
+            evidence=[ev],
         ))
     return out
 
@@ -186,11 +252,14 @@ def _dignities(by, asc_sign) -> list[Finding]:
         else:
             detail = (f"{name} is strong ({dig}) in {p.get('sign')}{where}, supporting "
                       f"{_karaka(name)} as a natural strength to lean on.")
+        ev = f"{name} {dig} in {p.get('sign')}{_at(p)}{where}"
+        if p.get("nakshatra"):
+            ev += f", nakshatra {p['nakshatra']}"
         out.append(Finding(
             code=f"DIGNITY.{name.upper()}", category=GRAHA_CATEGORY.get(name, "essence"),
             polarity=polarity, weight=weight,
             title=f"{name} {dig} in {p.get('sign')}",
-            detail=detail, evidence=[f"{name} {dig} in {p.get('sign')}{where}"],
+            detail=detail, evidence=[ev],
         ))
     return out
 
@@ -205,13 +274,22 @@ def _moon_nakshatra(chart, by, asc_sign) -> list[Finding]:
     dig = str(moon.get("dignity", "Normal")).lower()
     strength = f", where it is {dig}" if dig in ("exalted", "own sign", "moolatrikona", "debilitated") else ""
     h = _house_ws(moon.get("sign"), asc_sign)
+    pada = cb.get("moon_pada") or moon.get("pada")
+    nav = _varga_sign(chart, "D9", "Moon")
+    vgt = " (vargottama)" if nav and nav == moon.get("sign") else ""
+    ev = f"Moon in {nak}"
+    if pada:
+        ev += f" pada {pada}"
+    ev += f" ({moon.get('sign')}{_at(moon)}, {_ord(h)} house); nakshatra lord {lord}"
+    if nav:
+        ev += f"; navamsa {nav}{vgt}"
     return [Finding(
         code="MOON.NAKSHATRA", category="mind", polarity="neutral", weight=7,
         title=f"Moon in {nak}",
         detail=(f"The emotional mind is shaped by the Moon in {nak} (ruled by {lord}), placed in "
                 f"{moon.get('sign')}{strength} in the {_ord(h)} house. This nakshatra and sign set the "
                 f"baseline temperament and what brings a felt sense of security."),
-        evidence=[f"Moon in {nak} ({moon.get('sign')}, {_ord(h)} house); nakshatra lord {lord}"],
+        evidence=[ev],
     )]
 
 
@@ -390,6 +468,15 @@ def _relationships(chart, by, asc_sign) -> list[Finding]:
     if lp and lp.get("sign"):
         hL = _house_ws(lp["sign"], asc_sign)
         sp = _strength_phrase(lp.get("dignity"))
+        nav7 = _varga_sign(chart, "D9", lord7)
+        sub7 = _kp_sub(chart, 7)
+        ev = f"7th lord {lord7} in {lp['sign']}{_at(lp)}, {_ord(hL)} house, dignity {lp.get('dignity','Normal')}"
+        if lp.get("nakshatra"):
+            ev += f", nakshatra {lp['nakshatra']}"
+        if nav7:
+            ev += f"; navamsa {nav7}" + (" (vargottama)" if nav7 == lp.get("sign") else "")
+        if sub7:
+            ev += f"; KP 7th-cusp sub-lord {sub7}"
         out.append(Finding(
             code="RELATION.7THLORD", category="relationships", polarity="neutral", weight=7,
             title=f"7th lord {lord7} in the {_ord(hL)} house",
@@ -397,7 +484,7 @@ def _relationships(chart, by, asc_sign) -> list[Finding]:
                     f"{lord7}. {lord7} sits in the {_ord(hL)} house in {lp['sign']}{sp}, so the area "
                     f"of {HOUSE_MEANING.get(hL,'that house')} tends to be woven into how close "
                     f"partnership unfolds."),
-            evidence=[f"7th lord {lord7} in {lp['sign']}, {_ord(hL)} house"],
+            evidence=[ev],
         ))
     # planets sitting in the 7th house
     occ = _occupants(by, asc_sign, 7)
@@ -424,7 +511,8 @@ def _relationships(chart, by, asc_sign) -> list[Finding]:
                     f"the {_ord(hV)} house" + (f" in {nak}" if nak else "") + f", shaping how affection, "
                     f"beauty and closeness are sought and expressed around "
                     f"{HOUSE_MEANING.get(hV,'that house')}."),
-            evidence=[f"Venus in {v['sign']}, {_ord(hV)} house" + (f", {nak}" if nak else "")],
+            evidence=[f"Venus in {v['sign']}{_at(v)}, {_ord(hV)} house, dignity {v.get('dignity','Normal')}"
+                      + (f", nakshatra {nak}" if nak else "")],
         ))
     # Darakaraka, spouse significator (only if the engine provides it)
     dk = _d(_d(chart.get("jaimini_karakas")).get("Darakaraka"))
@@ -442,7 +530,7 @@ def _relationships(chart, by, asc_sign) -> list[Finding]:
     return out
 
 
-def _career_houses(by, asc_sign) -> list[Finding]:
+def _career_houses(chart, by, asc_sign) -> list[Finding]:
     out: list[Finding] = []
     if not asc_sign:
         return out
@@ -452,13 +540,22 @@ def _career_houses(by, asc_sign) -> list[Finding]:
     if lp and lp.get("sign"):
         hL = _house_ws(lp["sign"], asc_sign)
         sp = _strength_phrase(lp.get("dignity"))
+        d10 = _varga_sign(chart, "D10", lord10)        # dasamsa = the career divisional chart
+        sub10 = _kp_sub(chart, 10)
+        ev = f"10th lord {lord10} in {lp['sign']}{_at(lp)}, {_ord(hL)} house, dignity {lp.get('dignity','Normal')}"
+        if lp.get("nakshatra"):
+            ev += f", nakshatra {lp['nakshatra']}"
+        if d10:
+            ev += f"; D10 (dasamsa) {d10}"
+        if sub10:
+            ev += f"; KP 10th-cusp sub-lord {sub10}"
         out.append(Finding(
             code="CAREER.10THLORD", category="career", polarity="neutral", weight=7,
             title=f"10th lord {lord10} in the {_ord(hL)} house",
             detail=(f"Career, status and public action are read from the 10th house ({sign10}), whose "
                     f"lord is {lord10}. {lord10} sits in the {_ord(hL)} house in {lp['sign']}{sp}, "
                     f"linking your work and visible role to {HOUSE_MEANING.get(hL,'that house')}."),
-            evidence=[f"10th lord {lord10} in {lp['sign']}, {_ord(hL)} house"],
+            evidence=[ev],
         ))
     occ = _occupants(by, asc_sign, 10)
     if occ:
@@ -490,7 +587,8 @@ def _mercury_mind(by, asc_sign) -> list[Finding]:
         detail=(f"Mercury, intellect, speech and how the mind processes, is in {m['sign']}{sp} in the "
                 f"{_ord(h)} house" + (f" in {nak}" if nak else "") + f", shaping the style of thinking "
                 f"and communication around {HOUSE_MEANING.get(h,'that house')}."),
-        evidence=[f"Mercury in {m['sign']}, {_ord(h)} house" + (f", {nak}" if nak else "")],
+        evidence=[f"Mercury in {m['sign']}{_at(m)}, {_ord(h)} house, dignity {m.get('dignity','Normal')}"
+                  + (f", nakshatra {nak}" if nak else "")],
     )]
 
 
@@ -1267,7 +1365,7 @@ def derive_findings(chart: dict[str, Any], year: int | None = None) -> list[Find
     findings += _gandanta(chart, by)
     # enriched coverage so each life-area section has grounded substance
     findings += _relationships(chart, by, asc_sign)
-    findings += _career_houses(by, asc_sign)
+    findings += _career_houses(chart, by, asc_sign)
     findings += _mercury_mind(by, asc_sign)
     findings += _ninth_spirit(by, asc_sign)
     findings += _chara_karakas(chart, by, asc_sign)
