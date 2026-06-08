@@ -3,7 +3,7 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.6
 pydantic-settings>=2.2
-python-dateutil>=2.9
+python-dateutil>=2.9.0.post0
 httpx>=0.27
 
 # Swiss Ephemeris: pysweph is the maintained fork with wheels for current
