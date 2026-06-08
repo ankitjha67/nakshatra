@@ -8,6 +8,19 @@ const TIERS = ["free", "basic", "pro", "enterprise"];
 const SRC = { payment: "paid", beta: "beta", admin: "manual", revoked: "revoked" };
 const srcLabel = (s) => (s ? ` · ${SRC[s] || s}` : "");
 
+// Tiny inline bar chart for a daily series.
+function MiniBars({ data, k }) {
+  const max = Math.max(1, ...data.map((d) => d[k] || 0));
+  return (
+    <div className="spark">
+      {data.map((d, i) => (
+        <span key={i} className="spark-bar" title={`${d.date}: ${(d[k] || 0).toLocaleString()}`}
+              style={{ height: `${Math.max(2, Math.round(100 * (d[k] || 0) / max))}%` }} />
+      ))}
+    </div>
+  );
+}
+
 export default function AdminTab() {
   const [stats, setStats] = useState(null);
   const [flagged, setFlagged] = useState([]);
@@ -25,6 +38,8 @@ export default function AdminTab() {
   const [users, setUsers] = useState([]);
   const [detail, setDetail] = useState(null);
   const [ov, setOv] = useState(null);          // /admin/overview analytics
+  const [analytics, setAnalytics] = useState(null);
+  const [range, setRange] = useState(30);
   const [q, setQ] = useState("");              // users search
   const [tierFilter, setTierFilter] = useState("all");
   const [sortKey, setSortKey] = useState("last_seen");
@@ -49,6 +64,7 @@ export default function AdminTab() {
     apiGet("/admin/overview").then(setOv).catch(() => {});
   };
   useEffect(load, []);
+  useEffect(() => { apiGet(`/admin/analytics?days=${range}`).then(setAnalytics).catch(() => {}); }, [range]);
 
   const exportUsersCsv = () => {
     const cols = ["uid", "email", "tier", "tier_source", "banned", "last_seen", "tokens_today", "has_subscription", "discount_pct", "birth_locked"];
@@ -177,6 +193,54 @@ export default function AdminTab() {
               ))}
             </div>
             <p className="note">peak {maxTok.toLocaleString()} · today {((o.tokens || {}).today || 0).toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+
+      {analytics && (
+        <div style={{ marginTop: 16 }}>
+          <div className="sec-head">
+            <p className="data-h" style={{ marginTop: 0 }}>Trends & funnel</p>
+            <select value={range} onChange={(e) => setRange(+e.target.value)}>
+              <option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option>
+            </select>
+          </div>
+          <div className="admin-panels">
+            <div className="admin-panel">
+              <p className="data-h">Signups / day</p>
+              <MiniBars data={analytics.signups_by_day} k="count" />
+              <p className="note">{analytics.signups_by_day.reduce((s, d) => s + d.count, 0)} new in {range}d</p>
+            </div>
+            <div className="admin-panel">
+              <p className="data-h">Revenue / day</p>
+              <MiniBars data={analytics.revenue_by_day} k="inr" />
+              <p className="note">₹{analytics.revenue_by_day.reduce((s, d) => s + d.inr, 0).toLocaleString()} in {range}d</p>
+            </div>
+          </div>
+          <div className="admin-panels" style={{ marginTop: 16 }}>
+            <div className="admin-panel">
+              <p className="data-h">Conversion funnel</p>
+              {analytics.funnel.map((st, i) => {
+                const top = analytics.funnel[0].count || 1;
+                return (
+                  <div key={i} className="bar-row">
+                    <span className="bar-label" style={{ flexBasis: 110 }}>{st.stage}</span>
+                    <span className="bar-track"><span className="bar-fill" style={{ width: `${Math.round(100 * st.count / top)}%` }} /></span>
+                    <span className="bar-val">{st.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="admin-panel">
+              <p className="data-h">Top token consumers</p>
+              {analytics.top_consumers.length ? (
+                <table className="data-tbl"><tbody>
+                  {analytics.top_consumers.map((u, i) => (
+                    <tr key={i}><td>{u.email || <span className="mono">{u.uid}</span>}</td><td>{u.tier}</td><td>{u.tokens_total.toLocaleString()}</td></tr>
+                  ))}
+                </tbody></table>
+              ) : <p className="note">No token usage yet.</p>}
+            </div>
           </div>
         </div>
       )}

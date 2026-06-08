@@ -157,6 +157,29 @@ def enforce_birth_lock(uid: str, b) -> None:
         "place": getattr(b, "place", None)})
 
 
+def _meter_precheck(p: Principal) -> None:
+    """Block an LLM call when out of credits OR over the daily abuse ceiling.
+    Applies to every metered LLM endpoint (reading/chat/prashna/btr), not just chat."""
+    if not p.tier.monthly_tokens:
+        return
+    s = get_settings()
+    bal = get_store().credit_balance(p.user_id, p.tier)
+    if bal["available"] <= 0:
+        raise HTTPException(402, "You're out of credits for this cycle, upgrade or add a top-up.")
+    if bal.get("daily_used", 0) >= s.daily_token_ceiling:
+        raise HTTPException(429, "Daily limit reached, please try again tomorrow.")
+
+
+def _meter_debit(p: Principal, ti: int, to: int, reason: str, ref: Optional[str] = None) -> None:
+    """Debit the metered allowance for an LLM render and record usage (prashna/btr)."""
+    cost = int(ti) + int(to)
+    store = get_store()
+    if cost:
+        store.credit_debit(p.user_id, p.tier, cost, reason=reason, ref=ref)
+    store.record(p.key, ti, to, reading=True)
+    store.add_user_tokens(p.user_id, cost)
+
+
 @app.post("/v1/chart", response_model=ChartResponse)
 def chart(birth: BirthDetails, p: Principal = Depends(require_principal)):
     enforce_quota(p)
@@ -190,9 +213,8 @@ def reading(birth: BirthDetails, p: Principal = Depends(require_principal)):
     enforce_global_breaker()
     enforce_birth_lock(p.user_id, birth)
     store = get_store()
-    # readings draw on the same metered AI allowance as chat (the cost gate)
-    if p.tier.monthly_tokens and store.credit_balance(p.user_id, p.tier)["available"] <= 0:
-        raise HTTPException(402, "You're out of credits for this cycle, upgrade or add a top-up.")
+    # readings draw on the same metered AI allowance as chat (credits + daily ceiling)
+    _meter_precheck(p)
     resp = get_reading(birth, p.tier)
     if "varshphal" not in p.tier.features:        # Tajik annual block is Pro+
         resp.varshphal = None
@@ -200,6 +222,7 @@ def reading(birth: BirthDetails, p: Principal = Depends(require_principal)):
     if cost:                                  # cache hits cost 0 tokens -> free
         store.credit_debit(p.user_id, p.tier, cost, reason="reading", ref=resp.meta.chart_hash)
     store.record(p.key, resp.meta.tokens_in, resp.meta.tokens_out, reading=True)
+    store.add_user_tokens(p.user_id, int(resp.meta.tokens_in) + int(resp.meta.tokens_out))
     return resp
 
 
@@ -267,6 +290,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
             log.warning("chat persistence failed (non-fatal) uid=%s chat_id=%s err=%s",
                         p.user_id, chat_id, type(exc).__name__)
     store.record(p.key, ti, to, reading=False)
+    store.add_user_tokens(p.user_id, int(ti) + int(to))
 
     return ChatResponse(answer=answer, tokens_used=cost, chat_id=chat_id,
                         balance={"grant": bal2["grant"], "topup": bal2["topup"],
@@ -301,6 +325,7 @@ def prashna(req: PrashnaRequest, p: Principal = Depends(require_principal)):
         raise HTTPException(402, "Prashna (KP horary) is available on Pro and Enterprise.")
     enforce_quota(p)
     enforce_global_breaker()
+    _meter_precheck(p)                                     # credits + daily ceiling
     d, t = _now_in_tz(req.tz)                              # cast for the moment of asking
     birth = BirthDetails(date=d, time=t, tz=req.tz, lat=req.lat, lon=req.lon)
     cr = get_chart(birth)
@@ -310,7 +335,7 @@ def prashna(req: PrashnaRequest, p: Principal = Depends(require_principal)):
                 renderer_version=RENDERER_VERSION, model=model_name, tier=p.tier.key,
                 report_type="prashna", cache_hit=False, tokens_in=ti, tokens_out=to,
                 chart_hash=birth.chart_hash())
-    get_store().record(p.key, ti, to, reading=True)
+    _meter_debit(p, ti, to, "prashna")
     return ReadingResponse(summary=summary, sections=sections, findings=findings,
                            disclaimers=DISCLAIMERS, meta=meta)
 
@@ -375,6 +400,7 @@ def btr(req: BtrRequest, p: Principal = Depends(require_principal)):
         raise HTTPException(422, "Provide at least one dated life event (3-5 recommended) to rectify against.")
     enforce_quota(p)
     enforce_global_breaker()
+    _meter_precheck(p)                    # credits + daily ceiling (BTR is a real LLM render)
     enforce_birth_lock(p.user_id, req)   # BTR refines time on the SAME person (date+place must match)
     payload = req.model_dump()
     payload["events"] = [e.model_dump() for e in req.events]
@@ -384,7 +410,7 @@ def btr(req: BtrRequest, p: Principal = Depends(require_principal)):
     meta = Meta(engine_version=engine_version(), rules_version=RULES_VERSION,
                 renderer_version=RENDERER_VERSION, model=model_name, tier=p.tier.key,
                 report_type="btr", cache_hit=False, tokens_in=ti, tokens_out=to)
-    get_store().record(p.key, ti, to, reading=True)
+    _meter_debit(p, ti, to, "btr")
     return BtrResponse(summary=summary, sections=sections, findings=findings,
                        disclaimers=DISCLAIMERS, meta=meta, rectification=norm)
 
@@ -392,12 +418,17 @@ def btr(req: BtrRequest, p: Principal = Depends(require_principal)):
 # --------------------------------------------------------------------------- #
 # async readings
 # --------------------------------------------------------------------------- #
-def _run_job(job_id: str, birth: BirthDetails, tier_key: str, key: str):
+def _run_job(job_id: str, birth: BirthDetails, tier_key: str, key: str, uid: str):
     store = get_store()
+    tier = TIERS[tier_key]
     store.job_put(job_id, {"job_id": job_id, "status": "running", "owner": key})
     try:
-        resp = get_reading(birth, TIERS[tier_key])
+        resp = get_reading(birth, tier)
+        cost = int(resp.meta.tokens_in) + int(resp.meta.tokens_out)
+        if cost:                                  # async readings debit the SAME metered allowance
+            store.credit_debit(uid, tier, cost, reason="reading (async)", ref=resp.meta.chart_hash)
         store.record(key, resp.meta.tokens_in, resp.meta.tokens_out, reading=True)
+        store.add_user_tokens(uid, cost)
         store.job_put(job_id, {"job_id": job_id, "status": "done", "owner": key, "result": resp.model_dump()})
     except Exception as exc:  # noqa: BLE001
         log.exception("job failed")
@@ -412,13 +443,17 @@ def reading_async(birth: BirthDetails, background: BackgroundTasks, p: Principal
         raise HTTPException(402, f"Async readings require Pro or higher (current: {p.tier.label}).")
     enforce_quota(p)
     enforce_global_breaker()
+    enforce_birth_lock(p.user_id, birth)                   # same one-native lock as the sync path
+    store = get_store()
+    if p.tier.monthly_tokens and store.credit_balance(p.user_id, p.tier)["available"] <= 0:
+        raise HTTPException(402, "You're out of credits for this cycle, upgrade or add a top-up.")
     job_id = uuid.uuid4().hex
-    get_store().job_put(job_id, {"job_id": job_id, "status": "queued", "owner": p.key})
+    store.job_put(job_id, {"job_id": job_id, "status": "queued", "owner": p.key})
     s = get_settings()
     if s.cloud_tasks_queue and s.worker_base_url:
         _enqueue_cloud_task(job_id, birth, p)              # production path
     else:
-        background.add_task(_run_job, job_id, birth, p.tier.key, p.key)  # local path
+        background.add_task(_run_job, job_id, birth, p.tier.key, p.key, p.user_id)  # local path
     return JobResponse(job_id=job_id, status="queued")
 
 
@@ -436,6 +471,7 @@ class _TaskPayload(BaseModel):
     birth: BirthDetails
     tier: str
     key: str
+    uid: str = ""
 
 
 @app.post("/internal/run-reading")
@@ -445,7 +481,7 @@ def internal_run(payload: _TaskPayload, x_internal_token: Optional[str] = Header
         raise HTTPException(503, "Internal worker disabled: set a strong INTERNAL_TOKEN")
     if not _ct_eq(x_internal_token, s.internal_token):
         raise HTTPException(403, "forbidden")
-    _run_job(payload.job_id, payload.birth, payload.tier, payload.key)
+    _run_job(payload.job_id, payload.birth, payload.tier, payload.key, payload.uid or payload.key)
     return {"status": "ok"}
 
 
@@ -457,7 +493,7 @@ def _enqueue_cloud_task(job_id: str, birth: BirthDetails, p: Principal):
     from google.cloud import tasks_v2  # lazy
     s = get_settings()
     client = tasks_v2.CloudTasksClient()
-    body = _TaskPayload(job_id=job_id, birth=birth, tier=p.tier.key, key=p.key).model_dump_json().encode()
+    body = _TaskPayload(job_id=job_id, birth=birth, tier=p.tier.key, key=p.key, uid=p.user_id).model_dump_json().encode()
     task = {
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
@@ -1043,6 +1079,65 @@ def admin_overview(_: None = Depends(require_admin)):
                      "birth_changes_pending": len(store.list_change_requests("pending"))},
         "tokens": {"today": store.global_tokens_today(), "series": store.global_tokens_recent(14)},
         "platform_cost": pricing.monthly_platform_cost(max(len(users), 1)),
+    }
+
+
+def _to_date(v) -> Optional[str]:
+    """Best-effort YYYY-MM-DD from a datetime, Firestore Timestamp, or ISO string."""
+    if v is None:
+        return None
+    try:
+        if hasattr(v, "isoformat"):
+            return v.isoformat()[:10]
+        return str(v)[:10]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@app.get("/admin/analytics")
+def admin_analytics(days: int = 30, _: None = Depends(require_admin)):
+    """Time-series + funnel + top consumers. `days` selects the window (1-365)."""
+    days = min(max(int(days), 1), 365)
+    store = get_store()
+    today = datetime.now(timezone.utc).date()
+    span = [(today - timedelta(d)).isoformat() for d in range(days - 1, -1, -1)]
+    span_set = set(span)
+    users = store.list_users()
+
+    signups = {d: 0 for d in span}
+    for u in users:
+        d = _to_date(u.get("created_at"))
+        if d in span_set:
+            signups[d] += 1
+
+    revenue = {d: 0 for d in span}
+    for p_ in store.all_payments():
+        if p_.get("status") == "captured":
+            d = _to_date(p_.get("ts"))
+            if d in span_set:
+                revenue[d] += int(p_.get("amount_inr", 0))
+
+    # funnel from available signals
+    activated = sum(1 for u in users if u.get("birth_lock"))
+    redeemed = sum(1 for u in users if u.get("tier_source") in ("beta",) or int(u.get("discount_pct") or 0) > 0)
+    paid = sum(1 for u in users if u.get("subscription_id") or u.get("tier_source") == "payment")
+    total = len(users)
+
+    top = sorted(users, key=lambda u: int(u.get("tokens_total") or 0), reverse=True)[:10]
+    top_consumers = [{"uid": u.get("uid"), "email": u.get("email"), "tier": u.get("tier"),
+                      "tokens_total": int(u.get("tokens_total") or 0)} for u in top if int(u.get("tokens_total") or 0) > 0]
+
+    return {
+        "days": days,
+        "signups_by_day": [{"date": d, "count": signups[d]} for d in span],
+        "revenue_by_day": [{"date": d, "inr": revenue[d]} for d in span],
+        "funnel": [
+            {"stage": "Signed up", "count": total},
+            {"stage": "Cast a reading", "count": activated},
+            {"stage": "Redeemed a code", "count": redeemed},
+            {"stage": "Paid", "count": paid},
+        ],
+        "top_consumers": top_consumers,
     }
 
 

@@ -137,27 +137,35 @@ def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
     sub = _entity(payload, "subscription")
     refund = _entity(payload, "refund")
 
-    # --- refund → reverse credited tokens (and downgrade a refunded subscription) ---
+    # --- refund → reverse credited tokens (proportionally; downgrade only on a FULL refund) ---
     if event.startswith("refund.") or refund.get("id"):
         rid = refund.get("id") or ""
         pay_id = refund.get("payment_id") or payment.get("id") or ""
         if not (rid and pay_id):
             return {"status": "ignored", "reason": "no refund/payment id"}
-        if not store.mark_payment_processed(f"refund:{rid}"):
-            return {"status": "duplicate", "id": rid}
         rec = store.get_payment(pay_id) or {}
         uid = rec.get("uid")
         if not uid:
             return {"status": "ignored", "reason": "refund for unknown payment"}
-        tokens = int(rec.get("tokens") or 0)
-        if rec.get("kind") == "subscription":
-            store.set_tier(uid, "free")                # refunded subscription → downgrade
+        if rec.get("status") == "refunded":                  # payment-level guard: never reverse twice
+            return {"status": "duplicate", "reason": "payment already refunded", "payment_id": pay_id}
+        if not store.mark_payment_processed(f"refund:{rid}"):  # per-refund-entity dedupe (partials)
+            return {"status": "duplicate", "id": rid}
+        # proportional reversal: a partial refund reverses only its share of the grant
+        orig_paise = int(rec.get("amount_inr") or 0) * 100
+        refund_paise = int(refund.get("amount") or orig_paise or 0)
+        full = orig_paise <= 0 or refund_paise >= orig_paise
+        granted = int(rec.get("tokens") or 0)
+        tokens = granted if full else (int(granted * refund_paise / orig_paise) if orig_paise else 0)
+        if full and rec.get("kind") == "subscription":
+            store.set_tier(uid, "free")                      # full refund of a subscription → downgrade
             tier = tiers["free"]
         else:
             tier = tiers.get((store.get_user(uid) or {}).get("tier", "free"), tiers["free"])
         store.credit_refund(uid, tier, tokens, reason=f"refund {rid}", ref=pay_id)
-        store.set_payment_status(pay_id, "refunded")
-        return {"status": "refund", "uid": uid, "tokens": tokens, "payment_id": pay_id}
+        if full:
+            store.set_payment_status(pay_id, "refunded")     # only a full refund closes the payment
+        return {"status": "refund", "uid": uid, "tokens": tokens, "payment_id": pay_id, "full": full}
 
     # --- subscription: grant exactly once per CHARGE (not per lifecycle event) ---
     # Razorpay emits many subscription.* events (authenticated/activated/updated/...)
@@ -168,7 +176,9 @@ def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
         tier = notes.get("tier")
         if not (uid and tier in tiers):
             return {"status": "ignored", "reason": "missing uid/tier in subscription notes"}
-        charge_id = payment.get("id") or sub.get("id") or ""
+        # invoice_id is unique PER charge/renewal; prefer it so each renewal grants once
+        # (sub.id alone is constant across renewals and would dedupe every cycle but the first)
+        charge_id = payment.get("id") or payment.get("invoice_id") or sub.get("id") or ""
         if not charge_id:
             return {"status": "ignored", "reason": "no charge id"}
         if not store.mark_payment_processed(f"subgrant:{charge_id}"):
