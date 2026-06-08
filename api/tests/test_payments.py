@@ -179,3 +179,13 @@ def test_subscription_charge_amount_equal_to_pack_is_not_a_topup():
     raw = json.dumps(pay).encode(); sig = hmac.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()
     assert handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)["status"] == "ignored"
     assert s.credit_balance("u1", TIERS["free"])["topup"] == 0
+
+
+# --------------------------- plan/offer map parsing ------------------------ #
+def test_razorpay_plan_and_offer_map_parsing():
+    from app.config import Settings
+    s = Settings(razorpay_plans="basic=plan_b, pro=plan_p ,enterprise=plan_e",
+                 razorpay_offers="pro=offer_x")
+    assert s.razorpay_plan_map() == {"basic": "plan_b", "pro": "plan_p", "enterprise": "plan_e"}
+    assert s.razorpay_offer_map() == {"pro": "offer_x"}
+    assert Settings().razorpay_plan_map() == {}        # empty default

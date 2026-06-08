@@ -26,16 +26,17 @@ export default function CheckoutButton({ tier, label, onPaid }) {
     try {
       const r = await apiPost("/v1/checkout", { tier });
       setInfo(r);
-      if (r.enabled && r.provider === "razorpay" && r.order_id) {
+      if (r.enabled && r.provider === "razorpay" && (r.subscription_id || r.order_id)) {
         const ok = await loadRazorpay();
         if (!ok) { setErr("Could not load the payment window."); return; }
-        const rzp = new window.Razorpay({
-          key: r.key_id, order_id: r.order_id, amount: r.amount_inr * 100,
-          currency: r.currency || "INR", name: r.name || "Nakshatra",
+        const opts = {
+          key: r.key_id, name: r.name || "Nakshatra",
           description: `${r.tier_label || tier} subscription`,
           handler: () => { if (onPaid) setTimeout(onPaid, 1500); },
-        });
-        rzp.open();
+        };
+        if (r.subscription_id) opts.subscription_id = r.subscription_id;     // recurring
+        else { opts.order_id = r.order_id; opts.amount = r.amount_inr * 100; opts.currency = r.currency || "INR"; }
+        new window.Razorpay(opts).open();
       }
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };

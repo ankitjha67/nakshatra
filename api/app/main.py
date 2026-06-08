@@ -43,7 +43,7 @@ from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
 from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
-                       create_razorpay_order, keys_configured)
+                       create_razorpay_order, create_razorpay_subscription, keys_configured)
 from .mock_razorpay import checkout_event as _mock_checkout_event, refund_event as _mock_refund_event
 from . import pricing
 
@@ -619,13 +619,19 @@ def checkout(req: CheckoutRequest, p: Principal = Depends(require_principal)):
             "discount_pct": discount, "amount_inr": amount, "currency": "INR"}
 
     if s.payments_provider == "razorpay" and keys_configured(s.razorpay_key_id, s.razorpay_key_secret):
-        order = create_razorpay_order(
-            amount, s.razorpay_key_id, s.razorpay_key_secret,
-            notes={"user_id": p.user_id, "tier": req.tier, "discount_pct": discount},
+        notes = {"user_id": p.user_id, "tier": req.tier, "discount_pct": discount}
+        plan_id = s.razorpay_plan_map().get(req.tier)
+        if plan_id:                                    # recurring subscription (preferred)
+            offer_id = s.razorpay_offer_map().get(req.tier) if discount else None
+            sub = create_razorpay_subscription(plan_id, s.razorpay_key_id, s.razorpay_key_secret,
+                                               notes=notes, offer_id=offer_id)
+            return {**base, "provider": "razorpay", "enabled": True, "mode": "subscription",
+                    "key_id": s.razorpay_key_id, "subscription_id": sub.get("id"), "name": "Nakshatra"}
+        order = create_razorpay_order(                  # fallback: one-time order
+            amount, s.razorpay_key_id, s.razorpay_key_secret, notes=notes,
             receipt=f"{req.tier}-{p.user_id[:12]}")
-        return {**base, "provider": "razorpay", "enabled": True,
-                "key_id": s.razorpay_key_id, "order_id": order.get("id"),
-                "name": "Nakshatra"}
+        return {**base, "provider": "razorpay", "enabled": True, "mode": "order",
+                "key_id": s.razorpay_key_id, "order_id": order.get("id"), "name": "Nakshatra"}
     # Live payments not enabled yet: return the priced intent for the UI.
     return {**base, "provider": "none", "enabled": False,
             "message": "Live payments are being enabled. Use an access code to unlock in the meantime."}
