@@ -327,6 +327,8 @@ class Store:
     def list_audit(self, limit: int = 100) -> list: ...
     def add_feedback(self, entry: dict) -> None: ...
     def list_feedback(self, limit: int = 300) -> list: ...
+    def record_jailbreak(self, uid: str, snippet: str, kind: str = "chat") -> int: ...
+    def list_jailbreaks(self, uid: str, limit: int = 20) -> list: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -633,6 +635,18 @@ class MemoryStore(Store):
     def list_feedback(self, limit=300):
         return list(self.feedback[:limit])
 
+    def record_jailbreak(self, uid, snippet, kind="chat"):
+        u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
+        u["jailbreak_count"] = int(u.get("jailbreak_count", 0)) + 1
+        u["jailbreak_last"] = _now().isoformat()
+        samples = u.setdefault("jailbreak_samples", [])
+        samples.insert(0, {"ts": _now().isoformat(), "kind": kind, "text": (snippet or "")[:240]})
+        del samples[20:]
+        return u["jailbreak_count"]
+
+    def list_jailbreaks(self, uid, limit=20):
+        return list((self.users.get(uid) or {}).get("jailbreak_samples", [])[:limit])
+
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
                 "chats": self.chats.get(uid, {})}
@@ -787,6 +801,8 @@ class FirestoreStore(Store):
             for m in c.reference.collection("messages").stream():
                 m.reference.delete()
             c.reference.delete()
+        for j in uref.collection("jailbreaks").stream():
+            j.reference.delete()
         uref.delete()
         n = 0
         for doc in self._db.collection("api_keys").where("user_id", "==", uid).stream():
@@ -1074,6 +1090,25 @@ class FirestoreStore(Store):
                     .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
         except Exception:  # noqa: BLE001
             rows = [d.to_dict() for d in self._db.collection("audit").limit(limit).stream()]
+            rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
+        return rows
+
+    def record_jailbreak(self, uid, snippet, kind="chat"):
+        ref = self._db.collection("users").document(uid)
+        ref.set({"jailbreak_count": self._fs.Increment(1), "jailbreak_last": _now().isoformat()}, merge=True)
+        ref.collection("jailbreaks").document().set(
+            {"ts": _now().isoformat(), "kind": kind, "text": (snippet or "")[:240]})
+        snap = ref.get()
+        return int((snap.to_dict() or {}).get("jailbreak_count", 1)) if snap.exists else 1
+
+    def list_jailbreaks(self, uid, limit=20):
+        try:
+            from google.cloud.firestore import Query
+            rows = [d.to_dict() for d in self._db.collection("users").document(uid)
+                    .collection("jailbreaks").order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
+        except Exception:  # noqa: BLE001
+            rows = [d.to_dict() for d in self._db.collection("users").document(uid)
+                    .collection("jailbreaks").limit(limit).stream()]
             rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
         return rows
 
