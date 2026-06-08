@@ -13,10 +13,26 @@ export default function Reading({ data, birth }) {
       {data.summary && <p className="summary">{data.summary}</p>}
       {(data.sections || []).map((s) => {
         const cites = (s.citations || []).map((c) => titleByCode[c]).filter(Boolean);
+        const hasLS = s.light || s.shadow;
+        const vClass = s.verdict === "Supported" ? "v-ok" : s.verdict === "Needs care" ? "v-care" : "v-mixed";
         return (
           <div className="sec" key={s.key}>
-            <h3>{s.title}</h3>
-            <p>{s.body}</p>
+            <div className="sec-head">
+              <h3>{s.title}</h3>
+              {s.verdict && (
+                <span className={`verdict ${vClass}`}>
+                  {s.verdict}{s.confidence ? ` · ${s.confidence} confidence` : ""}
+                </span>
+              )}
+            </div>
+            {hasLS ? (
+              <>
+                {s.light && <p className="ls light"><span className="ls-tag">Light</span>{s.light}</p>}
+                {s.shadow && <p className="ls shadow"><span className="ls-tag">Shadow</span>{s.shadow}</p>}
+              </>
+            ) : (
+              <p>{s.body}</p>
+            )}
             {cites.length > 0 && <div className="drawn">Drawn from: {cites.map((t, i) => <b key={i}>{t}{i < cites.length - 1 ? " · " : ""}</b>)}</div>}
           </div>
         );

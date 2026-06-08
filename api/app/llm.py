@@ -64,14 +64,21 @@ ABSOLUTE RULES
 - If the findings for a section are thin, write less. One honest sentence beats a paragraph of padding.
 - Warm, literate, second person ("you"). Do not use the person's name. No emojis. No headings inside the body.
 
+LIGHT AND SHADOW
+For each section, write the prose as two short grounded movements, both drawn ONLY from the findings:
+- "light": the supportive side, the strengths, gifts, and what is working for the person (lean on findings whose polarity is "supportive" or "mixed").
+- "shadow": the growth edge, a tendency to watch or work with constructively (lean on findings whose polarity is "challenging" or "mixed").
+The shadow is a GROWTH EDGE, never doom, fate, fear, or catastrophe. Frame it as a tendency the person can work with, not a verdict on their life. If a section has no challenging finding, the shadow may be a brief, honest caution or left empty, never invented. The same anti-slop rules apply to both light and shadow: no invented placements, no filler, every claim traceable to a finding.
+
 OUTPUT
 Return STRICT JSON only, no markdown, matching:
 {"summary": "2-3 sentence synthesis grounded in the highest-weight findings",
- "sections": [{"key": "<section key>", "body": "<prose>", "citations": ["<finding code>", ...]}]}
-Only include sections you were asked to write and that have at least one supporting finding.
+ "sections": [{"key": "<section key>", "body": "<1-2 sentence lead>", "light": "<supportive prose>", "shadow": "<growth-edge prose>", "citations": ["<finding code>", ...]}]}
+Only include sections you were asked to write and that have at least one supporting finding. The "citations" must cover every claim across body, light, and shadow.
 
-GOOD (grounded): {"key":"essence","body":"With a Libra ascendant ruled by Venus, you meet the world through balance and relationship; and because that ruler sits in your tenth house, the urge toward fairness shows up most in your work and public role.","citations":["LAGNA.SIGN","LAGNA.LORD"]}
+GOOD (grounded): {"key":"essence","body":"With a Libra ascendant ruled by Venus, you meet the world through balance and relationship.","light":"Because that ruler sits in your tenth house, the urge toward fairness shows up as real strength in your work and public role.","shadow":"The same need for balance can tip into delaying decisions until everyone is pleased; naming what you want first helps.","citations":["LAGNA.SIGN","LAGNA.LORD","LORD.10"]}
 BAD (invented placement, not in findings): "Your Mars in Aries makes you impulsive." (no such finding -> forbidden)
+BAD (doom): "This shadow will bring ruin and loss." (fear/fatalism -> forbidden)
 BAD (filler): "The cosmos has wonderful things in store for you." (cites nothing -> forbidden)"""
 
 
@@ -100,6 +107,12 @@ ABSOLUTE RULES
 - Warm, literate, second person ("you"). Brief and specific, a few sentences. Do not use the person's name. No emojis. No headings."""
 
 
+# Sections that carry a deterministic Verdict + Confidence in the Maha-Kundali
+# (the life-area judgements). Computed in Python from finding polarity/weight, so
+# the verdict is grounded, never invented by the model.
+VERDICT_SECTIONS = {"essence", "relationships", "career", "wealth", "health", "timing", "fortune"}
+
+
 def _group(findings: list[Finding], allowed_keys: set[str]) -> list[dict[str, Any]]:
     out = []
     for key, title, cats in SECTION_SPEC:
@@ -109,8 +122,31 @@ def _group(findings: list[Finding], allowed_keys: set[str]) -> list[dict[str, An
         if not fs:
             continue
         out.append({"key": key, "title": title,
-                    "findings": [{"code": f.code, "title": f.title, "detail": f.detail} for f in fs]})
+                    "findings": [{"code": f.code, "title": f.title, "detail": f.detail,
+                                  "polarity": f.polarity} for f in fs]})
     return out
+
+
+def _verdict_confidence(findings: list[Finding]) -> tuple[str, str]:
+    """Deterministic life-area verdict from finding polarity + weight. Grounded:
+    derived from the computed findings, not phrased by the LLM."""
+    pos = sum(f.weight for f in findings if f.polarity == "supportive")
+    neg = sum(f.weight for f in findings if f.polarity == "challenging")
+    half = sum(f.weight for f in findings if f.polarity == "mixed") * 0.5
+    pos += half
+    neg += half
+    net = pos - neg
+    verdict = "Supported" if net > 2 else ("Needs care" if net < -2 else "Mixed")
+    n, total = len(findings), pos + neg
+    if n >= 4 and total >= 12:
+        confidence = "High"
+    elif n >= 3:
+        confidence = "Medium-High"
+    elif n >= 2:
+        confidence = "Medium"
+    else:
+        confidence = "Low"
+    return verdict, confidence
 
 
 def _user_payload(chart_summary: str, sections: list[dict[str, Any]]) -> str:
@@ -145,10 +181,13 @@ class MockProvider(Provider):
     def render(self, system, user, payload):
         sections = []
         for sec in payload["sections_to_write"]:
-            bodies = [f["detail"] for f in sec["findings"]]
-            body = " ".join(bodies)
-            sections.append({"key": sec["key"], "body": body,
-                             "citations": [f["code"] for f in sec["findings"]]})
+            fs = sec["findings"]
+            light = " ".join(f["detail"] for f in fs
+                             if f.get("polarity") in ("supportive", "mixed", "neutral"))
+            shadow = " ".join(f["detail"] for f in fs if f.get("polarity") == "challenging")
+            body = " ".join(f["detail"] for f in fs)
+            sections.append({"key": sec["key"], "body": body, "light": light, "shadow": shadow,
+                             "citations": [f["code"] for f in fs]})
         summary = payload.get("chart_summary", "").strip()
         return {"summary": summary, "sections": sections}, 0, 0
 
@@ -353,6 +392,9 @@ def render_reading(chart: dict, findings: list[Finding], allowed_sections: set[s
 
     valid_codes = {f.code for f in findings}
     title_by_key = {k: t for k, t, _ in SECTION_SPEC}
+    # findings per section key, for the deterministic verdict (grounded, not LLM)
+    cats_by_key = {k: set(cats) for k, _, cats in SECTION_SPEC}
+    findings_by_key = {k: [f for f in findings if f.category in cats_by_key[k]] for k in cats_by_key}
     out_sections: list[ReadingSection] = []
     for sec in data.get("sections", []):
         key = sec.get("key")
@@ -360,9 +402,18 @@ def render_reading(chart: dict, findings: list[Finding], allowed_sections: set[s
             continue
         cites = [c for c in sec.get("citations", []) if c in valid_codes]  # drop hallucinated cites
         body = (sec.get("body") or "").strip()
-        if not body:
+        light = (sec.get("light") or "").strip()
+        shadow = (sec.get("shadow") or "").strip()
+        if not (body or light or shadow):
             continue
-        out_sections.append(ReadingSection(key=key, title=title_by_key[key], body=body, citations=cites))
+        if not body:                                  # ensure a non-empty body for older clients
+            body = (light + (" " + shadow if shadow else "")).strip()
+        verdict = confidence = ""
+        if key in VERDICT_SECTIONS and findings_by_key.get(key):
+            verdict, confidence = _verdict_confidence(findings_by_key[key])
+        out_sections.append(ReadingSection(key=key, title=title_by_key[key], body=body,
+                                           light=light, shadow=shadow, verdict=verdict,
+                                           confidence=confidence, citations=cites))
 
     # keep section order stable per SECTION_SPEC
     order = {k: i for i, (k, _, _) in enumerate(SECTION_SPEC)}

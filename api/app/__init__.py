@@ -12,4 +12,4 @@ __version__ = "0.1.0"
 # bump these when the corresponding stage's output changes
 ENGINE_VERSION_FALLBACK = "mock-0.1"   # used only when the mock engine runs
 RULES_VERSION = "rules-0.6"       # rules-0.6: yearly (Varshphal) findings generator
-RENDERER_VERSION = "render-0.7"   # 0.4: report_type; 0.5: yearly; 0.6: prashna; 0.7: btr section
+RENDERER_VERSION = "render-0.8"   # 0.4: report_type; 0.5: yearly; 0.6: prashna; 0.7: btr; 0.8: light/shadow + verdict
