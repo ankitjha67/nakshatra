@@ -23,6 +23,18 @@ function placements(chart) {
 }
 const houseOfSign = (signIdx, ascIdx) => (((signIdx - ascIdx) % 12) + 12) % 12 + 1;
 
+// Planet labels wrapped into short centered rows so they never spill out of a
+// house/cell, no matter how many grahas share it. Centered on (cx, cy).
+function PlanetText({ cx, cy, list, perRow = 2, fs = 10, lh = 11 }) {
+  if (!list || !list.length) return null;
+  const rows = [];
+  for (let i = 0; i < list.length; i += perRow) rows.push(list.slice(i, i + perRow).join(" "));
+  const y0 = cy - ((rows.length - 1) * lh) / 2 + fs * 0.34;
+  return rows.map((r, i) => (
+    <text key={i} x={cx} y={y0 + i * lh} className="pl" style={{ fontSize: fs }}>{r}</text>
+  ));
+}
+
 // ---- South Indian: fixed 4x4 grid, signs in fixed cells (Aries..Pisces) ----
 const SOUTH = [[0, 1], [0, 2], [0, 3], [1, 3], [2, 3], [3, 3], [3, 2], [3, 1], [3, 0], [2, 0], [1, 0], [0, 0]];
 function South({ ascIdx, bySign, S = 240 }) {
@@ -38,7 +50,7 @@ function South({ ascIdx, bySign, S = 240 }) {
           <g key={si}>
             {asc && <line x1={x} y1={y} x2={x + cs * 0.5} y2={y + cs * 0.5} className="ascd" />}
             <text x={x + 5} y={y + 13} className="snum">{si + 1}</text>
-            <text x={x + cs / 2} y={y + cs / 2 + 5} className="pl">{bySign[si].join(" ")}</text>
+            <PlanetText cx={x + cs / 2} cy={y + cs / 2 + 6} list={bySign[si]} perRow={2} fs={11} lh={12} />
           </g>
         );
       })}
@@ -61,7 +73,7 @@ function North({ ascIdx, bySign, S = 240 }) {
         return (
           <g key={h0}>
             <text x={x * k} y={(y - 8) * k} className="snum">{signIdx + 1}</text>
-            <text x={x * k} y={(y + 6) * k} className="pl">{bySign[signIdx].join(" ")}</text>
+            <PlanetText cx={x * k} cy={(y + 4) * k} list={bySign[signIdx]} perRow={2} fs={9} lh={10} />
             {house === 1 && <text x={x * k} y={(y + 16) * k} className="ascl">Asc</text>}
           </g>
         );
@@ -84,7 +96,7 @@ function Western({ ascIdx, bySign, S = 240 }) {
     cells.push(
       <g key={"c" + h}>
         <text x={snx} y={sny + 3} className="snum">{signIdx + 1}</text>
-        <text x={px} y={py + 4} className="pl">{bySign[signIdx].join(" ")}</text>
+        <PlanetText cx={px} cy={py} list={bySign[signIdx]} perRow={2} fs={9} lh={10} />
       </g>
     );
   }
