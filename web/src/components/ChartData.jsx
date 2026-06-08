@@ -37,13 +37,20 @@ export default function ChartData({ chart }) {
   const jc = (ds.jaimini_chara || {}).current || {};
   const cusps = (chart.kp_significators || {}).cusps || {};
   const num = chart.numerology || {};
+  const ya = chart.yogi_avayogi || {};
+  const bb = chart.bhrigu_bindu || {};
+  const dt = chart.double_transit || {};
+  const ss = chart.sade_sati || {};
 
   const hasPlanets = Object.keys(planets).length > 0;
   const hasKarakas = Object.keys(karakas).length > 0;
   const hasDasha = vim.mahadasha || yog.yogini || jc.sign;
   const hasKp = Object.keys(cusps).length > 0;
   const hasNum = num.psychic != null || num.destiny != null;
-  if (!hasPlanets && !hasDasha && !hasKp && !hasNum) return null;
+  const ak = karakas.Atmakaraka, amk = karakas.Amatyakaraka;
+  const hasNadi = ya.yogi_lord || bb.sign || ak || amk;
+  const hasTransit = dt.saturn_sign || dt.jupiter_sign || ss.active != null;
+  if (!hasPlanets && !hasDasha && !hasKp && !hasNum && !hasNadi && !hasTransit) return null;
 
   return (
     <div className="sheet">
@@ -87,23 +94,60 @@ export default function ChartData({ chart }) {
         </div>
       )}
 
+      {hasNadi && (
+        <div className="data-block">
+          <p className="data-h">Siddha Nadi points</p>
+          <table className="data-tbl">
+            <tbody>
+              {ya.yogi_lord && <tr><td>Yogi lord</td><td>{ya.yogi_lord}{ya.yogi_nakshatra ? ` · ${ya.yogi_nakshatra}` : ""}</td></tr>}
+              {ya.avayogi_lord && <tr><td>Avayogi lord</td><td>{ya.avayogi_lord}{ya.avayogi_nakshatra ? ` · ${ya.avayogi_nakshatra}` : ""}</td></tr>}
+              {bb.sign && <tr><td>Bhrigu Bindu</td><td>{bb.sign}{bb.nakshatra ? ` · ${bb.nakshatra}` : ""}</td></tr>}
+              {ak && <tr><td>Atmakaraka</td><td>{ak.planet}{ak.sign ? ` in ${ak.sign}` : ""}</td></tr>}
+              {amk && <tr><td>Amatyakaraka</td><td>{amk.planet}{amk.sign ? ` in ${amk.sign}` : ""}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {hasDasha && (
         <div className="data-block">
           <p className="data-h">Dasha periods</p>
           <table className="data-tbl">
             <thead><tr><th>System</th><th>Running</th><th>Window</th></tr></thead>
             <tbody>
+              {vim.balance && (
+                <tr><td>Birth balance</td><td>{vim.balance}</td><td>at birth</td></tr>
+              )}
               {vim.mahadasha && (
                 <tr><td>Vimshottari Maha</td><td>{vim.mahadasha}</td><td>{date(vim.md_start)} – {date(vim.md_end)}</td></tr>
               )}
               {vim.antardasha && (
                 <tr><td>Vimshottari Antar</td><td>{vim.mahadasha} / {vim.antardasha}</td><td>{date(vim.ad_start)} – {date(vim.ad_end)}</td></tr>
               )}
+              {vim.next_antardasha && (
+                <tr><td>Next Antar</td><td>{vim.mahadasha} / {vim.next_antardasha}</td><td>{date(vim.next_ad_start)} – {date(vim.next_ad_end)}</td></tr>
+              )}
               {yog.yogini && (
                 <tr><td>Yogini</td><td>{yog.yogini}{yog.lord ? ` (${yog.lord})` : ""}</td><td>{date(yog.start)} – {date(yog.end)}</td></tr>
               )}
               {jc.sign && (
                 <tr><td>Jaimini Chara</td><td>{jc.sign}</td><td>{date(jc.start)} – {date(jc.end)}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasTransit && (
+        <div className="data-block">
+          <p className="data-h">Current transit snapshot</p>
+          <table className="data-tbl">
+            <tbody>
+              <tr><td>Sade Sati</td><td>{ss.active ? (ss.phase || "Active") : "Not active"}</td></tr>
+              {dt.saturn_sign && <tr><td>Saturn transit</td><td>{dt.saturn_sign}</td></tr>}
+              {dt.jupiter_sign && <tr><td>Jupiter transit</td><td>{dt.jupiter_sign}</td></tr>}
+              {Array.isArray(dt.houses) && dt.houses.length > 0 && (
+                <tr><td>Double transit focus</td><td>{dt.houses.map((h) => `${h}th house`).join(", ")}</td></tr>
               )}
             </tbody>
           </table>
