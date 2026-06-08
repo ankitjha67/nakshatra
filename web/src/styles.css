@@ -198,6 +198,21 @@ button.sm{padding:5px 11px;font-size:12px}
 .graha-role{font-family:"Cormorant Garamond",serif;font-size:19px;font-style:italic;line-height:1.45;color:var(--ink);margin:16px 0 0}
 .graha-role b{font-style:normal;font-weight:600;color:var(--brass)}
 @media (max-width:640px){.graha-card{top:auto;bottom:14px;left:14px;right:14px;width:auto;transform:none}}
+/* feedback FAB + panel */
+.fab-feedback{position:fixed;left:18px;bottom:18px;z-index:10000;display:inline-flex;align-items:center;gap:8px;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:9px 14px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--ink);
+  cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.fab-feedback:hover{background:var(--brass);border-color:var(--brass);color:#1a140a}
+.fb-overlay{position:fixed;inset:0;z-index:10002;background:rgba(5,5,11,.55);display:grid;place-items:center;animation:grahaFade .15s ease}
+.fb-panel{position:relative;width:min(440px,calc(100vw - 32px));background:var(--paper);border:1px solid var(--line);
+  border-radius:16px;padding:24px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.fb-x{position:absolute;top:12px;right:12px;width:30px;height:30px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:8px;display:grid;place-items:center}
+.fb-x:hover{color:var(--ink);background:rgba(12,12,22,.05)}
+.fb-cats{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.fb-chip{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.06em;padding:6px 13px;border-radius:999px;
+  border:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer}
+.fb-chip.on{background:var(--brass);border-color:var(--brass);color:#1a140a}
 /* on-void intro blurbs (above the glass forms) need a light colour, not dark muted */
 .lead{color:var(--cream-dim)}
 /* admin/chat now sit on a paper .sheet; nested cards use white so they read as cards */

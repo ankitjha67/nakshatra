@@ -123,6 +123,27 @@ def me(p: Principal = Depends(require_principal)):
             "balance": store.credit_balance(p.user_id, p.tier)}
 
 
+class FeedbackIn(BaseModel):
+    message: str = Field(..., min_length=3, max_length=2000)
+    category: str = Field("general", max_length=24)
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    page: Optional[str] = Field(None, max_length=80)
+
+
+@app.post("/v1/feedback")
+def submit_feedback(req: FeedbackIn, p: Principal = Depends(require_principal)):
+    """Capture user feedback (idea/bug/praise/etc.) for later review in Admin."""
+    store = get_store()
+    u = store.get_user(p.user_id) or {}
+    store.add_feedback({
+        "uid": p.user_id, "email": u.get("email"), "tier": p.tier.key,
+        "message": req.message.strip(), "category": req.category,
+        "rating": req.rating, "page": req.page,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True}
+
+
 class ConsentIn(BaseModel):
     version: str = Field(..., max_length=32)
 
@@ -1093,6 +1114,13 @@ def admin_ping(_: None = Depends(require_admin)):
 @app.get("/admin/anomalies")
 def admin_anomalies(_: None = Depends(require_admin)):
     return {"flagged": _scan_anomalies()}
+
+
+@app.get("/admin/feedback")
+def admin_feedback(_: None = Depends(require_admin)):
+    """User feedback collected via the in-app feedback button (newest first)."""
+    rows = get_store().list_feedback(300)
+    return {"count": len(rows), "feedback": rows}
 
 
 @app.get("/admin/overview")

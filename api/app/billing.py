@@ -325,6 +325,8 @@ class Store:
     # admin audit log
     def audit_log(self, entry: dict) -> None: ...
     def list_audit(self, limit: int = 100) -> list: ...
+    def add_feedback(self, entry: dict) -> None: ...
+    def list_feedback(self, limit: int = 300) -> list: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -354,6 +356,7 @@ class MemoryStore(Store):
     refund_requests: dict = field(default_factory=dict)  # req_id -> record
     activity: dict = field(default_factory=dict)         # uid -> {last_ip, ips, last_seen, requests}
     bans: dict = field(default_factory=dict)             # uid -> ban record
+    feedback: list = field(default_factory=list)         # user feedback entries (newest first)
 
     def get_key(self, key):
         return self.keys.get(key)
@@ -623,6 +626,12 @@ class MemoryStore(Store):
 
     def list_audit(self, limit=100):
         return list(reversed(self.audit[-limit:]))
+
+    def add_feedback(self, entry):
+        self.feedback.insert(0, dict(entry))
+
+    def list_feedback(self, limit=300):
+        return list(self.feedback[:limit])
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -1065,6 +1074,19 @@ class FirestoreStore(Store):
                     .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
         except Exception:  # noqa: BLE001
             rows = [d.to_dict() for d in self._db.collection("audit").limit(limit).stream()]
+            rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
+        return rows
+
+    def add_feedback(self, entry):
+        self._db.collection("feedback").document().set(dict(entry))
+
+    def list_feedback(self, limit=300):
+        try:
+            from google.cloud.firestore import Query
+            rows = [d.to_dict() for d in self._db.collection("feedback")
+                    .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
+        except Exception:  # noqa: BLE001
+            rows = [d.to_dict() for d in self._db.collection("feedback").limit(limit).stream()]
             rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
         return rows
 
