@@ -329,6 +329,7 @@ class Store:
     def list_feedback(self, limit: int = 300) -> list: ...
     def record_jailbreak(self, uid: str, snippet: str, kind: str = "chat") -> int: ...
     def list_jailbreaks(self, uid: str, limit: int = 20) -> list: ...
+    def set_risk(self, uid: str, risk: dict) -> None: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -638,6 +639,8 @@ class MemoryStore(Store):
     def record_jailbreak(self, uid, snippet, kind="chat"):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
         u["jailbreak_count"] = int(u.get("jailbreak_count", 0)) + 1
+        if "malicious" in (kind or ""):                  # destructive intent: weight heavily in risk
+            u["malicious_count"] = int(u.get("malicious_count", 0)) + 1
         u["jailbreak_last"] = _now().isoformat()
         samples = u.setdefault("jailbreak_samples", [])
         samples.insert(0, {"ts": _now().isoformat(), "kind": kind, "text": (snippet or "")[:240]})
@@ -646,6 +649,10 @@ class MemoryStore(Store):
 
     def list_jailbreaks(self, uid, limit=20):
         return list((self.users.get(uid) or {}).get("jailbreak_samples", [])[:limit])
+
+    def set_risk(self, uid, risk):
+        u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
+        u["risk"] = dict(risk)
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -1095,11 +1102,17 @@ class FirestoreStore(Store):
 
     def record_jailbreak(self, uid, snippet, kind="chat"):
         ref = self._db.collection("users").document(uid)
-        ref.set({"jailbreak_count": self._fs.Increment(1), "jailbreak_last": _now().isoformat()}, merge=True)
+        doc = {"jailbreak_count": self._fs.Increment(1), "jailbreak_last": _now().isoformat()}
+        if "malicious" in (kind or ""):
+            doc["malicious_count"] = self._fs.Increment(1)
+        ref.set(doc, merge=True)
         ref.collection("jailbreaks").document().set(
             {"ts": _now().isoformat(), "kind": kind, "text": (snippet or "")[:240]})
         snap = ref.get()
         return int((snap.to_dict() or {}).get("jailbreak_count", 1)) if snap.exists else 1
+
+    def set_risk(self, uid, risk):
+        self._db.collection("users").document(uid).set({"risk": dict(risk)}, merge=True)
 
     def list_jailbreaks(self, uid, limit=20):
         try:

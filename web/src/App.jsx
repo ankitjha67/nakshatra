@@ -142,6 +142,12 @@ export default function App() {
               <button className="ghost sm" onClick={dismissNotice}>Dismiss</button>
             </div>
           )}
+          {me?.risk_notice && (
+            <div className="risk-bar" role="alert">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}><path d="M12 9v4M12 17h.01M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0Z" /></svg>
+              <span>{me.risk_notice}</span>
+            </div>
+          )}
           <nav className="tabs">
             {tabs.map((t) => (
               <button key={t.key} className={`tab ${tab === t.key ? "active" : ""}`} onClick={() => setTab(t.key)}>

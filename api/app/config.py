@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     anomaly_ip_accounts_flag: int = 5         # >= this many accounts on one IP flags them
     anomaly_jailbreak_flag: int = 3           # >= this many jailbreak/injection attempts flags a user
 
+    # --- fraud / abuse risk model (continuous monitoring; see app/fraud.py) ---
+    fraud_watch_score: int = 40               # >= this risk score -> "watch" band (warning banner)
+    fraud_high_score: int = 75                # >= this -> "high" band (strong banner)
+    fraud_autoban_score: int = 100            # >= this -> auto-suspend in the batch scan (0 = never)
+
     # --- auth / billing ---
     # No usable default: admin/internal endpoints stay disabled until a real
     # secret is configured (Secret Manager). Placeholders are rejected too.

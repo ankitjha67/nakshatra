@@ -51,6 +51,7 @@ export default function AdminTab() {
   const [cUses, setCUses] = useState(1);
   const [cExpiry, setCExpiry] = useState(30);
   const [feedback, setFeedback] = useState([]);
+  const [fraudData, setFraudData] = useState(null);
 
   const load = () => {
     setErr("");
@@ -64,6 +65,7 @@ export default function AdminTab() {
     apiGet("/admin/users").then((d) => setUsers(d.users || [])).catch(() => {});
     apiGet("/admin/overview").then(setOv).catch(() => {});
     apiGet("/admin/feedback").then((d) => setFeedback(d.feedback || [])).catch(() => {});
+    apiGet("/admin/fraud").then(setFraudData).catch(() => {});
   };
   useEffect(load, []);
   useEffect(() => { apiGet(`/admin/analytics?days=${range}`).then(setAnalytics).catch(() => {}); }, [range]);
@@ -300,6 +302,9 @@ export default function AdminTab() {
             <tr><td>Last activity</td><td className="mono">{detail.activity?.last_seen ? new Date(detail.activity.last_seen).toLocaleString() : "—"} · {detail.activity?.last_ip || "no ip"}</td></tr>
             <tr><td>Birth lock</td><td>{detail.birth_lock ? `${detail.birth_lock.name || "—"} · ${detail.birth_lock.date} · ${detail.birth_lock.place || ""}` : "none"}</td></tr>
             <tr><td>Banned</td><td>{detail.ban ? `${detail.ban.kind} · ${detail.ban.reason || ""}` : "no"}</td></tr>
+            <tr><td>Fraud risk</td><td>{detail.risk
+              ? <span style={{ fontWeight: 700, color: detail.risk.band === "high" ? "var(--danger,#c0392b)" : detail.risk.band === "watch" ? "var(--brass)" : "inherit" }}>{detail.risk.band.toUpperCase()} · {detail.risk.score}{(detail.risk.signals || []).length ? ` · ${detail.risk.signals.map((s) => s.signal).join(", ")}` : ""}</span>
+              : "—"}</td></tr>
             <tr><td>Jailbreak attempts</td><td>{detail.jailbreak_count
               ? <b style={{ color: "var(--danger, #c0392b)" }}>⚑ {detail.jailbreak_count}{detail.jailbreak_last ? ` · last ${new Date(detail.jailbreak_last).toLocaleString()}` : ""}</b>
               : "none"}</td></tr>
@@ -463,6 +468,29 @@ export default function AdminTab() {
           </table>
         )}
       </div>
+
+      <p className="kicker" style={{ marginTop: 26 }}>Fraud monitoring · risk{fraudData ? ` (${fraudData.high} high · ${fraudData.watch} watch)` : ""}</p>
+      {!fraudData || (fraudData.flagged || []).length === 0 ? (
+        <p className="note">No elevated-risk users. Continuous scan scores every user on signals (malicious intent, injection attempts, refund abuse, token velocity, shared IPs).</p>
+      ) : (
+        <table className="admin-tbl">
+          <thead><tr><th>User</th><th>Risk</th><th>Score</th><th>Signals</th><th></th></tr></thead>
+          <tbody>
+            {fraudData.flagged.map((f) => (
+              <tr key={f.uid} className="rowlink" onClick={() => openUser(f.uid)}>
+                <td>{f.email || <span className="mono">{f.uid}</span>}</td>
+                <td><span style={{ fontWeight: 700, color: f.band === "high" ? "var(--danger,#c0392b)" : "var(--brass)" }}>{f.band.toUpperCase()}</span></td>
+                <td>{f.score}</td>
+                <td style={{ fontSize: 12 }}>{(f.signals || []).map((s) => `${s.signal} (+${s.points})`).join(", ")}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  {f.banned ? <span className="mono" style={{ color: "var(--muted)" }}>banned</span>
+                    : <button className="sm" disabled={busy} onClick={(e) => { e.stopPropagation(); ban(f.uid); }}>Ban 7d</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <p className="kicker" style={{ marginTop: 26 }}>Flagged users ({flagged.length})</p>
       {flagged.length === 0 ? (

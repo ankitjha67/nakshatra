@@ -213,6 +213,10 @@ button.sm{padding:5px 11px;font-size:12px}
 .fb-chip{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.06em;padding:6px 13px;border-radius:999px;
   border:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer}
 .fb-chip.on{background:var(--brass);border-color:var(--brass);color:#1a140a}
+/* fraud-risk warning banner (shown to flagged users) */
+.risk-bar{position:relative;z-index:1;display:flex;align-items:center;gap:10px;margin:0 0 14px;
+  padding:11px 16px;border-radius:12px;font-size:13px;line-height:1.5;
+  background:rgba(192,57,43,.14);border:1px solid rgba(192,57,43,.5);color:#f3c9c2}
 /* on-void intro blurbs (above the glass forms) need a light colour, not dark muted */
 .lead{color:var(--cream-dim)}
 /* admin/chat now sit on a paper .sheet; nested cards use white so they read as cards */
