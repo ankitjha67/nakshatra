@@ -6,6 +6,7 @@ import SignIn from "./components/SignIn.jsx";
 import CreditsWidget from "./components/CreditsWidget.jsx";
 import RedeemCode from "./components/RedeemCode.jsx";
 import CheckoutButton from "./components/CheckoutButton.jsx";
+import FeedbackButton from "./components/FeedbackButton.jsx";
 import ReadingTab from "./tabs/ReadingTab.jsx";
 import ChatTab from "./tabs/ChatTab.jsx";
 import PrashnaTab from "./tabs/PrashnaTab.jsx";
@@ -158,6 +159,7 @@ export default function App() {
 
       <footer className="site">Nakshatra · readings are for reflection, not fixed prediction.</footer>
     </div>
+    {user && <FeedbackButton />}
     </>
   );
 }

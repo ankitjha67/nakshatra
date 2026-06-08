@@ -50,6 +50,7 @@ export default function AdminTab() {
   const [cDiscount, setCDiscount] = useState(20);
   const [cUses, setCUses] = useState(1);
   const [cExpiry, setCExpiry] = useState(30);
+  const [feedback, setFeedback] = useState([]);
 
   const load = () => {
     setErr("");
@@ -62,6 +63,7 @@ export default function AdminTab() {
     apiGet("/admin/audit?limit=50").then((d) => setAudit(d.entries || [])).catch(() => {});
     apiGet("/admin/users").then((d) => setUsers(d.users || [])).catch(() => {});
     apiGet("/admin/overview").then(setOv).catch(() => {});
+    apiGet("/admin/feedback").then((d) => setFeedback(d.feedback || [])).catch(() => {});
   };
   useEffect(load, []);
   useEffect(() => { apiGet(`/admin/analytics?days=${range}`).then(setAnalytics).catch(() => {}); }, [range]);
@@ -462,6 +464,25 @@ export default function AdminTab() {
                     ? <button className="ghost sm" disabled={busy} onClick={() => unban(f.uid)}>Unban</button>
                     : <button className="sm" disabled={busy} onClick={() => ban(f.uid)}>Ban 7d</button>}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <p className="kicker" style={{ marginTop: 26 }}>Feedback ({feedback.length})</p>
+      {feedback.length === 0 ? (
+        <p className="note">No feedback yet.</p>
+      ) : (
+        <table className="admin-tbl">
+          <thead><tr><th>When</th><th>User</th><th>Type</th><th>Message</th></tr></thead>
+          <tbody>
+            {feedback.map((f, i) => (
+              <tr key={i}>
+                <td className="mono">{f.ts ? new Date(f.ts).toLocaleString() : "—"}</td>
+                <td>{f.email || <span className="mono">{f.uid}</span>}<span className="mono" style={{ color: "var(--muted)" }}> · {f.tier}</span></td>
+                <td>{f.category}{f.rating ? ` · ${f.rating}★` : ""}</td>
+                <td style={{ whiteSpace: "pre-wrap" }}>{f.message}</td>
               </tr>
             ))}
           </tbody>
