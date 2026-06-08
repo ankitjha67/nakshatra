@@ -272,6 +272,28 @@ def compute_mock_chart(birth: dict) -> dict[str, Any]:
             "ssl": order[(h + 4) % 9],
         }
 
+    # --- Siddha Nadi points: Yogi / Avayogi, Bhrigu Bindu ---
+    yp_lon = (sun_lon + lon["Moon"] + 93.3333) % 360
+    yog_nak, yog_lord, _ = _nak_at(yp_lon)
+    avy_idx = (NAKSHATRAS.index(yog_nak) + 6) % 27
+    yogi_avayogi = {
+        "yogi_point": round(yp_lon, 2), "yogi_nakshatra": yog_nak, "yogi_lord": yog_lord,
+        "avayogi_nakshatra": NAKSHATRAS[avy_idx], "avayogi_lord": NAKSHATRA_LORD[avy_idx + 1],
+    }
+    bb_lon = (lon["Moon"] + ((lon["Rahu"] - lon["Moon"]) % 360) / 2) % 360
+    bb_nak, _, _ = _nak_at(bb_lon)
+    bhrigu_bindu = {"deg": round(bb_lon % 30, 2), "sign": SIGNS[int(bb_lon // 30)], "nakshatra": bb_nak}
+
+    # --- double transit (Saturn + Jupiter); mock uses current-era signs ---
+    double_transit = {"active": True, "houses": [10], "saturn_sign": "Pisces", "jupiter_sign": "Cancer"}
+
+    # --- vimshottari birth balance + next antardasha ---
+    bal_days = max(0, int((DASHA_YEARS[moon_nak_lord] - elapsed0) * 365.25))
+    birth_balance = f"{moon_nak_lord} {bal_days // 365}y {(bal_days % 365) // 30}m {(bal_days % 365) % 30}d"
+    ai = antar_seq.index(antar_lord)
+    next_lord = antar_seq[(ai + 1) % 9]
+    nad_end = ad_end + timedelta(days=int(m_span * (DASHA_YEARS[next_lord] / 120.0)))
+
     return {
         "engine": "mock",
         "input": {k: birth.get(k) for k in ("name", "date", "time", "tz", "lat", "lon")},
@@ -287,6 +309,9 @@ def compute_mock_chart(birth: dict) -> dict[str, Any]:
         "jaimini_karakas": jaimini,
         "numerology": numerology,
         "kp_significators": {"cusps": kp_cusps},
+        "yogi_avayogi": yogi_avayogi,
+        "bhrigu_bindu": bhrigu_bindu,
+        "double_transit": double_transit,
         "sade_sati": {"active": ss_active, "phase": ss_phase},
         "danger_zones": {"gandanta_planets": gz},
         "dasha_systems": {
@@ -297,6 +322,10 @@ def compute_mock_chart(birth: dict) -> dict[str, Any]:
                 "antardasha": antar_lord,
                 "ad_start": ad_start.isoformat(),
                 "ad_end": ad_end.isoformat(),
+                "balance": birth_balance,
+                "next_antardasha": next_lord,
+                "next_ad_start": ad_end.isoformat(),
+                "next_ad_end": nad_end.isoformat(),
             }},
             "yogini": {"current": {
                 "yogini": ycur[0], "lord": ycur[1],
@@ -344,19 +373,27 @@ def rectify_mock(payload: dict) -> dict:
     cands.sort(key=lambda c: c["confidence"], reverse=True)
     recommended = cands[0]
     times = [c["time"] for c in cands]
+    matches = 2 * n_ev
+    score = min(7, 3 + n_ev)
+    rating = "Strong" if score >= 6 else "Good" if score >= 5 else "Fair" if score >= 4 else "Weak"
+    methods = {
+        "Kunda": {"verdict": "Strong", "detail": "Kunda lagna aligns, trine to the Moon nakshatra."},
+        "Event Verification": {"verdict": "High", "detail": f"{n_ev} event(s); {matches} transit matches found."},
+        "KP Ruling Planets": {"verdict": "Medium", "detail": "Common ruling factors at the recommended moment."},
+        "Trutine of Hermes": {"verdict": "Supportive", "detail": "Moon-Ascendant reciprocity holds."},
+        "Tattva Shuddhi": {"verdict": "Mixed", "detail": "Element signal partially matches."},
+        "Animodar": {"verdict": "Outlier", "detail": "Suggests a large correction; treated as an outlier."},
+        "Physiognomy": {"verdict": "Confirm", "detail": "Ascendant traits, needs the native's confirmation."},
+    }
     return {
         "input_time": time_str,
         "recommended": recommended,
         "candidates": cands,
-        "methods": {
-            "Tattva": {"time": cands[0]["time"]},
-            "Kunda": {"time": cands[min(1, len(cands) - 1)]["time"]},
-            "Trutine": {"applied": True},
-            "Animodar": {"applied": True},
-            "KP-RP": {"applied": True},
-            "EventVerification": {"events": n_ev, "agreement_pct": recommended["confidence"]},
-        },
+        "methods": methods,
         "events_used": n_ev,
+        "confidence_score": f"{score} / 7",
+        "confidence_pct": recommended["confidence"],
+        "rating": rating,
         "window": {"start": min(times), "end": max(times)},
         "_engine": "mock",
     }

@@ -111,6 +111,7 @@ class ReadingResponse(BaseModel):
     findings: list[Finding]                     # the evidence behind the prose (shown for trust)
     disclaimers: list[str]
     meta: Meta
+    varshphal: Optional[dict[str, Any]] = None  # Tajik annual block (report_type="yearly" only)
 
 
 class JobResponse(BaseModel):

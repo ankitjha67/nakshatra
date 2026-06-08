@@ -11,6 +11,7 @@ from datetime import date
 
 from .engine import compute_chart, engine_version
 from .rules import derive_findings
+from .varshphal import compute_varshphal
 from .llm import render_reading, get_provider, DISCLAIMERS
 from .models import BirthDetails, ChartResponse, ReadingResponse, Meta
 from .billing import Tier, get_store, report_sections
@@ -55,7 +56,8 @@ def get_reading(birth: BirthDetails, tier: Tier) -> ReadingResponse:
             return ReadingResponse(summary=cached["summary"],
                                    sections=[s for s in cached["sections"]],
                                    findings=cached["findings"],
-                                   disclaimers=cached["disclaimers"], meta=meta)
+                                   disclaimers=cached["disclaimers"], meta=meta,
+                                   varshphal=cached.get("varshphal"))
 
     chart = compute_chart(birth)
     findings = derive_findings(chart, year=year)
@@ -63,8 +65,10 @@ def get_reading(birth: BirthDetails, tier: Tier) -> ReadingResponse:
     meta = Meta(engine_version=ev, rules_version=RULES_VERSION, renderer_version=RENDERER_VERSION,
                 model=model_name, tier=tier.key, report_type=report_type, year=year, cache_hit=False,
                 tokens_in=ti, tokens_out=to, chart_hash=birth.chart_hash())
+    # Tajik Varshphal block (deterministic from natal chart + year) for yearly reports
+    varshphal = compute_varshphal(chart, birth, year) if (report_type == "yearly" and year) else None
     resp = ReadingResponse(summary=summary, sections=sections, findings=findings,
-                           disclaimers=DISCLAIMERS, meta=meta)
+                           disclaimers=DISCLAIMERS, meta=meta, varshphal=varshphal)
     if tier.cache:
         store.cache_put(ck, resp.model_dump())
     return resp

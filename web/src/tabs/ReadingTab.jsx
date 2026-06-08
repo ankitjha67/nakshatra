@@ -3,6 +3,7 @@ import BirthForm from "../components/BirthForm.jsx";
 import Reading from "../components/Reading.jsx";
 import Charts from "../components/Charts.jsx";
 import ChartData from "../components/ChartData.jsx";
+import VarshphalData from "../components/VarshphalData.jsx";
 import AnchorBlock from "../components/AnchorBlock.jsx";
 import { apiPost } from "../lib/api.js";
 
@@ -18,38 +19,27 @@ export default function ReadingTab({ reportType, blurb, extra, onCast }) {
   const [year, setYear] = useState(NOW_YEAR);
   const [data, setData] = useState(null); const [birth, setBirth] = useState(null);
   const [chart, setChart] = useState(null);
-  const [anchor, setAnchor] = useState(null);   // verification block awaiting confirm
-  const [pending, setPending] = useState(null); // birth details held until confirmed
+  const [anchor, setAnchor] = useState(null);   // informational header (engine-computed)
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
 
-  // Step 1: entering details fetches the anchor block (engine-only, no credits).
+  // The engine is authoritative, so there is no external verify step: casting
+  // computes the anchor, charts, and full reading together and shows them all.
   const cast = async (b) => {
     setErr(""); setBusy(true); setData(null); setChart(null); setAnchor(null);
     try {
-      const { anchor: anc } = await apiPost("/v1/anchor", b);
-      setPending(b); setAnchor(anc);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  };
-
-  // Step 2: on confirm, render the full report + charts.
-  const proceed = async () => {
-    const b = pending;
-    if (!b) return;
-    setErr(""); setBusy(true);
-    try {
       const body = { ...b, report_type: reportType };
       if (isYearly) body.year = year;
-      const [resp, chartResp] = await Promise.all([
+      const [resp, chartResp, ancResp] = await Promise.all([
         apiPost("/v1/reading", body),
         apiPost("/v1/chart", b).catch(() => null),
+        apiPost("/v1/anchor", b).catch(() => null),
       ]);
-      setBirth(b); setData(resp); setAnchor(null);
+      setBirth(b); setData(resp);
       if (chartResp) setChart(chartResp.chart);
+      if (ancResp) setAnchor(ancResp.anchor);
       onCast && onCast(b);          // share the cast chart so Chat can ground on it
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
-
-  const reject = () => { setAnchor(null); setPending(null); };
   const yearPicker = isYearly ? (
     <div className="full">
       <label className="fld">Year (Varshphal)</label>
@@ -61,11 +51,12 @@ export default function ReadingTab({ reportType, blurb, extra, onCast }) {
   return (
     <div>
       {blurb && <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>{blurb}</p>}
-      <BirthForm onSubmit={cast} busy={busy && !anchor} extra={isYearly ? yearPicker : extra} />
+      <BirthForm onSubmit={cast} busy={busy} extra={isYearly ? yearPicker : extra} />
       <p className="err">{err}</p>
-      {anchor && <AnchorBlock anchor={anchor} busy={busy} onConfirm={proceed} onReject={reject} />}
+      {anchor && <AnchorBlock anchor={anchor} />}
       <Charts chart={chart} />
       <ChartData chart={chart} />
+      {data?.varshphal && <VarshphalData varshphal={data.varshphal} />}
       <Reading data={data} birth={birth} />
     </div>
   );

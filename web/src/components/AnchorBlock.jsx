@@ -1,11 +1,10 @@
 import React from "react";
 
-// Maha-Jyotish Anchor Verification Block. Shown after birth details are entered
-// and BEFORE the full Maha-Kundali, the user verifies the Tropical vs Sidereal
-// Ascendant & Moon and the Nakshatra lock against an external panchang
-// (DrikPanchang / AstroSage), then confirms or re-enters. This is the protocol's
-// "verify before you read" gate.
-export default function AnchorBlock({ anchor, busy, onConfirm, onReject }) {
+// Anchor Block. An informational header shown above every reading: the Western
+// Tropical vs Vedic Sidereal Ascendant & Moon, the Nakshatra lock, and the
+// preliminary danger-zone flags. The cloud engine computes all of this precisely
+// (Lahiri ayanamsa, Placidus-KP), so there is no external "verify" step.
+export default function AnchorBlock({ anchor }) {
   if (!anchor) return null;
   const a = anchor;
   const tz = a.timezone || {};
@@ -17,11 +16,12 @@ export default function AnchorBlock({ anchor, busy, onConfirm, onReject }) {
 
   return (
     <div className="sheet anchor">
-      <p className="kicker">Anchor verification</p>
+      <p className="kicker">Chart anchor</p>
       <h3 className="anchor-title">{a.name} · chart anchor</h3>
       <p className="note" style={{ marginTop: 4 }}>
-        The Maha-Jyotish protocol verifies the anchor before the full reading. Please check the
-        Ascendant, Moon, and Nakshatra below against DrikPanchang or AstroSage, then confirm.
+        Computed precisely by the engine ({a.ayanamsa} ayanamsa, {a.house_system} houses). The
+        Western Tropical and Vedic Sidereal Ascendant and Moon, with the Nakshatra lock, are shown
+        for transparency.
       </p>
 
       <div className="anchor-meta">
@@ -66,17 +66,6 @@ export default function AnchorBlock({ anchor, busy, onConfirm, onReject }) {
         </div>
       )}
 
-      <div className="actions">
-        <button onClick={onConfirm} disabled={busy}>
-          {busy ? "Building the report…" : "Yes, this matches, proceed"}
-        </button>
-        <button className="ghost" onClick={onReject} disabled={busy}>
-          No, re-enter details
-        </button>
-      </div>
-      <p className="note" style={{ marginTop: 8 }}>
-        If a value is off, the birth time is the usual cause. Re-enter details to re-anchor.
-      </p>
     </div>
   );
 }

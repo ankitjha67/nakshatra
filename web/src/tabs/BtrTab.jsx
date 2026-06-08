@@ -106,6 +106,39 @@ export default function BtrTab() {
           {cands.length > 0 && (
             <p className="note">Candidates: {cands.map((c) => `${c.time}${c.confidence != null ? ` (${c.confidence}%)` : ""}`).join(" · ")}</p>
           )}
+          {(data?.rectification?.confidence_score || data?.rectification?.rating) && (
+            <p className="note" style={{ marginTop: 6 }}>
+              {data.rectification.confidence_score && <>Score <b>{data.rectification.confidence_score}</b></>}
+              {data.rectification.rating && <> · Rating <b>{data.rectification.rating}</b></>}
+            </p>
+          )}
+        </div>
+      )}
+
+      {(data?.rectification?.method_rows?.length > 0) && (
+        <div className="sheet">
+          <p className="kicker">Rectification methods</p>
+          <table className="data-tbl">
+            <thead><tr><th>Method</th><th>Verdict</th><th>Detail</th></tr></thead>
+            <tbody>
+              {data.rectification.method_rows.map((m, i) => (
+                <tr key={i}><td>{m.method}</td><td>{m.verdict}</td><td>{m.detail}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          {data.rectification.events?.length > 0 && (
+            <>
+              <p className="data-h" style={{ marginTop: 18 }}>Event calibration</p>
+              <table className="data-tbl">
+                <thead><tr><th>Event</th><th>Date</th></tr></thead>
+                <tbody>
+                  {data.rectification.events.map((e, i) => (
+                    <tr key={i}><td>{e.type}</td><td>{e.date}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       )}
 
