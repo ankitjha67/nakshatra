@@ -12,4 +12,4 @@ __version__ = "0.1.0"
 # bump these when the corresponding stage's output changes
 ENGINE_VERSION_FALLBACK = "mock-0.3"   # mock-0.3: + yogi/avayogi, bhrigu bindu, double transit, dasha balance
 RULES_VERSION = "rules-0.7"       # rules-0.7: remedies as structured grouped-by-graha findings
-RENDERER_VERSION = "render-0.8"   # 0.4: report_type; 0.5: yearly; 0.6: prashna; 0.7: btr; 0.8: light/shadow + verdict
+RENDERER_VERSION = "render-0.9"   # 0.4: report_type; 0.5: yearly; 0.6: prashna; 0.7: btr; 0.8: light/shadow + verdict; 0.9: evidence in prompt + specificity mandate
