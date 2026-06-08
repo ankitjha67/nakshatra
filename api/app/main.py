@@ -280,7 +280,9 @@ class ChatTurn(BaseModel):
 
 class ChatRequest(BaseModel):
     birth: BirthDetails                      # the cast chart this conversation is grounded in
-    message: str = Field(..., min_length=1, max_length=2000)
+    # 6000 so a pasted jailbreak (often 1-5k chars) still reaches the injection/abuse
+    # screen and gets flagged + refused, rather than bouncing off validation unflagged.
+    message: str = Field(..., min_length=1, max_length=6000)
     history: list[ChatTurn] = Field(default_factory=list, max_length=16)
     chat_id: Optional[str] = Field(None, max_length=64, pattern=r"^[A-Za-z0-9_-]{1,64}$")
 

@@ -24,6 +24,7 @@ export default function ChatTab({ lastBirth, onBalance }) {
   const send = async () => {
     const text = input.trim();
     if (!text || busy) return;
+    if (text.length > 6000) { setErr(`Message is too long (${text.length}/6000 characters). Please shorten it.`); return; }
     setErr(""); setInput(""); setBusy(true);
     const history = msgs.filter((m) => !m.error).map((m) => ({ role: m.role, text: m.text }));
     setMsgs((m) => [...m, { role: "user", text }]);
@@ -62,6 +63,7 @@ export default function ChatTab({ lastBirth, onBalance }) {
       <div className="chat-input">
         <input
           value={input}
+          maxLength={6000}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") send(); }}
           placeholder="Ask about your chart…"
