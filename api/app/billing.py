@@ -254,6 +254,7 @@ class Store:
     # users (Firebase-authenticated; keyed by uid)
     def get_user(self, uid: str) -> Optional[dict]: ...
     def upsert_user(self, uid: str, email: Optional[str], tier: Optional[str] = None) -> dict: ...
+    def add_user_tokens(self, uid: str, n: int) -> None: ...
     # usage + rate
     def hit_rate(self, key: str, per_minute: int) -> bool: ...      # True if allowed
     def usage_today(self, key: str) -> dict: ...
@@ -379,9 +380,13 @@ class MemoryStore(Store):
             if email and u.get("email") != email:
                 u["email"] = email
             return u
-        u = {"email": email or "", "tier": tier or "free"}
+        u = {"email": email or "", "tier": tier or "free", "created_at": _now().isoformat()}
         self.users[uid] = u
         return u
+
+    def add_user_tokens(self, uid, n):
+        u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
+        u["tokens_total"] = int(u.get("tokens_total", 0)) + int(n)
 
     def hit_rate(self, key, per_minute):
         now = time.time()
@@ -458,7 +463,7 @@ class MemoryStore(Store):
 
     # --- payment records + refund requests ---
     def record_payment(self, payment_id, data):
-        self.payments[payment_id] = {**data, "payment_id": payment_id}
+        self.payments[payment_id] = {"ts": _now().isoformat(), **data, "payment_id": payment_id}
 
     def get_payment(self, payment_id):
         return self.payments.get(payment_id)
@@ -695,6 +700,10 @@ class FirestoreStore(Store):
                  "created_at": self._fs.SERVER_TIMESTAMP})
         return {"email": email or "", "tier": tier or "free"}
 
+    def add_user_tokens(self, uid, n):
+        self._db.collection("users").document(uid).set(
+            {"tokens_total": self._fs.Increment(int(n))}, merge=True)
+
     # --- rate (per-instance) ---
     def hit_rate(self, key, per_minute):
         now = time.time()
@@ -795,7 +804,11 @@ class FirestoreStore(Store):
             return
         if len(blob) > 1_000_000:        # Firestore 1 MiB/field cap, skip oversized charts
             return
-        self._db.collection("cache").document(self._ck_id(ck)).set({"json": blob})
+        doc = {"json": blob}
+        ttl = get_settings().cache_ttl_days
+        if ttl and ttl > 0:              # TTL so birth-derived cache ages out (enable Firestore TTL on expireAt)
+            doc["expireAt"] = _now() + timedelta(days=ttl)
+        self._db.collection("cache").document(self._ck_id(ck)).set(doc)
 
     # --- jobs ---
     def job_put(self, job_id, value):
@@ -846,7 +859,8 @@ class FirestoreStore(Store):
 
     # --- payment records + refund requests ---
     def record_payment(self, payment_id, data):
-        self._db.collection("payments").document(payment_id).set({**data, "payment_id": payment_id}, merge=True)
+        self._db.collection("payments").document(payment_id).set(
+            {"ts": _now().isoformat(), **data, "payment_id": payment_id}, merge=True)
 
     def get_payment(self, payment_id):
         snap = self._db.collection("payments").document(payment_id).get()

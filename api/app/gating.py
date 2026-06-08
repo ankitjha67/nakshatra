@@ -21,26 +21,31 @@ _FULL_TABLE_BLOCKS = (
     "jaimini_karakas", "kp_significators", "numerology",
     "yogi_avayogi", "bhrigu_bindu", "double_transit", "sade_sati",
 )
+# core placements + metadata the D1 charts and anchor always need (every tier)
+_ALWAYS = ("engine", "chart", "input", "datetime")
 
 
 def filter_chart_for_features(chart: dict, features: set[str] | frozenset[str]) -> dict[str, Any]:
-    """Return a shallow copy of the engine chart with blocks the tier lacks removed."""
+    """ALLOW-LIST the chart by tier: return ONLY the blocks the tier's UI uses, so
+    no extra interpretive engine output (yogas, shadbala, ashtakavarga, sahams,
+    aspects, etc.) is ever exposed over the wire to a tier that didn't unlock it."""
     if not isinstance(chart, dict):
         return chart
-    out = dict(chart)
+    out = {k: chart[k] for k in _ALWAYS if k in chart}      # placements for D1 + anchor (all tiers)
 
-    if "divisional" not in features:
-        out.pop("vargas", None)                       # D9/D10/D24 selector goes away
+    if "divisional" in features and "vargas" in chart:
+        out["vargas"] = chart["vargas"]                     # D9/D10/D24 (Pro)
 
-    if "tables_full" not in features:
+    if "tables_full" in features:
         for k in _FULL_TABLE_BLOCKS:
-            out.pop(k, None)
-        ds = out.get("dasha_systems")
-        if isinstance(ds, dict):                      # keep only Vimshottari for tables_basic
-            out["dasha_systems"] = {k: v for k, v in ds.items() if k == "vimshottari"}
-
-    if "tables_basic" not in features:
-        out.pop("dasha_systems", None)                # free: no dasha table at all
+            if k in chart:
+                out[k] = chart[k]
+        if isinstance(chart.get("dasha_systems"), dict):
+            out["dasha_systems"] = chart["dasha_systems"]   # all dasha systems (Pro)
+    elif "tables_basic" in features:
+        ds = chart.get("dasha_systems")
+        if isinstance(ds, dict) and "vimshottari" in ds:
+            out["dasha_systems"] = {"vimshottari": ds["vimshottari"]}  # Basic: Vimshottari only
 
     return out
 

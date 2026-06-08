@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # Lock one native (person = date + place) per account after first use, so a
     # single subscription can't be used to read unlimited different people.
     birth_lock_enabled: bool = True
+    # Cache retention: chart/reading caches hold birth-derived data; expire them so
+    # PII ages out (enable a Firestore TTL policy on cache.expireAt). 0 = keep.
+    cache_ttl_days: int = 90
     payments_provider: str = "none"        # none | razorpay | stripe
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
@@ -126,6 +129,10 @@ class Settings(BaseSettings):
             w.append("payments enabled but no webhook secret set, signatures cannot be verified.")
         if self.llm_provider == "mock":
             w.append("LLM_PROVIDER=mock in prod, readings would be deterministic stubs, not real LLM output.")
+        if self.daily_global_token_breaker <= 0:
+            w.append("DAILY_GLOBAL_TOKEN_BREAKER is off (0), set a cap as a platform-wide spend backstop.")
+        if not self.verify_token_revocation:
+            w.append("VERIFY_TOKEN_REVOCATION is off, revoked/disabled sessions may still pass; enable in prod.")
         return w
 
 

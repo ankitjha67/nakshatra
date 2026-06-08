@@ -189,3 +189,37 @@ def test_razorpay_plan_and_offer_map_parsing():
     assert s.razorpay_plan_map() == {"basic": "plan_b", "pro": "plan_p", "enterprise": "plan_e"}
     assert s.razorpay_offer_map() == {"pro": "offer_x"}
     assert Settings().razorpay_plan_map() == {}        # empty default
+
+
+# --------------------------- refund hardening (security sweep) -------------- #
+def _refund_evt(rid, pay_id, amount_paise):
+    return {"event": "refund.processed", "payload": {"refund": {"entity": {"id": rid, "payment_id": pay_id, "amount": amount_paise}}}}
+
+
+def test_full_refund_reverses_once_and_blocks_repeat():
+    s = MemoryStore()
+    # a captured subscription payment: ₹999, 600k tokens granted
+    s.record_payment("pay_x", {"uid": "u1", "kind": "subscription", "tier": "pro",
+                               "tokens": 600_000, "amount_inr": 999, "status": "captured"})
+    s.set_tier("u1", "pro"); s.credit_grant("u1", TIERS["pro"])
+    raw, sig = _signed(_refund_evt("rfnd_1", "pay_x", 999_00))
+    r = handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
+    assert r["status"] == "refund" and r["full"] is True
+    assert s.get_payment("pay_x")["status"] == "refunded"
+    assert s.get_user("u1")["tier"] == "free"            # full sub refund downgrades
+    # a SECOND refund entity on the same (already-refunded) payment must NOT reverse again
+    raw2, sig2 = _signed(_refund_evt("rfnd_2", "pay_x", 999_00))
+    r2 = handle_razorpay_webhook(raw2, sig2, SECRET, s, TIERS)
+    assert r2["status"] == "duplicate"
+
+
+def test_partial_refund_is_proportional_and_keeps_subscription():
+    s = MemoryStore()
+    s.record_payment("pay_y", {"uid": "u2", "kind": "subscription", "tier": "pro",
+                               "tokens": 600_000, "amount_inr": 1000, "status": "captured"})
+    s.set_tier("u2", "pro"); s.credit_grant("u2", TIERS["pro"])
+    raw, sig = _signed(_refund_evt("rfnd_3", "pay_y", 250_00))   # ₹250 of ₹1000 = 25%
+    r = handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
+    assert r["full"] is False and r["tokens"] == 150_000     # 25% of 600k
+    assert s.get_user("u2")["tier"] == "pro"                 # partial refund does NOT downgrade
+    assert s.get_payment("pay_y")["status"] != "refunded"    # payment stays open for further partials
