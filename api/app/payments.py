@@ -39,6 +39,39 @@ def verify_razorpay_signature(raw: bytes, signature: str | None, secret: str) ->
     return hmac.compare_digest(digest, signature)
 
 
+def keys_configured(key_id: str, key_secret: str) -> bool:
+    """True only when real (non-placeholder) Razorpay API keys are present."""
+    return bool(key_id and key_secret and not key_id.startswith("REPLACE")
+                and not key_secret.startswith("REPLACE"))
+
+
+def create_razorpay_order(amount_inr: int, key_id: str, key_secret: str,
+                          notes: dict, receipt: str) -> dict:
+    """Create a Razorpay order for the discounted amount. Returns the order JSON.
+    Called only when real keys are configured; raises PaymentError on failure."""
+    import base64
+    import urllib.error
+    import urllib.request
+
+    body = json.dumps({
+        "amount": int(amount_inr) * 100,            # paise
+        "currency": "INR",
+        "receipt": receipt,
+        "notes": {k: str(v) for k, v in (notes or {}).items()},
+    }).encode("utf-8")
+    auth = base64.b64encode(f"{key_id}:{key_secret}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        "https://api.razorpay.com/v1/orders", data=body, method="POST",
+        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:                       # noqa: BLE001
+        raise PaymentError(502, f"Razorpay order creation failed ({e.code}).")
+    except Exception:                                          # noqa: BLE001
+        raise PaymentError(502, "Could not reach the payment gateway.")
+
+
 def _entity(payload: dict, key: str) -> dict:
     ent = (((payload.get("payload") or {}).get(key) or {}).get("entity")) or {}
     return ent if isinstance(ent, dict) else {}

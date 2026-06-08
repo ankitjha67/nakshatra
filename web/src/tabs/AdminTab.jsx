@@ -50,6 +50,8 @@ export default function AdminTab() {
     if (!window.confirm(`Revoke ALL ${beta.count} beta users back to free? Paying users are not affected.`)) return;
     act(() => apiPost("/admin/beta/revoke", {}), (r) => `Revoked ${r.revoked} beta user(s).`);
   };
+  const deactivateCode = (id) => act(() => apiPost(`/admin/codes/${id}/deactivate`, {}), () => "Code deactivated.");
+  const reactivateCode = (id) => act(() => apiPost(`/admin/codes/${id}/reactivate`, {}), () => "Code reactivated.");
   const genCodes = () => act(async () => {
     const body = { kind: cKind, count: Number(cCount), max_uses: Number(cUses) };
     if (cExpiry) body.expires_days = Number(cExpiry);
@@ -157,15 +159,18 @@ export default function AdminTab() {
         )}
         {codes.length > 0 && (
           <table className="admin-tbl" style={{ marginTop: 12 }}>
-            <thead><tr><th>Code id</th><th>Kind</th><th>Grants</th><th>Uses</th><th>Status</th></tr></thead>
+            <thead><tr><th>Code id</th><th>Kind</th><th>Grants</th><th>Uses</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {codes.map((c) => (
                 <tr key={c.id}>
-                  <td className="mono">{c.id}…</td>
+                  <td className="mono">{c.id.slice(0, 10)}…</td>
                   <td>{c.kind}</td>
                   <td>{c.kind === "discount" ? `${c.discount_pct}% off` : c.tier}</td>
                   <td>{c.uses}/{c.max_uses}</td>
                   <td>{!c.active ? "inactive" : c.uses >= c.max_uses ? "spent" : "active"}</td>
+                  <td>{c.active
+                    ? <button className="ghost sm" disabled={busy} onClick={() => deactivateCode(c.id)}>Deactivate</button>
+                    : <button className="ghost sm" disabled={busy} onClick={() => reactivateCode(c.id)}>Reactivate</button>}</td>
                 </tr>
               ))}
             </tbody>

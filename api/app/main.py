@@ -42,7 +42,8 @@ from .codes import generate_plaintext, hash_code
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
-from .payments import handle_razorpay_webhook, PaymentError, TOPUP_PACKS
+from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
+                       create_razorpay_order, keys_configured)
 from .mock_razorpay import checkout_event as _mock_checkout_event, refund_event as _mock_refund_event
 from . import pricing
 
@@ -578,6 +579,56 @@ def redeem(req: RedeemRequest, p: Principal = Depends(require_principal)):
     store.set_tier(p.user_id, tier, source="beta")   # revocable via /admin/beta/revoke
     return {"kind": "beta", "granted": tier,
             "message": f"Access unlocked: {TIERS[tier].label}."}
+
+
+@app.post("/admin/codes/{code_id}/deactivate")
+def codes_deactivate(code_id: str, _: None = Depends(require_admin)):
+    if not get_store().code_set_active(code_id, False):
+        raise HTTPException(404, "Unknown code id")
+    return {"id": code_id, "active": False}
+
+
+@app.post("/admin/codes/{code_id}/reactivate")
+def codes_reactivate(code_id: str, _: None = Depends(require_admin)):
+    if not get_store().code_set_active(code_id, True):
+        raise HTTPException(404, "Unknown code id")
+    return {"id": code_id, "active": True}
+
+
+# --------------------------------------------------------------------------- #
+# checkout: start a subscription, applying any redeemed discount. Creates a real
+# Razorpay order when live keys are configured; otherwise returns the priced
+# intent (so the UI can show the discounted amount before payments go live).
+# --------------------------------------------------------------------------- #
+class CheckoutRequest(BaseModel):
+    tier: str
+
+
+@app.post("/v1/checkout")
+def checkout(req: CheckoutRequest, p: Principal = Depends(require_principal)):
+    if req.tier not in TIERS or req.tier == "free":
+        raise HTTPException(400, "Choose a paid tier (basic, pro, enterprise).")
+    enforce_quota(p)
+    s = get_settings()
+    t = TIERS[req.tier]
+    user = get_store().get_user(p.user_id) or {}
+    discount = max(0, min(100, int(user.get("discount_pct") or 0)))
+    original = int(t.price_inr_month)
+    amount = round(original * (100 - discount) / 100)
+    base = {"tier": req.tier, "tier_label": t.label, "original_inr": original,
+            "discount_pct": discount, "amount_inr": amount, "currency": "INR"}
+
+    if s.payments_provider == "razorpay" and keys_configured(s.razorpay_key_id, s.razorpay_key_secret):
+        order = create_razorpay_order(
+            amount, s.razorpay_key_id, s.razorpay_key_secret,
+            notes={"user_id": p.user_id, "tier": req.tier, "discount_pct": discount},
+            receipt=f"{req.tier}-{p.user_id[:12]}")
+        return {**base, "provider": "razorpay", "enabled": True,
+                "key_id": s.razorpay_key_id, "order_id": order.get("id"),
+                "name": "Nakshatra"}
+    # Live payments not enabled yet: return the priced intent for the UI.
+    return {**base, "provider": "none", "enabled": False,
+            "message": "Live payments are being enabled. Use an access code to unlock in the meantime."}
 
 
 @app.post("/webhooks/payments")
