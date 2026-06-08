@@ -1382,6 +1382,48 @@ def _yearly(chart, year: int) -> list[Finding]:
 # --------------------------------------------------------------------------- #
 # public
 # --------------------------------------------------------------------------- #
+def chart_facts(chart: dict[str, Any], features=None) -> dict:
+    """Compact, TIER-GATED literal chart facts for grounding LLM answers (positions
+    the user is entitled to). D1 placements for all; D9/D10 only with 'divisional';
+    KP sub-lords + Ashtakavarga only with 'tables_full'. Interpretation still comes
+    from findings, this is just the factual data the model may state verbatim."""
+    feats = set(features or ())
+    asc = _asc_full(chart)
+    asc_sign = asc.get("sign")
+    by = _by_name(_planets(chart))
+    planets: dict = {}
+    for name, p in by.items():
+        line = {"sign": p.get("sign"), "house": _house_ws(p.get("sign"), asc_sign),
+                "degree": p.get("fmt"), "nakshatra": p.get("nakshatra"),
+                "pada": p.get("pada"), "dignity": p.get("dignity")}
+        flags = [k for k in ("retrograde", "combust") if p.get(k)]
+        if flags:
+            line["flags"] = flags
+        planets[name] = {k: v for k, v in line.items() if v is not None}
+    out: dict = {
+        "ascendant": {k: v for k, v in {"sign": asc_sign, "degree": asc.get("fmt"),
+                                        "nakshatra": asc.get("nakshatra")}.items() if v},
+        "planets": planets,
+    }
+    cur = _dasha_current(chart)
+    if cur.get("mahadasha"):
+        out["current_dasha"] = {k: v for k, v in {
+            "mahadasha": cur.get("mahadasha"), "antardasha": cur.get("antardasha"),
+            "md_end": cur.get("md_end"), "ad_end": cur.get("ad_end")}.items() if v}
+    if "divisional" in feats:
+        d9 = {n: _varga_sign(chart, "D9", n) for n in by}
+        d10 = {n: _varga_sign(chart, "D10", n) for n in by}
+        out["navamsa_d9"] = {n: s for n, s in d9.items() if s}
+        out["dasamsa_d10"] = {n: s for n, s in d10.items() if s}
+    if "tables_full" in feats:
+        kp = {f"H{h}": _kp_sub(chart, h) for h in range(1, 13)}
+        out["kp_cusp_sublords"] = {k: v for k, v in kp.items() if v}
+        sav = _d(chart.get("ashtakavarga")).get("sav")
+        if isinstance(sav, list):
+            out["ashtakavarga_sav_by_house"] = sav
+    return out
+
+
 def derive_findings(chart: dict[str, Any], year: int | None = None) -> list[Finding]:
     planets = _planets(chart)
     by = _by_name(planets)
