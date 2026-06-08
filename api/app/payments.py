@@ -106,6 +106,15 @@ def create_razorpay_subscription(plan_id: str, key_id: str, key_secret: str, not
     return _razorpay_post("/subscriptions", body, key_id, key_secret)
 
 
+def cancel_razorpay_subscription(subscription_id: str, key_id: str, key_secret: str,
+                                 at_cycle_end: bool = True) -> dict:
+    """Cancel a subscription (default: at the end of the paid cycle so the user
+    keeps access they've paid for). The refund/downgrade flows via the webhook."""
+    return _razorpay_post(f"/subscriptions/{subscription_id}/cancel",
+                          {"cancel_at_cycle_end": 1 if at_cycle_end else 0},
+                          key_id, key_secret)
+
+
 def _entity(payload: dict, key: str) -> dict:
     ent = (((payload.get("payload") or {}).get(key) or {}).get("entity")) or {}
     return ent if isinstance(ent, dict) else {}
@@ -165,6 +174,8 @@ def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
         if not store.mark_payment_processed(f"subgrant:{charge_id}"):
             return {"status": "duplicate", "id": charge_id}
         store.set_tier(uid, tier)
+        if sub.get("id"):
+            store.set_subscription(uid, sub.get("id"))     # for self-serve cancel
         store.credit_grant(uid, tiers[tier], reason="subscription charged")
         store.record_payment(charge_id, {
             "uid": uid, "kind": "subscription", "tier": tier,

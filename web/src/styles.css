@@ -188,6 +188,9 @@ button.sm{padding:5px 11px;font-size:12px}
 .redeem-bar .redeem{border-top:none;padding-top:0;margin-top:0}
 .redeem-bar .redeem-label{color:var(--cream-dim)}
 .redeem-bar .redeem-row input{background:rgba(10,10,22,.55);color:var(--cream);border-color:var(--hair-dark);color-scheme:dark}
+/* locked birth-details summary (one native per account) */
+.locked-birth{font-size:14px;color:var(--cream);line-height:1.7;margin:8px 0 6px}
+.locked-birth .lb-name{font-family:"Cormorant Garamond",serif;font-size:20px;font-weight:600;color:var(--cream)}
 footer.site{padding:28px 0;border-top:1px solid var(--hair-dark);color:var(--cream-faint);font-size:12px;font-family:"IBM Plex Mono",monospace;margin-top:30px}
 
 /* ------------------------------------------------------------------ */

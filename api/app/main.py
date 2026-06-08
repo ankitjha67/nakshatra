@@ -43,7 +43,8 @@ from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
 from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
-                       create_razorpay_order, create_razorpay_subscription, keys_configured)
+                       create_razorpay_order, create_razorpay_subscription,
+                       cancel_razorpay_subscription, keys_configured)
 from .mock_razorpay import checkout_event as _mock_checkout_event, refund_event as _mock_refund_event
 from . import pricing
 
@@ -104,9 +105,14 @@ def credits_balance(p: Principal = Depends(require_principal)):
 @app.get("/v1/me")
 def me(p: Principal = Depends(require_principal)):
     """The signed-in user's profile + entitlements + balance (frontend reads its real tier here)."""
+    store = get_store()
+    user = store.get_user(p.user_id) or {}
     return {"user_id": p.user_id, "tier": p.tier.key,
             "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
-            "balance": get_store().credit_balance(p.user_id, p.tier)}
+            "discount_pct": int(user.get("discount_pct") or 0),
+            "birth_lock": user.get("birth_lock"),
+            "has_subscription": bool(user.get("subscription_id")),
+            "balance": store.credit_balance(p.user_id, p.tier)}
 
 
 @app.get("/v1/me/export")
@@ -124,9 +130,31 @@ def me_delete(p: Principal = Depends(require_principal)):
     return {"status": "deleted", **res}
 
 
+def enforce_birth_lock(uid: str, b) -> None:
+    """Lock ONE native (person = date + place) per account. First birth-based call
+    saves it; afterwards a different person (different DOB/place) is rejected (409).
+    Time-only changes (BTR / typo fix on the same person) are still allowed. This
+    closes the loophole where one subscription reads unlimited different people."""
+    if not get_settings().birth_lock_enabled:
+        return
+    store = get_store()
+    pk = f"{b.date}|{float(b.lat):.2f}|{float(b.lon):.2f}"
+    lock = store.get_birth_lock(uid)
+    if lock:
+        if lock.get("person_key") != pk:
+            raise HTTPException(409, "Your birth details are locked to this account. "
+                                     "Contact support to change the saved birth details.")
+        return
+    store.set_birth_lock(uid, {
+        "person_key": pk, "name": getattr(b, "name", None), "date": b.date,
+        "time": b.time, "tz": b.tz, "lat": b.lat, "lon": b.lon,
+        "place": getattr(b, "place", None)})
+
+
 @app.post("/v1/chart", response_model=ChartResponse)
 def chart(birth: BirthDetails, p: Principal = Depends(require_principal)):
     enforce_quota(p)
+    enforce_birth_lock(p.user_id, birth)
     resp = get_chart(birth)
     get_store().record(p.key, 0, 0, reading=False)
     # tier feature-gate: strip divisional/full-table blocks the tier doesn't include
@@ -142,6 +170,7 @@ def anchor(birth: BirthDetails, p: Principal = Depends(require_principal)):
     if "anchor" not in p.tier.features:
         raise HTTPException(402, "The anchor block is not included in your plan.")
     enforce_quota(p)
+    enforce_birth_lock(p.user_id, birth)
     resp = get_chart(birth)
     get_store().record(p.key, 0, 0, reading=False)
     return {"anchor": derive_anchor(resp.chart, birth), "meta": resp.meta}
@@ -153,6 +182,7 @@ def reading(birth: BirthDetails, p: Principal = Depends(require_principal)):
         raise HTTPException(402, f"Readings are not included in the {p.tier.label} tier. Upgrade to Basic or higher.")
     enforce_quota(p)
     enforce_global_breaker()
+    enforce_birth_lock(p.user_id, birth)
     store = get_store()
     # readings draw on the same metered AI allowance as chat (the cost gate)
     if p.tier.monthly_tokens and store.credit_balance(p.user_id, p.tier)["available"] <= 0:
@@ -206,6 +236,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     # --- grounded answer: only from THIS chart's findings, AND only the ones the
     # user's tier unlocks. Context minimization is the core jailbreak defense, the
     # model can't reveal a higher tier (or anything else) that isn't in its context.
+    enforce_birth_lock(p.user_id, req.birth)
     chart = get_chart(req.birth).chart
     findings = filter_findings(derive_findings(chart), p.tier.sections)
     # Server-authoritative history: load prior turns from the store by chat_id; the
@@ -338,6 +369,7 @@ def btr(req: BtrRequest, p: Principal = Depends(require_principal)):
         raise HTTPException(422, "Provide at least one dated life event (3-5 recommended) to rectify against.")
     enforce_quota(p)
     enforce_global_breaker()
+    enforce_birth_lock(p.user_id, req)   # BTR refines time on the SAME person (date+place must match)
     payload = req.model_dump()
     payload["events"] = [e.model_dump() for e in req.events]
     rect = rectify_birth_time(payload)
@@ -581,6 +613,14 @@ def redeem(req: RedeemRequest, p: Principal = Depends(require_principal)):
             "message": f"Access unlocked: {TIERS[tier].label}."}
 
 
+@app.post("/admin/users/{uid}/reset-birth")
+def admin_reset_birth(uid: str, _: None = Depends(require_admin)):
+    """Clear a user's saved birth lock (support: typo in DOB/place, or a genuine
+    re-assignment). The next birth-based call re-locks to the new person."""
+    get_store().clear_birth_lock(uid)
+    return {"uid": uid, "birth_lock": None}
+
+
 @app.post("/admin/codes/{code_id}/deactivate")
 def codes_deactivate(code_id: str, _: None = Depends(require_admin)):
     if not get_store().code_set_active(code_id, False):
@@ -635,6 +675,21 @@ def checkout(req: CheckoutRequest, p: Principal = Depends(require_principal)):
     # Live payments not enabled yet: return the priced intent for the UI.
     return {**base, "provider": "none", "enabled": False,
             "message": "Live payments are being enabled. Use an access code to unlock in the meantime."}
+
+
+@app.post("/v1/subscription/cancel")
+def cancel_subscription(p: Principal = Depends(require_principal)):
+    """Self-serve cancel: cancels the user's recurring subscription at cycle end
+    (they keep paid access until then). The webhook handles the eventual downgrade."""
+    s = get_settings()
+    user = get_store().get_user(p.user_id) or {}
+    sub_id = user.get("subscription_id")
+    if not sub_id:
+        raise HTTPException(400, "No active subscription on file.")
+    if not (s.payments_provider == "razorpay" and keys_configured(s.razorpay_key_id, s.razorpay_key_secret)):
+        raise HTTPException(503, "Payments are not enabled.")
+    cancel_razorpay_subscription(sub_id, s.razorpay_key_id, s.razorpay_key_secret, at_cycle_end=True)
+    return {"status": "cancelling", "message": "Your subscription will end at the close of the current cycle."}
 
 
 @app.post("/webhooks/payments")
