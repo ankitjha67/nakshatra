@@ -307,6 +307,12 @@ class Store:
     def code_redeem(self, code_hash: str, uid: str, now: Optional[datetime] = None) -> dict: ...
     def code_set_active(self, code_hash: str, active: bool) -> bool: ...
     def set_discount(self, uid: str, pct: int, code_hash: Optional[str] = None) -> None: ...
+    # one-native-per-account lock (anti subscription-sharing)
+    def get_birth_lock(self, uid: str) -> Optional[dict]: ...
+    def set_birth_lock(self, uid: str, lock: dict) -> None: ...
+    def clear_birth_lock(self, uid: str) -> None: ...
+    # active recurring subscription id (for cancel)
+    def set_subscription(self, uid: str, subscription_id: Optional[str]) -> None: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -545,6 +551,19 @@ class MemoryStore(Store):
         u["discount_pct"] = int(pct)
         if code_hash:
             u["discount_code"] = code_hash[:10]
+
+    def get_birth_lock(self, uid):
+        return (self.users.get(uid) or {}).get("birth_lock")
+
+    def set_birth_lock(self, uid, lock):
+        self.users.setdefault(uid, {"email": "", "tier": "free"})["birth_lock"] = dict(lock)
+
+    def clear_birth_lock(self, uid):
+        if uid in self.users:
+            self.users[uid].pop("birth_lock", None)
+
+    def set_subscription(self, uid, subscription_id):
+        self.users.setdefault(uid, {"email": "", "tier": "free"})["subscription_id"] = subscription_id
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -908,6 +927,22 @@ class FirestoreStore(Store):
         if code_hash:
             doc["discount_code"] = code_hash[:10]
         self._db.collection("users").document(uid).set(doc, merge=True)
+
+    def get_birth_lock(self, uid):
+        snap = self._db.collection("users").document(uid).get()
+        return (snap.to_dict() or {}).get("birth_lock") if snap.exists else None
+
+    def set_birth_lock(self, uid, lock):
+        self._db.collection("users").document(uid).set({"birth_lock": dict(lock)}, merge=True)
+
+    def clear_birth_lock(self, uid):
+        from google.cloud import firestore as _fsmod
+        self._db.collection("users").document(uid).set(
+            {"birth_lock": _fsmod.DELETE_FIELD}, merge=True)
+
+    def set_subscription(self, uid, subscription_id):
+        self._db.collection("users").document(uid).set(
+            {"subscription_id": subscription_id}, merge=True)
 
     def mark_payment_processed(self, payment_id):
         # Atomic check-and-set so concurrent webhook retries can't double-credit.

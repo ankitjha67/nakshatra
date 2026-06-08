@@ -5,7 +5,7 @@ import { tzOffsetForDate } from "../lib/geo.js";
 // Birth details, rendered as a transparent "glass" panel so the celestial field
 // shows through. Place of birth is any city worldwide (geocoded), with a manual
 // coordinates fallback.
-export default function BirthForm({ onSubmit, busy, extra }) {
+export default function BirthForm({ onSubmit, busy, extra, locked }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState("1990-08-15");
   const [time, setTime] = useState("14:30");
@@ -28,6 +28,30 @@ export default function BirthForm({ onSubmit, busy, extra }) {
     setErr("");
     onSubmit({ name: name.trim() || "Friend", date, time, lat: p.lat, lon: p.lon, tz: p.tz, place: p.place });
   };
+
+  // Locked mode: birth details saved to the account (one native per account).
+  if (locked && locked.date) {
+    const castLocked = () => onSubmit({
+      name: locked.name || "Friend", date: locked.date, time: locked.time,
+      lat: locked.lat, lon: locked.lon, tz: locked.tz, place: locked.place,
+    });
+    return (
+      <div className="card glass">
+        <p className="kicker">Birth details · locked</p>
+        <div className="locked-birth">
+          <div className="lb-name">{locked.name || "Your chart"}</div>
+          <div>{locked.date} · {locked.time} · UTC {locked.tz}</div>
+          <div>{locked.place || `${Number(locked.lat).toFixed(2)}, ${Number(locked.lon).toFixed(2)}`}</div>
+        </div>
+        <p className="note">Saved and locked to your account (one chart per account). Contact support to change them.</p>
+        <div className="grid">{extra}</div>
+        <div className="actions">
+          <button onClick={castLocked} disabled={busy}>{busy ? "Casting…" : "Cast reading"}</button>
+          {busy && <span className="loader">Casting the chart…</span>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card glass">

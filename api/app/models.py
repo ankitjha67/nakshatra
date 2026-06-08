@@ -60,6 +60,13 @@ class BirthDetails(BaseModel):
     def chart_hash(self) -> str:
         return hashlib.sha256(self.canonical().encode()).hexdigest()[:32]
 
+    def person_key(self) -> str:
+        """Identity of the *person* (date of birth + place), independent of the
+        exact time. Used to lock one native per account: it blocks switching to a
+        different family member (different DOB/place) while still allowing
+        birth-time refinement (BTR) and a time typo fix on the same person."""
+        return f"{self.date}|{self.lat:.2f}|{self.lon:.2f}"
+
 
 # --------------------------------------------------------------------------- #
 # Output

@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # No usable default: admin/internal endpoints stay disabled until a real
     # secret is configured (Secret Manager). Placeholders are rejected too.
     admin_api_key: str = ""                 # must be set (Secret Manager) to enable admin endpoints
+    # Lock one native (person = date + place) per account after first use, so a
+    # single subscription can't be used to read unlimited different people.
+    birth_lock_enabled: bool = True
     payments_provider: str = "none"        # none | razorpay | stripe
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""

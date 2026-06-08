@@ -10,6 +10,7 @@ import ReadingTab from "./tabs/ReadingTab.jsx";
 import ChatTab from "./tabs/ChatTab.jsx";
 import PrashnaTab from "./tabs/PrashnaTab.jsx";
 import BtrTab from "./tabs/BtrTab.jsx";
+import AccountTab from "./tabs/AccountTab.jsx";
 // Admin is a SEPARATE lazy chunk: a non-admin's browser never downloads the admin
 // code, and every /admin endpoint is server-side admin-gated (403) regardless.
 const AdminTab = lazy(() => import("./tabs/AdminTab.jsx"));
@@ -24,17 +25,19 @@ const ALLOWANCE_NOTE = "Readings draw on your monthly AI allowance (shared with 
 // and richer data unlock by tier, gated inside ReadingTab/Charts/ChartData).
 const TABS = [
   { key: "natal", label: "Natal", min: "free",
-    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} features={ctx.features} blurb={"Your birth chart + a focused natal reading. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} blurb={"Your birth chart + a focused natal reading. " + ALLOWANCE_NOTE} /> },
   { key: "maha", label: "Maha-Kundali", min: "pro",
-    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} features={ctx.features} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
   { key: "yearly", label: "Yearly", min: "pro",
-    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} features={ctx.features} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
   { key: "prashna", label: "Prashna", min: "pro",
     render: () => <PrashnaTab /> },
   { key: "chat", label: "Chat", min: "basic",
     render: (ctx) => <ChatTab lastBirth={ctx.lastBirth} onBalance={ctx.setBalance} /> },
   { key: "btr", label: "Birth-Time Fix", min: "enterprise",
     render: () => <BtrTab /> },
+  { key: "account", label: "Account", min: "free",
+    render: (ctx) => <AccountTab me={ctx.me} refresh={ctx.refresh} /> },
 ];
 
 // Shown only to admins (gated by /admin/ping); lazy chunk loads only when opened.
@@ -75,7 +78,10 @@ export default function App() {
 
   const userTier = me?.tier || "free";                // real tier (falls back to free until /v1/me loads)
   const features = me?.features || [];
-  const ctx = { onCast: setLastBirth, lastBirth, setBalance, features };
+  // After a cast the server may lock the birth details; refresh entitlements so
+  // the form switches to locked mode and the Account view reflects it.
+  const ctx = { onCast: (b) => { setLastBirth(b); refreshMe(); }, lastBirth, setBalance,
+                features, me, refresh: refreshMe, lockedBirth: me?.birth_lock };
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
 
   const locked = (min) => RANK[userTier] < RANK[min];
