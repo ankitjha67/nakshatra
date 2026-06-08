@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     cloud_tasks_queue: str = ""      # projects/.../locations/.../queues/...
     worker_base_url: str = ""        # public URL Cloud Tasks calls back to
     internal_token: str = ""             # must be set to enable the internal worker endpoint
+    # optional outbound webhook for the scheduled metrics digest (Slack/Zapier/email relay)
+    digest_webhook_url: str = ""
 
 
     @property

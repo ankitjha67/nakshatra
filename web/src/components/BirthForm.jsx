@@ -5,14 +5,31 @@ import { tzOffsetForDate } from "../lib/geo.js";
 // Birth details, rendered as a transparent "glass" panel so the celestial field
 // shows through. Place of birth is any city worldwide (geocoded), with a manual
 // coordinates fallback.
-export default function BirthForm({ onSubmit, busy, extra, locked }) {
+export default function BirthForm({ onSubmit, busy, extra, locked, consented, onConsent }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState("1990-08-15");
   const [time, setTime] = useState("14:30");
   const [city, setCity] = useState(null);
   const [manual, setManual] = useState(false);
   const [lat, setLat] = useState(""); const [lon, setLon] = useState(""); const [tz, setTz] = useState("+05:30");
+  const [agreed, setAgreed] = useState(false);
   const [err, setErr] = useState("");
+
+  // Consent capture for sensitive birth data (DPDP/GDPR). Required once per account.
+  const needConsent = !consented;
+  const consentRow = needConsent ? (
+    <label className="consent">
+      <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+      <span>I consent to Nakshatra processing my birth details (date, time, place) to generate my
+        reading, per the <a href="https://github.com/ankitjha67/nakshatra/blob/main/docs/legal/PRIVACY_POLICY.md" target="_blank" rel="noreferrer">Privacy Policy</a> and{" "}
+        <a href="https://github.com/ankitjha67/nakshatra/blob/main/docs/legal/TERMS_OF_SERVICE.md" target="_blank" rel="noreferrer">Terms</a>.</span>
+    </label>
+  ) : null;
+  // Record consent (once) then run the cast.
+  const guard = (fn) => () => {
+    if (needConsent) { if (!agreed) return; onConsent && onConsent(); }
+    fn();
+  };
 
   const submit = () => {
     let p;
@@ -45,8 +62,9 @@ export default function BirthForm({ onSubmit, busy, extra, locked }) {
         </div>
         <p className="note">Saved and locked to your account (one chart per account). Contact support to change them.</p>
         <div className="grid">{extra}</div>
+        {consentRow}
         <div className="actions">
-          <button onClick={castLocked} disabled={busy}>{busy ? "Casting…" : "Cast reading"}</button>
+          <button onClick={guard(castLocked)} disabled={busy || (needConsent && !agreed)}>{busy ? "Casting…" : "Cast reading"}</button>
           {busy && <span className="loader">Casting the chart…</span>}
         </div>
       </div>
@@ -75,8 +93,9 @@ export default function BirthForm({ onSubmit, busy, extra, locked }) {
         )}
         {extra}
       </div>
+      {consentRow}
       <div className="actions">
-        <button onClick={submit} disabled={busy}>{busy ? "Casting…" : "Cast reading"}</button>
+        <button onClick={guard(submit)} disabled={busy || (needConsent && !agreed)}>{busy ? "Casting…" : "Cast reading"}</button>
         <button className="ghost" type="button" onClick={() => { setManual(!manual); setErr(""); }}>
           {manual ? "Search a city instead" : "Enter coordinates"}
         </button>

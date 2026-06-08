@@ -11,6 +11,7 @@ Internal: POST /internal/run-reading (Cloud Tasks callback; token-guarded)
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
@@ -114,11 +115,26 @@ def me(p: Principal = Depends(require_principal)):
     return {"user_id": p.user_id, "tier": p.tier.key,
             "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
             "discount_pct": int(user.get("discount_pct") or 0),
+            "consent_version": user.get("consent_version"),
             "birth_lock": user.get("birth_lock"),
             "birth_change_pending": bool(store.user_open_change_request(p.user_id)),
             "birth_change_notice": notice,
             "has_subscription": bool(user.get("subscription_id")),
             "balance": store.credit_balance(p.user_id, p.tier)}
+
+
+class ConsentIn(BaseModel):
+    version: str = Field(..., max_length=32)
+
+
+@app.post("/v1/consent")
+def record_consent(req: ConsentIn, p: Principal = Depends(require_principal)):
+    """Record the user's consent to process their (sensitive) birth data. Auditable
+    record for DPDP/GDPR; the web captures it before the first cast."""
+    store = get_store()
+    store.upsert_user(p.user_id, None)
+    store.set_consent(p.user_id, req.version)
+    return {"ok": True, "version": req.version}
 
 
 @app.get("/v1/me/export")
@@ -483,6 +499,55 @@ def internal_run(payload: _TaskPayload, x_internal_token: Optional[str] = Header
         raise HTTPException(403, "forbidden")
     _run_job(payload.job_id, payload.birth, payload.tier, payload.key, payload.uid or payload.key)
     return {"status": "ok"}
+
+
+@app.post("/internal/digest")
+def internal_digest(x_internal_token: Optional[str] = Header(default=None)):
+    """Compile a metrics digest (for a Cloud Scheduler cron). Logs it and, if
+    DIGEST_WEBHOOK_URL is set, POSTs {text} to it (Slack/Zapier/email relay).
+    Guarded by INTERNAL_TOKEN like the worker endpoint."""
+    s = get_settings()
+    if s.internal_token in _WEAK_INTERNAL_TOKENS:
+        raise HTTPException(503, "Digest disabled: set a strong INTERNAL_TOKEN")
+    if not _ct_eq(x_internal_token, s.internal_token):
+        raise HTTPException(403, "forbidden")
+    store = get_store()
+    users = store.list_users()
+    by_tier: dict = {}
+    subs = 0
+    for u in users:
+        by_tier[u.get("tier", "free")] = by_tier.get(u.get("tier", "free"), 0) + 1
+        subs += 1 if u.get("subscription_id") else 0
+    pays = store.all_payments()
+    captured = sum(int(p.get("amount_inr", 0)) for p in pays if p.get("status") == "captured")
+    refunded = sum(int(p.get("amount_inr", 0)) for p in pays if p.get("status") == "refunded")
+    mrr = sum(TIERS.get(u.get("tier", "free"), TIERS["free"]).price_inr_month
+              for u in users if u.get("subscription_id"))
+    tokens7 = sum(d["tokens"] for d in store.global_tokens_recent(7))
+    today = datetime.now(timezone.utc).date()
+    span = {(today - timedelta(d)).isoformat() for d in range(7)}
+    signups7 = sum(1 for u in users if _to_date(u.get("created_at")) in span)
+    paid = by_tier.get("basic", 0) + by_tier.get("pro", 0) + by_tier.get("enterprise", 0)
+    text = "\n".join([
+        f"Nakshatra digest — {today.isoformat()}",
+        f"Users {len(users)} (paid {paid}, active subs {subs}) · signups 7d: {signups7}",
+        "Tiers: " + ", ".join(f"{k} {by_tier.get(k, 0)}" for k in ("free", "basic", "pro", "enterprise")),
+        f"MRR ₹{mrr:,} · net revenue ₹{captured - refunded:,}",
+        f"Tokens 7d {tokens7:,} · today {store.global_tokens_today():,}",
+    ])
+    sent = False
+    if s.digest_webhook_url:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                s.digest_webhook_url, data=json.dumps({"text": text}).encode(),
+                headers={"Content-Type": "application/json"}, method="POST")
+            urllib.request.urlopen(req, timeout=15)
+            sent = True
+        except Exception:  # noqa: BLE001
+            log.warning("digest webhook delivery failed")
+    log.info("metrics digest:\n%s", text)
+    return {"digest": text, "webhook_sent": sent}
 
 
 def _enqueue_cloud_task(job_id: str, birth: BirthDetails, p: Principal):

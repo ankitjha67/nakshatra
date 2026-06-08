@@ -95,3 +95,29 @@ cd web && npm run build && firebase deploy --only hosting,firestore:rules
 - [ ] **Razorpay live keys + Plans/Offers + webhook; flip `PAYMENTS_PROVIDER` (your step).**
 - [ ] Legal docs reviewed by counsel + linked in footer/checkout (`docs/legal/`).
 - [ ] (Optional) email notifications; `DAILY_GLOBAL_TOKEN_BREAKER` set.
+
+## Scheduled metrics digest (Cloud Scheduler)
+
+`POST /internal/digest` (guarded by `X-Internal-Token: <INTERNAL_TOKEN>`) compiles a
+metrics digest (users, tier mix, signups 7d, MRR, net revenue, tokens) — it logs it
+and, if `DIGEST_WEBHOOK_URL` is set, POSTs `{text}` to that URL (point it at a Slack
+incoming webhook, Zapier/Make, or an email relay).
+
+```
+# optional: where to deliver the digest
+gcloud run services update jyotish-api --region asia-south1 \
+  --update-env-vars DIGEST_WEBHOOK_URL=https://hooks.slack.com/services/XXX
+# daily 8am IST cron -> the digest endpoint
+gcloud scheduler jobs create http nakshatra-digest --location asia-south1 \
+  --schedule "30 2 * * *" --uri "<API_URL>/internal/digest" --http-method POST \
+  --message-body "{}" \
+  --headers "X-Internal-Token=$(gcloud secrets versions access latest --secret=internal-token)"
+# NOTE: --message-body "{}" is required; Cloud Run rejects a body-less POST with 411.
+```
+
+## Other ops items (from the security sweep)
+- **Firestore TTL:** enable a TTL policy on the `cache` collection's `expireAt` field
+  (Firestore console → TTL) so birth-derived cache rows auto-purge (`CACHE_TTL_DAYS`, default 90).
+- **Global spend breaker:** set `DAILY_GLOBAL_TOKEN_BREAKER` (the startup log warns if unset).
+- **Consent:** the web captures consent (version `CONSENT_VERSION`) before the first cast and
+  records it server-side (`POST /v1/consent`, surfaced in `/v1/me`). Bump the version to force re-consent.
