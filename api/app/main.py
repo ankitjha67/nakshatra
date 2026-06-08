@@ -994,6 +994,64 @@ def admin_anomalies(_: None = Depends(require_admin)):
     return {"flagged": _scan_anomalies()}
 
 
+@app.get("/admin/users")
+def admin_users(_: None = Depends(require_admin)):
+    """All users with the key analytics fields, for the clickable users table."""
+    store = get_store()
+    out = []
+    for u in store.list_users():
+        uid = u.get("uid")
+        a = store.get_activity(uid) or {}
+        usage = store.usage_today(uid) or {}
+        out.append({
+            "uid": uid, "email": u.get("email"), "tier": u.get("tier", "free"),
+            "tier_source": u.get("tier_source"), "banned": bool(store.get_ban(uid)),
+            "last_ip": a.get("last_ip"), "last_seen": _iso(a.get("last_seen")),
+            "tokens_today": int(usage.get("tokens_in", 0)) + int(usage.get("tokens_out", 0)),
+            "has_subscription": bool(u.get("subscription_id")),
+            "discount_pct": int(u.get("discount_pct") or 0),
+            "birth_locked": bool(u.get("birth_lock")),
+        })
+    out.sort(key=lambda x: x.get("last_seen") or "", reverse=True)
+    return {"count": len(out), "users": out}
+
+
+@app.get("/admin/users/{uid}")
+def admin_user_detail(uid: str, _: None = Depends(require_admin)):
+    """Full profile + analytics for one user (drill-down from the users table)."""
+    store = get_store()
+    u = store.get_user(uid)
+    if not u:
+        raise HTTPException(404, "Unknown user")
+    tier = TIERS.get(u.get("tier", "free"), TIERS["free"])
+    a = store.get_activity(uid) or {}
+    usage = store.usage_today(uid) or {}
+    return {
+        "uid": uid, "email": u.get("email"), "tier": u.get("tier", "free"),
+        "tier_source": u.get("tier_source"), "discount_pct": int(u.get("discount_pct") or 0),
+        "has_subscription": bool(u.get("subscription_id")), "subscription_id": u.get("subscription_id"),
+        "birth_lock": u.get("birth_lock"),
+        "balance": store.credit_balance(uid, tier),
+        "tokens_today": int(usage.get("tokens_in", 0)) + int(usage.get("tokens_out", 0)),
+        "activity": {"last_ip": a.get("last_ip"), "last_seen": _iso(a.get("last_seen")),
+                     "count": a.get("count")},
+        "ban": store.get_ban(uid),
+        "payments": [p for p in store.all_payments() if p.get("uid") == uid],
+        "refunds": [r for r in store.list_refund_requests() if r.get("uid") == uid],
+        "audit": [e for e in store.list_audit(500) if e.get("target") == uid][:30],
+    }
+
+
+@app.post("/admin/users/{uid}/delete")
+def admin_delete_user(uid: str, admin: str = Depends(require_admin)):
+    """Delete a user (profile, keys, chats) and clear any ban. Ops + test cleanup."""
+    store = get_store()
+    store.clear_ban(uid)
+    res = store.delete_user(uid)
+    _audit(admin, "delete_user", uid)
+    return {"uid": uid, "deleted": True, **(res or {})}
+
+
 @app.get("/admin/stats")
 def admin_stats(_: None = Depends(require_admin)):
     """One-stop analytics: users, traffic, tokens, revenue, refunds, run-cost."""

@@ -167,6 +167,10 @@ button:disabled{opacity:.5;cursor:default}
 .admin-tbl td{border-bottom:1px solid var(--line);padding:9px 10px;color:var(--ink-soft);vertical-align:top}
 .admin-tbl .mono{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
 button.sm{padding:5px 11px;font-size:12px}
+.admin-tbl tr.rowlink{cursor:pointer}
+.admin-tbl tr.rowlink:hover{background:#faf5e8}
+.user-detail{margin-top:16px;background:var(--paper);border:1px solid var(--line);border-radius:12px;
+  padding:16px 18px;box-shadow:0 16px 44px rgba(0,0,0,.4)}
 .admin-panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
 .admin-panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 16px 44px rgba(0,0,0,.4)}
 .admin-panel .data-h{margin-top:0}
