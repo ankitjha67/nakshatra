@@ -17,6 +17,8 @@ export default function AdminTab() {
   const [betaUid, setBetaUid] = useState("");
   const [codes, setCodes] = useState([]);
   const [changeReqs, setChangeReqs] = useState([]);
+  const [refunds, setRefunds] = useState([]);
+  const [audit, setAudit] = useState([]);
   const [generated, setGenerated] = useState([]);     // plaintext, shown once
   const [cKind, setCKind] = useState("beta");
   const [cCount, setCCount] = useState(20);
@@ -32,6 +34,8 @@ export default function AdminTab() {
     apiGet("/admin/beta").then(setBeta).catch(() => {});
     apiGet("/admin/codes").then((d) => setCodes(d.codes || [])).catch(() => {});
     apiGet("/admin/birth-change-requests").then((d) => setChangeReqs(d.requests || [])).catch(() => {});
+    apiGet("/admin/refunds").then((d) => setRefunds(d.requests || [])).catch(() => {});
+    apiGet("/admin/audit?limit=50").then((d) => setAudit(d.entries || [])).catch(() => {});
   };
   useEffect(load, []);
 
@@ -52,6 +56,8 @@ export default function AdminTab() {
     if (!window.confirm(`Revoke ALL ${beta.count} beta users back to free? Paying users are not affected.`)) return;
     act(() => apiPost("/admin/beta/revoke", {}), (r) => `Revoked ${r.revoked} beta user(s).`);
   };
+  const approveRefund = (rid) => act(() => apiPost(`/admin/refunds/${rid}/approve`, {}), () => "Refund approved.");
+  const rejectRefund = (rid) => act(() => apiPost(`/admin/refunds/${rid}/reject`, {}), () => "Refund rejected.");
   const approveChange = (rid) => act(() => apiPost(`/admin/birth-change-requests/${rid}/approve`, {}), () => "Approved, the user can re-enter their details.");
   const rejectChange = (rid) => act(() => apiPost(`/admin/birth-change-requests/${rid}/reject`, {}), () => "Request rejected.");
   const deactivateCode = (id) => act(() => apiPost(`/admin/codes/${id}/deactivate`, {}), () => "Code deactivated.");
@@ -133,6 +139,28 @@ export default function AdminTab() {
           ) : <p className="note">No beta users yet. Grant access by Firebase uid; revoke all in one click before going live.</p>}
         </div>
       </div>
+
+      <p className="kicker" style={{ marginTop: 26 }}>Refund requests ({refunds.length})</p>
+      {refunds.length === 0 ? (
+        <p className="note">No pending refund requests.</p>
+      ) : (
+        <table className="admin-tbl">
+          <thead><tr><th>User</th><th>Payment</th><th>Reason</th><th></th></tr></thead>
+          <tbody>
+            {refunds.map((r) => (
+              <tr key={r.id}>
+                <td className="mono">{r.uid}</td>
+                <td className="mono">{r.payment_id}</td>
+                <td>{r.reason || "—"}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button className="sm" disabled={busy} onClick={() => approveRefund(r.id)}>Approve</button>{" "}
+                  <button className="ghost sm" disabled={busy} onClick={() => rejectRefund(r.id)}>Reject</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <p className="kicker" style={{ marginTop: 26 }}>Birth-detail change requests ({changeReqs.length})</p>
       {changeReqs.length === 0 ? (
@@ -222,6 +250,26 @@ export default function AdminTab() {
                     ? <button className="ghost sm" disabled={busy} onClick={() => unban(f.uid)}>Unban</button>
                     : <button className="sm" disabled={busy} onClick={() => ban(f.uid)}>Ban 7d</button>}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <p className="kicker" style={{ marginTop: 26 }}>Audit log (recent)</p>
+      {audit.length === 0 ? (
+        <p className="note">No admin actions recorded yet.</p>
+      ) : (
+        <table className="admin-tbl">
+          <thead><tr><th>When</th><th>Admin</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+          <tbody>
+            {audit.map((a, i) => (
+              <tr key={i}>
+                <td className="mono">{a.ts ? new Date(a.ts).toLocaleString() : "—"}</td>
+                <td className="mono">{a.admin || "—"}</td>
+                <td>{a.action}</td>
+                <td className="mono">{a.target || "—"}</td>
+                <td className="mono">{a.details ? Object.entries(a.details).filter(([, v]) => v != null).map(([k, v]) => `${k}=${v}`).join(", ") : ""}</td>
               </tr>
             ))}
           </tbody>

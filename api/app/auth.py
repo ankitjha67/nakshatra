@@ -120,13 +120,15 @@ async def require_principal(
 async def require_admin(
     authorization: str | None = Header(default=None),
     x_admin_key: str | None = Header(default=None),
-) -> None:
+) -> str:
     """Admin access via EITHER a Firebase ID token with an `admin` custom claim
     (so the web dashboard needs no server secret in the browser) OR an X-Admin-Key
-    (programmatic). The X-Admin-Key path is fail-closed on weak/unset secrets."""
+    (programmatic). The X-Admin-Key path is fail-closed on weak/unset secrets.
+    Returns an identity string for audit logging (email/uid, or 'api-key')."""
     if authorization and authorization.lower().startswith("bearer "):
         decoded = _verify_bearer(authorization.split(" ", 1)[1].strip())
         if decoded.get("admin") is True:
-            return
+            return decoded.get("email") or decoded.get("uid") or "admin"
         raise HTTPException(403, "Admin privilege required")
     await _key_admin(x_admin_key)
+    return "api-key"

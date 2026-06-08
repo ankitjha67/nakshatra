@@ -319,6 +319,10 @@ class Store:
     def get_change_request(self, rid: str) -> Optional[dict]: ...
     def update_change_request(self, rid: str, fields: dict) -> None: ...
     def user_open_change_request(self, uid: str) -> Optional[dict]: ...
+    def user_latest_change_request(self, uid: str) -> Optional[dict]: ...
+    # admin audit log
+    def audit_log(self, entry: dict) -> None: ...
+    def list_audit(self, limit: int = 100) -> list: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -342,6 +346,7 @@ class MemoryStore(Store):
     global_usage: dict = field(default_factory=dict)   # date -> total tokens
     codes: dict[str, dict] = field(default_factory=dict)   # code_hash -> meta (beta/discount)
     change_requests: dict[str, dict] = field(default_factory=dict)   # rid -> birth-change request
+    audit: list = field(default_factory=list)                        # admin action log
     payments: dict = field(default_factory=dict)        # payment_id -> record
     refund_requests: dict = field(default_factory=dict)  # req_id -> record
     activity: dict = field(default_factory=dict)         # uid -> {last_ip, ips, last_seen, requests}
@@ -589,6 +594,17 @@ class MemoryStore(Store):
     def user_open_change_request(self, uid):
         return next((r for r in self.change_requests.values()
                      if r.get("uid") == uid and r.get("status") == "pending"), None)
+
+    def user_latest_change_request(self, uid):
+        rs = sorted((r for r in self.change_requests.values() if r.get("uid") == uid),
+                    key=lambda r: r.get("created_at") or "", reverse=True)
+        return rs[0] if rs else None
+
+    def audit_log(self, entry):
+        self.audit.append(dict(entry))
+
+    def list_audit(self, limit=100):
+        return list(reversed(self.audit[-limit:]))
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -992,6 +1008,24 @@ class FirestoreStore(Store):
             if r.get("status") == "pending":
                 return r
         return None
+
+    def user_latest_change_request(self, uid):
+        rs = [d.to_dict() for d in self._db.collection("change_requests").where("uid", "==", uid).stream()]
+        rs.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+        return rs[0] if rs else None
+
+    def audit_log(self, entry):
+        self._db.collection("audit").document().set(dict(entry))
+
+    def list_audit(self, limit=100):
+        try:
+            from google.cloud.firestore import Query
+            rows = [d.to_dict() for d in self._db.collection("audit")
+                    .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
+        except Exception:  # noqa: BLE001
+            rows = [d.to_dict() for d in self._db.collection("audit").limit(limit).stream()]
+            rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
+        return rows
 
     def mark_payment_processed(self, payment_id):
         # Atomic check-and-set so concurrent webhook retries can't double-credit.
