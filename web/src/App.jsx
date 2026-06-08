@@ -54,6 +54,7 @@ export default function App() {
   const [balance, setBalance] = useState(null);       // chat credit balance (CreditsWidget)
   const [isAdmin, setIsAdmin] = useState(false);      // shows the Admin tab when true
   const [me, setMe] = useState(null);                 // real tier + feature entitlements (/v1/me)
+  const [graha, setGraha] = useState(null);           // planet info card (from the interactive orrery)
 
   useEffect(() => {
     if (PREVIEW) { setUser({ email: "preview@local" }); return; }
@@ -75,6 +76,12 @@ export default function App() {
   useEffect(() => { if (user) apiGet("/v1/me").then(setMe).catch(() => setMe(null)); }, [user]);
   // Reveal the Admin tab only if this account is authorized.
   useEffect(() => { if (user) apiGet("/admin/ping").then(() => setIsAdmin(true)).catch(() => setIsAdmin(false)); }, [user]);
+  // The background orrery posts the picked graha; render its info card over the app.
+  useEffect(() => {
+    const onMsg = (e) => { if (e.data && e.data.source === "orrery-graha") setGraha(e.data.graha); };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
 
   if (user === undefined) return <div className="wrap"><p className="loader" style={{ paddingTop: 40 }}>Loading…</p></div>;
 
@@ -94,6 +101,8 @@ export default function App() {
   const active = tabs.find((t) => t.key === tab) || tabs[0];
 
   return (
+    <>
+    <GrahaCard graha={graha} onClose={() => setGraha(null)} />
     <div className="wrap">
       <header className="site">
         <div className="brand">Nakshatra</div>
@@ -149,6 +158,25 @@ export default function App() {
 
       <footer className="site">Nakshatra · readings are for reflection, not fixed prediction.</footer>
     </div>
+    </>
+  );
+}
+
+// Info card for a planet picked in the interactive background orrery. Mirrors the
+// orrery's own panel: kind · name · english · astronomy fact · jyotish karaka role.
+function GrahaCard({ graha, onClose }) {
+  if (!graha) return null;
+  return (
+    <aside className="graha-card" aria-live="polite">
+      <button className="graha-close" onClick={onClose} aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+      <p className="graha-k">{graha.kind}</p>
+      <h2 className="graha-name">{graha.name}</h2>
+      <div className="graha-eng">{graha.eng}</div>
+      <p className="graha-fact">{graha.fact}</p>
+      <p className="graha-role" dangerouslySetInnerHTML={{ __html: graha.role }} />
+    </aside>
   );
 }
 

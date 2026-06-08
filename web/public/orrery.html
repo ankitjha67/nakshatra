@@ -157,9 +157,11 @@
     font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--cream-faint);text-align:center;max-width:30rem;padding:0 16px}
   body.no3d .fb-note{display:block}
 
-  /* background mode (?bg): pure quiet backdrop, no overlay, no interaction */
-  body.bg .overlay,body.bg .hint,body.bg .zoom,body.bg .fb-note{display:none!important}
-  body.bg #scene{pointer-events:none!important}
+  /* background mode (?bg): INTERACTIVE backdrop — planets clickable, info panel
+     on, marketing chrome hidden, and the field brightened (softer vignette/grain) */
+  body.bg .masthead,body.bg .herotext,body.bg .hint,body.bg .zoom,body.bg .fb-note,body.bg .panel{display:none!important}
+  body.bg .vignette{background:radial-gradient(135% 135% at 50% 42%,transparent 68%,rgba(0,0,0,.30) 100%)}
+  body.bg .grain{opacity:.03}
 
   @media (prefers-reduced-motion:reduce){
     .panel,.btn,.zoom button{transition:none}
@@ -590,6 +592,12 @@
     if(hits.length){ selectMesh(hits[0].object); }
     else { closePanel(); }
   }
+  var BG = /[?&]bg/.test(location.search);
+  function postGraha(d){
+    if(window.parent===window) return;
+    try{ window.parent.postMessage({source:"orrery-graha",
+      graha: d ? {kind:d.kind,name:d.name,eng:d.eng,fact:d.fact,role:d.role} : null}, "*"); }catch(e){}
+  }
   function selectMesh(m){
     selected=m;
     var d=m.userData;
@@ -601,8 +609,9 @@
     document.getElementById("panel").classList.add("open");
     var s=(m.geometry.parameters.radius||3.2)*3.4;
     halo.scale.set(s,s,1); halo.visible=true;
+    if(BG) postGraha(d);                  // in background mode the parent app renders the card
   }
-  function closePanel(){ document.getElementById("panel").classList.remove("open"); selected=null; halo.visible=false; }
+  function closePanel(){ document.getElementById("panel").classList.remove("open"); selected=null; halo.visible=false; if(BG) postGraha(null); }
   document.getElementById("pclose").onclick=closePanel;
   document.addEventListener("keydown",function(e){ if(e.key==="Escape") closePanel(); });
 
