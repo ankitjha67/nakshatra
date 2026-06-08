@@ -171,3 +171,20 @@ def test_risk_scoring_bands():
     high = compute_risk({"malicious_count": 2}, {}, s)                      # 100 pts
     assert high["band"] == "high" and high["score"] == 100
     assert any(sig["signal"] == "malicious_intent" for sig in high["signals"])
+
+
+def test_locked_evidence_stripped_for_lower_tier():
+    # divisional (navamsa/D10), KP sub-lord and ashtakavarga facts must NOT reach a
+    # tier lacking the feature, even though the finding's category is unlocked.
+    from app.gating import filter_findings
+    from app.models import Finding
+    f = Finding(code="X", category="relationships", polarity="neutral", weight=5, title="t", detail="d",
+                evidence=["7th lord Venus in Cancer, 9th house, nakshatra Pushya; navamsa Virgo; "
+                          "KP 7th-cusp sub-lord Ketu; ashtakavarga 4 bindus in the 7th house"])
+    basic = filter_findings([f], ["relationships"], frozenset({"charts", "tables_basic"}))
+    ev = basic[0].evidence[0]
+    assert "navamsa" not in ev and "KP" not in ev and "ashtakavarga" not in ev
+    assert "Venus" in ev and "Pushya" in ev          # D1 facts are kept for everyone
+    pro = filter_findings([f], ["relationships"], frozenset({"charts", "divisional", "tables_full"}))
+    pev = pro[0].evidence[0]
+    assert "navamsa" in pev and "KP" in pev and "ashtakavarga" in pev

@@ -38,7 +38,7 @@ from .billing import (
 from .auth import require_principal, delete_firebase_user, require_admin
 from .pipeline import get_chart, get_reading
 from .anchor import derive_anchor
-from .gating import filter_chart_for_features, filter_findings
+from .gating import filter_chart_for_features, filter_findings, locked_topic, _TOPIC_LABEL
 from .codes import generate_plaintext, hash_code
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
@@ -317,6 +317,20 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
         return ChatResponse(answer=fraud.MALICIOUS_REFUSAL, tokens_used=0, chat_id=chat_id,
                             balance={"grant": b["grant"], "topup": b["topup"], "available": b["available"]})
 
+    # --- tier topic gate: a question targeting a LOCKED technique (divisional charts,
+    # KP/Ashtakavarga tables, Varshphal) is refused before the model is called, so it
+    # can't be coaxed into fabricating analysis the user's tier doesn't include. ---
+    locked = locked_topic(req.message, p.tier.features)
+    if locked:
+        chat_id = req.chat_id or uuid.uuid4().hex
+        b = store.credit_balance(p.user_id, p.tier)
+        return ChatResponse(
+            answer=(f"{_TOPIC_LABEL[locked].capitalize()} aren't part of your current "
+                    f"{p.tier.label} plan, so I can't read them here. Upgrade to unlock that, "
+                    f"meanwhile I'm happy to go deeper on what your plan includes."),
+            tokens_used=0, chat_id=chat_id,
+            balance={"grant": b["grant"], "topup": b["topup"], "available": b["available"]})
+
     # --- credit pre-check (advisory; do NOT call the LLM if blocked) ---
     bal = store.credit_balance(p.user_id, p.tier)
     if bal["available"] <= 0:
@@ -329,7 +343,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     # model can't reveal a higher tier (or anything else) that isn't in its context.
     enforce_birth_lock(p.user_id, req.birth)
     chart = get_chart(req.birth).chart
-    findings = filter_findings(derive_findings(chart), p.tier.sections)
+    findings = filter_findings(derive_findings(chart), p.tier.sections, p.tier.features)
     # Server-authoritative history: load prior turns from the store by chat_id; the
     # client-supplied req.history is IGNORED for grounding so a crafted client can't
     # inject fake turns. (Stateless if persistence is off or it's a new conversation.)
