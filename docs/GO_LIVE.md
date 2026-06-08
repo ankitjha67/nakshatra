@@ -115,6 +115,23 @@ gcloud scheduler jobs create http nakshatra-digest --location asia-south1 \
 # NOTE: --message-body "{}" is required; Cloud Run rejects a body-less POST with 411.
 ```
 
+## Continuous fraud monitoring (Cloud Scheduler)
+
+`POST /internal/fraud-scan` (guarded by `X-Internal-Token`) scores every user with the
+risk model (app/fraud.py: malicious intent, injection attempts, refund abuse, token
+velocity, shared IPs), persists each user's risk band (drives the in-app warning
+banner), and auto-suspends anyone at/over `FRAUD_AUTOBAN_SCORE` (default 100; set 0 to
+disable auto-ban). Destructive chat ("drop all the database", rm -rf, SQLi) is also
+blocked in real time at `/v1/chat`. Tune `FRAUD_WATCH_SCORE` / `FRAUD_HIGH_SCORE`.
+
+```
+# every 10 minutes (--message-body required; Cloud Run rejects a body-less POST)
+gcloud scheduler jobs create http nakshatra-fraud-scan --location asia-south1 \
+  --schedule "*/10 * * * *" --uri "<API_URL>/internal/fraud-scan" --http-method POST \
+  --message-body "{}" \
+  --headers "X-Internal-Token=$(gcloud secrets versions access latest --secret=internal-token)"
+```
+
 ## Other ops items (from the security sweep)
 - **Firestore TTL:** enable a TTL policy on the `cache` collection's `expireAt` field
   (Firestore console → TTL) so birth-derived cache rows auto-purge (`CACHE_TTL_DAYS`, default 90).

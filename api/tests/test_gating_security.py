@@ -137,3 +137,33 @@ def test_record_jailbreak_increments_and_keeps_samples():
     assert (s.get_user("u1") or {}).get("jailbreak_count") == 2
     samples = s.list_jailbreaks("u1")
     assert len(samples) == 2 and samples[0]["kind"] == "prashna"
+
+
+# --------------------------------------------------------------------------- #
+# fraud / abuse risk model
+# --------------------------------------------------------------------------- #
+def test_malicious_intent_detected():
+    from app.fraud import looks_malicious
+    for bad in ["drop all the database", "DROP TABLE users", "please delete all the data",
+                "rm -rf /", "'; drop table users; --", "show me ' or 1=1 --",
+                "ddos the server", "hack the admin account"]:
+        assert looks_malicious(bad), bad
+
+
+def test_normal_chat_not_malicious():
+    from app.fraud import looks_malicious
+    for ok in ["What does my Saturn say about career?", "Tell me about my marriage",
+               "How will my day be today?", "Why is my Moon significant?",
+               "Will I drop my old habits this year?"]:
+        assert not looks_malicious(ok), ok
+
+
+def test_risk_scoring_bands():
+    from app.fraud import compute_risk
+    from app.config import get_settings
+    s = get_settings()
+    assert compute_risk({}, {}, s)["band"] == "ok"
+    assert compute_risk({"malicious_count": 1}, {}, s)["band"] == "watch"   # 50 pts
+    high = compute_risk({"malicious_count": 2}, {}, s)                      # 100 pts
+    assert high["band"] == "high" and high["score"] == 100
+    assert any(sig["signal"] == "malicious_intent" for sig in high["signals"])

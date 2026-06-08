@@ -43,6 +43,7 @@ from .codes import generate_plaintext, hash_code
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, looks_like_injection, DISCLAIMERS
+from . import fraud
 from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
                        create_razorpay_order, create_razorpay_subscription,
                        cancel_razorpay_subscription, keys_configured)
@@ -112,6 +113,11 @@ def me(p: Principal = Depends(require_principal)):
     notice = None
     if latest and latest.get("status") in ("approved", "rejected") and not latest.get("acked"):
         notice = {"id": latest.get("id"), "status": latest.get("status")}
+    # Live fraud-risk banner (immediate, reflects this user's own signals; the batch
+    # scan adds cross-user context like shared-IP and can auto-suspend).
+    usage = store.usage_today(p.user_id) or {}
+    risk = fraud.compute_risk(user, {"tokens_today": int(usage.get("tokens_in", 0)) + int(usage.get("tokens_out", 0))},
+                              get_settings())
     return {"user_id": p.user_id, "tier": p.tier.key,
             "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
             "discount_pct": int(user.get("discount_pct") or 0),
@@ -119,6 +125,7 @@ def me(p: Principal = Depends(require_principal)):
             "birth_lock": user.get("birth_lock"),
             "birth_change_pending": bool(store.user_open_change_request(p.user_id)),
             "birth_change_notice": notice,
+            "risk_notice": fraud.risk_banner(risk["band"]),
             "has_subscription": bool(user.get("subscription_id")),
             "balance": store.credit_balance(p.user_id, p.tier)}
 
@@ -292,6 +299,20 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     enforce_quota(p)                          # per-minute + daily call limits
     enforce_global_breaker()                  # platform-wide daily spend cap
 
+    # --- real-time abuse block: destructive/hacking intent ("drop all the database",
+    # rm -rf, SQLi, ...) is refused IMMEDIATELY with a generic reply, never reaches the
+    # model, costs nothing, and is recorded as a high-severity (malicious) signal. ---
+    if fraud.looks_malicious(req.message):
+        try:
+            store.record_jailbreak(p.user_id, req.message, kind="chat-malicious")
+            log.warning("malicious chat blocked uid=%s", p.user_id)
+        except Exception:  # noqa: BLE001
+            pass
+        chat_id = req.chat_id or uuid.uuid4().hex
+        b = store.credit_balance(p.user_id, p.tier)
+        return ChatResponse(answer=fraud.MALICIOUS_REFUSAL, tokens_used=0, chat_id=chat_id,
+                            balance={"grant": b["grant"], "topup": b["topup"], "available": b["available"]})
+
     # --- credit pre-check (advisory; do NOT call the LLM if blocked) ---
     bal = store.credit_balance(p.user_id, p.tier)
     if bal["available"] <= 0:
@@ -373,9 +394,11 @@ def prashna(req: PrashnaRequest, p: Principal = Depends(require_principal)):
         raise HTTPException(402, "Prashna (KP horary) is available on Pro and Enterprise.")
     enforce_quota(p)
     enforce_global_breaker()
-    if looks_like_injection(req.question):                 # the free-text question is an injection vector too
+    _bad = fraud.looks_malicious(req.question)
+    if _bad or looks_like_injection(req.question):         # the free-text question is an abuse vector too
         try:
-            get_store().record_jailbreak(p.user_id, req.question, kind="prashna")
+            get_store().record_jailbreak(p.user_id, req.question,
+                                         kind="prashna-malicious" if _bad else "prashna")
         except Exception:  # noqa: BLE001
             pass
         raise HTTPException(400, "Please ask a genuine horary question about your life.")
@@ -1126,6 +1149,80 @@ def _scan_anomalies() -> list[dict]:
     return flagged
 
 
+def _fraud_scan(persist: bool, autoban: bool) -> dict:
+    """Score EVERY user with the full risk model (incl. cross-user signals).
+    persist -> write each user's risk band; autoban -> suspend users at/over the
+    auto-ban score. Returns a summary + the flagged (non-ok) users sorted by score."""
+    s = get_settings()
+    store = get_store()
+    users = store.list_users()
+    refund_counts: dict = {}
+    for r in store.list_refund_requests():
+        refund_counts[r.get("uid")] = refund_counts.get(r.get("uid"), 0) + 1
+    ip_map: dict = {}
+    acts: dict = {}
+    for u in users:
+        a = store.get_activity(u["uid"]) or {}
+        acts[u["uid"]] = a
+        if a.get("last_ip"):
+            ip_map.setdefault(a["last_ip"], []).append(u["uid"])
+
+    flagged, watch, high, banned = [], 0, 0, 0
+    for u in users:
+        uid = u["uid"]
+        a = acts.get(uid, {})
+        usage = store.usage_today(uid) or {}
+        ctx = {
+            "refunds": refund_counts.get(uid, 0),
+            "tokens_today": int(usage.get("tokens_in", 0)) + int(usage.get("tokens_out", 0)),
+            "ip_accounts": len(ip_map.get(a.get("last_ip"), [])) if a.get("last_ip") else 0,
+        }
+        risk = fraud.compute_risk(u, ctx, s)
+        if persist:
+            try:
+                store.set_risk(uid, {**risk, "ts": _iso(datetime.now(timezone.utc))})
+            except Exception:  # noqa: BLE001
+                pass
+        if autoban and s.fraud_autoban_score and risk["score"] >= s.fraud_autoban_score and not store.get_ban(uid):
+            try:
+                store.set_ban(uid, "temporary", "auto: fraud risk score "
+                              f"{risk['score']}", until=None, by="fraud-monitor")
+                _audit("fraud-monitor", "auto_ban", uid, score=risk["score"])
+                banned += 1
+            except Exception:  # noqa: BLE001
+                pass
+        if risk["band"] != "ok":
+            high += risk["band"] == "high"
+            watch += risk["band"] == "watch"
+            flagged.append({"uid": uid, "email": u.get("email"), "tier": u.get("tier", "free"),
+                            "score": risk["score"], "band": risk["band"], "signals": risk["signals"],
+                            "last_ip": a.get("last_ip"), "banned": bool(store.get_ban(uid))})
+    flagged.sort(key=lambda x: x["score"], reverse=True)
+    return {"scanned": len(users), "watch": watch, "high": high, "auto_banned": banned, "flagged": flagged}
+
+
+@app.post("/internal/fraud-scan")
+def internal_fraud_scan(x_internal_token: Optional[str] = Header(default=None)):
+    """Continuous fraud monitoring (a Cloud Scheduler cron). Scores every user,
+    persists their risk band (drives the warning banner), and auto-suspends the
+    worst. INTERNAL_TOKEN-guarded like the other internal jobs."""
+    s = get_settings()
+    if s.internal_token in _WEAK_INTERNAL_TOKENS:
+        raise HTTPException(503, "Fraud scan disabled: set a strong INTERNAL_TOKEN")
+    if not _ct_eq(x_internal_token, s.internal_token):
+        raise HTTPException(403, "forbidden")
+    res = _fraud_scan(persist=True, autoban=True)
+    log.info("fraud-scan: scanned=%s watch=%s high=%s auto_banned=%s",
+             res["scanned"], res["watch"], res["high"], res["auto_banned"])
+    return {k: v for k, v in res.items() if k != "flagged"} | {"flagged_count": len(res["flagged"])}
+
+
+@app.get("/admin/fraud")
+def admin_fraud(_: None = Depends(require_admin)):
+    """Live fraud-risk view for the dashboard (scored on read, not auto-banning)."""
+    return _fraud_scan(persist=False, autoban=False)
+
+
 @app.get("/admin/ping")
 def admin_ping(_: None = Depends(require_admin)):
     return {"admin": True}
@@ -1300,8 +1397,10 @@ def admin_user_detail(uid: str, _: None = Depends(require_admin)):
                      "count": a.get("count")},
         "ban": store.get_ban(uid),
         "jailbreak_count": int(u.get("jailbreak_count") or 0),
+        "malicious_count": int(u.get("malicious_count") or 0),
         "jailbreak_last": u.get("jailbreak_last"),
         "jailbreaks": store.list_jailbreaks(uid, 20),
+        "risk": fraud.compute_risk(u, {"tokens_today": int(usage.get("tokens_in", 0)) + int(usage.get("tokens_out", 0))}, get_settings()),
         "payments": [p for p in store.all_payments() if p.get("uid") == uid],
         "refunds": [r for r in store.list_refund_requests() if r.get("uid") == uid],
         "audit": [e for e in store.list_audit(500) if e.get("target") == uid][:30],
