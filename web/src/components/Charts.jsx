@@ -128,9 +128,11 @@ function Western({ ascIdx, bySign, S = 240 }) {
   );
 }
 
-export default function Charts({ chart }) {
+export default function Charts({ chart, features = [] }) {
   if (!chart) return null;
-  const vargas = availableVargas(chart);
+  // Divisional charts (D9/D10/D24) are a Pro feature; without it, only D1 shows.
+  const canDivisional = features.length === 0 || features.includes("divisional");
+  const vargas = canDivisional ? availableVargas(chart) : ["D1"];
   const [varga, setVarga] = useState("D1");
   const active = vargas.includes(varga) ? varga : "D1";
   const { ascIdx, bySign } = placements(chart, active);
@@ -157,6 +159,9 @@ export default function Charts({ chart }) {
         {VARGA_LABEL[active] || active} · whole-sign houses from a {SIGNS[ascIdx]} {active === "D1" ? "ascendant" : "varga lagna"}.
         Su Mo Ma Me Ju Ve Sa Ra Ke = the grahas; the number is the sign (1 = Aries … 12 = Pisces).
       </p>
+      {!canDivisional && features.length > 0 && (
+        <p className="note">Divisional charts (D9 Navamsa / D10 Dasamsa / D24) unlock on Pro.</p>
+      )}
     </div>
   );
 }

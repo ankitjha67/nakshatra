@@ -37,6 +37,7 @@ from .billing import (
 from .auth import require_principal, delete_firebase_user, require_admin
 from .pipeline import get_chart, get_reading
 from .anchor import derive_anchor
+from .gating import filter_chart_for_features
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
@@ -102,7 +103,8 @@ def credits_balance(p: Principal = Depends(require_principal)):
 def me(p: Principal = Depends(require_principal)):
     """The signed-in user's profile + entitlements + balance (frontend reads its real tier here)."""
     return {"user_id": p.user_id, "tier": p.tier.key,
-            "sections": sorted(p.tier.sections), "balance": get_store().credit_balance(p.user_id, p.tier)}
+            "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
+            "balance": get_store().credit_balance(p.user_id, p.tier)}
 
 
 @app.get("/v1/me/export")
@@ -125,6 +127,8 @@ def chart(birth: BirthDetails, p: Principal = Depends(require_principal)):
     enforce_quota(p)
     resp = get_chart(birth)
     get_store().record(p.key, 0, 0, reading=False)
+    # tier feature-gate: strip divisional/full-table blocks the tier doesn't include
+    resp.chart = filter_chart_for_features(resp.chart, p.tier.features)
     return resp
 
 
@@ -133,6 +137,8 @@ def anchor(birth: BirthDetails, p: Principal = Depends(require_principal)):
     """Maha-Jyotish anchor verification block (Tropical vs Sidereal Asc/Moon,
     Nakshatra lock, danger flags). Cheap, engine-only, no LLM, no credit debit,
     shown for the user to verify against an external panchang before the reading."""
+    if "anchor" not in p.tier.features:
+        raise HTTPException(402, "The anchor block is not included in your plan.")
     enforce_quota(p)
     resp = get_chart(birth)
     get_store().record(p.key, 0, 0, reading=False)
@@ -150,6 +156,8 @@ def reading(birth: BirthDetails, p: Principal = Depends(require_principal)):
     if p.tier.monthly_tokens and store.credit_balance(p.user_id, p.tier)["available"] <= 0:
         raise HTTPException(402, "You're out of credits for this cycle, upgrade or add a top-up.")
     resp = get_reading(birth, p.tier)
+    if "varshphal" not in p.tier.features:        # Tajik annual block is Pro+
+        resp.varshphal = None
     cost = int(resp.meta.tokens_in) + int(resp.meta.tokens_out)
     if cost:                                  # cache hits cost 0 tokens -> free
         store.credit_debit(p.user_id, p.tier, cost, reason="reading", ref=resp.meta.chart_hash)

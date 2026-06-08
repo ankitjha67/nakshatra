@@ -1,4 +1,5 @@
 import React from "react";
+import Locked from "./Locked.jsx";
 
 // Factual chart-data tables shown alongside the reading (like the birth charts,
 // these are raw computed facts for trust, not interpretation, that stays in the
@@ -25,8 +26,13 @@ function date(s) {
   return isNaN(d) ? s : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export default function ChartData({ chart }) {
+export default function ChartData({ chart, features = [] }) {
   if (!chart) return null;
+  // tier capabilities: tables_basic = planetary + Vimshottari dasha; tables_full = the rest.
+  // When features is empty (preview / pre-load) fall back to data presence (no gating).
+  const unknown = features.length === 0;
+  const hasBasic = unknown || features.includes("tables_basic");
+  const hasFull = unknown || features.includes("tables_full");
   const cb = chart.chart || chart;
   const planets = cb.planets || {};
   const asc = cb.asc || {};
@@ -50,13 +56,17 @@ export default function ChartData({ chart }) {
   const ak = karakas.Atmakaraka, amk = karakas.Amatyakaraka;
   const hasNadi = ya.yogi_lord || bb.sign || ak || amk;
   const hasTransit = dt.saturn_sign || dt.jupiter_sign || ss.active != null;
-  if (!hasPlanets && !hasDasha && !hasKp && !hasNum && !hasNadi && !hasTransit) return null;
 
   return (
     <div className="sheet">
       <p className="kicker">Chart data</p>
 
-      {hasPlanets && (
+      {!hasBasic && (
+        <Locked title="Chart data tables" tier="Basic"
+                note="Planetary positions and dashas unlock on Basic; the full Jaimini karakas, Siddha Nadi points, KP cusps, transits and numerology unlock on Pro." />
+      )}
+
+      {hasPlanets && hasBasic && (
         <div className="data-block">
           <p className="data-h">Planetary positions</p>
           <table className="data-tbl">
@@ -80,36 +90,7 @@ export default function ChartData({ chart }) {
         </div>
       )}
 
-      {hasKarakas && (
-        <div className="data-block">
-          <p className="data-h">Jaimini karakas</p>
-          <table className="data-tbl">
-            <thead><tr><th>Karaka</th><th>Planet</th><th>Sign</th></tr></thead>
-            <tbody>
-              {Object.keys(karakas).map((k) => (
-                <tr key={k}><td>{k}</td><td>{karakas[k].planet}</td><td>{karakas[k].sign}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {hasNadi && (
-        <div className="data-block">
-          <p className="data-h">Siddha Nadi points</p>
-          <table className="data-tbl">
-            <tbody>
-              {ya.yogi_lord && <tr><td>Yogi lord</td><td>{ya.yogi_lord}{ya.yogi_nakshatra ? ` · ${ya.yogi_nakshatra}` : ""}</td></tr>}
-              {ya.avayogi_lord && <tr><td>Avayogi lord</td><td>{ya.avayogi_lord}{ya.avayogi_nakshatra ? ` · ${ya.avayogi_nakshatra}` : ""}</td></tr>}
-              {bb.sign && <tr><td>Bhrigu Bindu</td><td>{bb.sign}{bb.nakshatra ? ` · ${bb.nakshatra}` : ""}</td></tr>}
-              {ak && <tr><td>Atmakaraka</td><td>{ak.planet}{ak.sign ? ` in ${ak.sign}` : ""}</td></tr>}
-              {amk && <tr><td>Amatyakaraka</td><td>{amk.planet}{amk.sign ? ` in ${amk.sign}` : ""}</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {hasDasha && (
+      {hasDasha && hasBasic && (
         <div className="data-block">
           <p className="data-h">Dasha periods</p>
           <table className="data-tbl">
@@ -138,7 +119,41 @@ export default function ChartData({ chart }) {
         </div>
       )}
 
-      {hasTransit && (
+      {hasBasic && !hasFull && (
+        <Locked title="Full chart data" tier="Pro"
+                note="Jaimini karakas, Siddha Nadi points, the current transit snapshot, KP cusp highlights and Chaldean numerology unlock on Pro." />
+      )}
+
+      {hasFull && hasKarakas && (
+        <div className="data-block">
+          <p className="data-h">Jaimini karakas</p>
+          <table className="data-tbl">
+            <thead><tr><th>Karaka</th><th>Planet</th><th>Sign</th></tr></thead>
+            <tbody>
+              {Object.keys(karakas).map((k) => (
+                <tr key={k}><td>{k}</td><td>{karakas[k].planet}</td><td>{karakas[k].sign}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasFull && hasNadi && (
+        <div className="data-block">
+          <p className="data-h">Siddha Nadi points</p>
+          <table className="data-tbl">
+            <tbody>
+              {ya.yogi_lord && <tr><td>Yogi lord</td><td>{ya.yogi_lord}{ya.yogi_nakshatra ? ` · ${ya.yogi_nakshatra}` : ""}</td></tr>}
+              {ya.avayogi_lord && <tr><td>Avayogi lord</td><td>{ya.avayogi_lord}{ya.avayogi_nakshatra ? ` · ${ya.avayogi_nakshatra}` : ""}</td></tr>}
+              {bb.sign && <tr><td>Bhrigu Bindu</td><td>{bb.sign}{bb.nakshatra ? ` · ${bb.nakshatra}` : ""}</td></tr>}
+              {ak && <tr><td>Atmakaraka</td><td>{ak.planet}{ak.sign ? ` in ${ak.sign}` : ""}</td></tr>}
+              {amk && <tr><td>Amatyakaraka</td><td>{amk.planet}{amk.sign ? ` in ${amk.sign}` : ""}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasFull && hasTransit && (
         <div className="data-block">
           <p className="data-h">Current transit snapshot</p>
           <table className="data-tbl">
@@ -154,7 +169,7 @@ export default function ChartData({ chart }) {
         </div>
       )}
 
-      {hasKp && (
+      {hasFull && hasKp && (
         <div className="data-block">
           <p className="data-h">KP cusp highlights</p>
           <table className="data-tbl">
@@ -169,7 +184,7 @@ export default function ChartData({ chart }) {
         </div>
       )}
 
-      {hasNum && (
+      {hasFull && hasNum && (
         <div className="data-block">
           <p className="data-h">Chaldean numerology</p>
           <table className="data-tbl">
