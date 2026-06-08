@@ -19,6 +19,8 @@ export default function AdminTab() {
   const [changeReqs, setChangeReqs] = useState([]);
   const [refunds, setRefunds] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [detail, setDetail] = useState(null);
   const [generated, setGenerated] = useState([]);     // plaintext, shown once
   const [cKind, setCKind] = useState("beta");
   const [cCount, setCCount] = useState(20);
@@ -36,12 +38,21 @@ export default function AdminTab() {
     apiGet("/admin/birth-change-requests").then((d) => setChangeReqs(d.requests || [])).catch(() => {});
     apiGet("/admin/refunds").then((d) => setRefunds(d.requests || [])).catch(() => {});
     apiGet("/admin/audit?limit=50").then((d) => setAudit(d.entries || [])).catch(() => {});
+    apiGet("/admin/users").then((d) => setUsers(d.users || [])).catch(() => {});
   };
   useEffect(load, []);
+
+  const openUser = (uid) => { setDetail(null); apiGet(`/admin/users/${uid}`).then(setDetail).catch((e) => setErr(e.message)); };
+  const refreshDetail = (uid) => apiGet(`/admin/users/${uid}`).then(setDetail).catch(() => {});
 
   const act = async (fn, ok) => {
     setBusy(true); setMsg("");
     try { const r = await fn(); if (ok) setMsg(ok(r)); load(); }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const userAction = async (uid, path, body, okMsg, after) => {
+    setBusy(true); setMsg(""); setErr("");
+    try { await apiPost(path, body || {}); setMsg(okMsg); if (after) after(); else await refreshDetail(uid); load(); }
     catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const ban = (uid) => act(() => apiPost(`/admin/users/${uid}/ban`, { kind: "temporary", reason: "flagged by admin", days: 7 }));
@@ -105,6 +116,64 @@ export default function AdminTab() {
       </div>
 
       {msg && <p className="note" style={{ color: "var(--brass)", marginTop: 18 }}>{msg}</p>}
+
+      <p className="kicker" style={{ marginTop: 26 }}>Users ({users.length}) · click a row for details</p>
+      {users.length === 0 ? (
+        <p className="note">No users yet.</p>
+      ) : (
+        <table className="admin-tbl">
+          <thead><tr><th>User</th><th>Tier</th><th>Last seen</th><th>Tokens today</th><th>Status</th></tr></thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.uid} className="rowlink" onClick={() => openUser(u.uid)}>
+                <td>{u.email || <span className="mono">{u.uid}</span>}</td>
+                <td>{u.tier}{u.tier_source ? <span className="mono"> ({u.tier_source})</span> : ""}</td>
+                <td className="mono">{u.last_seen ? new Date(u.last_seen).toLocaleString() : "—"}</td>
+                <td>{(u.tokens_today || 0).toLocaleString()}</td>
+                <td>{u.banned ? "banned" : u.birth_locked ? "active · locked" : "active"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {detail && (
+        <div className="user-detail">
+          <div className="sec-head">
+            <p className="data-h" style={{ marginTop: 0 }}>{detail.email || detail.uid}</p>
+            <button className="ghost sm" onClick={() => setDetail(null)}>Close</button>
+          </div>
+          <table className="data-tbl"><tbody>
+            <tr><td>UID</td><td className="mono">{detail.uid}</td></tr>
+            <tr><td>Tier</td><td>{detail.tier}{detail.tier_source ? ` (${detail.tier_source})` : ""}</td></tr>
+            <tr><td>AI credits</td><td>{(detail.balance?.available ?? 0).toLocaleString()} available</td></tr>
+            <tr><td>Tokens today</td><td>{(detail.tokens_today || 0).toLocaleString()}</td></tr>
+            <tr><td>Discount</td><td>{detail.discount_pct ? `${detail.discount_pct}%` : "—"}</td></tr>
+            <tr><td>Subscription</td><td>{detail.has_subscription ? (detail.subscription_id || "active") : "—"}</td></tr>
+            <tr><td>Last activity</td><td className="mono">{detail.activity?.last_seen ? new Date(detail.activity.last_seen).toLocaleString() : "—"} · {detail.activity?.last_ip || "no ip"}</td></tr>
+            <tr><td>Birth lock</td><td>{detail.birth_lock ? `${detail.birth_lock.name || "—"} · ${detail.birth_lock.date} · ${detail.birth_lock.place || ""}` : "none"}</td></tr>
+            <tr><td>Banned</td><td>{detail.ban ? `${detail.ban.kind} · ${detail.ban.reason || ""}` : "no"}</td></tr>
+            <tr><td>Payments</td><td>{(detail.payments || []).length} · Refund requests {(detail.refunds || []).length}</td></tr>
+          </tbody></table>
+          <div className="actions">
+            {detail.ban
+              ? <button className="ghost sm" disabled={busy} onClick={() => userAction(detail.uid, `/admin/users/${detail.uid}/unban`, {}, "Unbanned.")}>Unban</button>
+              : <button className="ghost sm" disabled={busy} onClick={() => userAction(detail.uid, `/admin/users/${detail.uid}/ban`, { kind: "temporary", reason: "admin", days: 7 }, "Banned 7d.")}>Ban 7d</button>}
+            {detail.birth_lock && <button className="ghost sm" disabled={busy} onClick={() => userAction(detail.uid, `/admin/users/${detail.uid}/reset-birth`, {}, "Birth lock cleared.")}>Reset birth lock</button>}
+            <button className="ghost sm" disabled={busy} onClick={() => { if (window.confirm(`Delete user ${detail.email || detail.uid}? This removes their profile, keys and chats.`)) userAction(detail.uid, `/admin/users/${detail.uid}/delete`, {}, "User deleted.", () => { setDetail(null); load(); }); }}>Delete user</button>
+          </div>
+          {(detail.audit || []).length > 0 && (
+            <>
+              <p className="data-h" style={{ marginTop: 16 }}>Recent admin actions on this user</p>
+              <table className="data-tbl"><tbody>
+                {detail.audit.map((a, i) => (
+                  <tr key={i}><td className="mono">{a.ts ? new Date(a.ts).toLocaleString() : ""}</td><td>{a.action}</td></tr>
+                ))}
+              </tbody></table>
+            </>
+          )}
+        </div>
+      )}
 
       <p className="kicker" style={{ marginTop: 26 }}>Subscriptions & beta cohort</p>
       <div className="admin-panels">
