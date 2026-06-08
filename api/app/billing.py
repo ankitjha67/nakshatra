@@ -52,8 +52,9 @@ def _code_redeem_check(meta: Optional[dict], uid: str, now: datetime) -> Optiona
 
 
 def _code_redacted(code_hash: str, meta: dict) -> dict:
-    """Admin-facing view of a code: never the plaintext (only a hash prefix id)."""
-    return {"id": code_hash[:10], "kind": meta.get("kind"), "tier": meta.get("tier"),
+    """Admin-facing view of a code: the hash (NOT the plaintext, irreversible without
+    the pepper) so the admin can act on it; never the shareable code itself."""
+    return {"id": code_hash, "kind": meta.get("kind"), "tier": meta.get("tier"),
             "discount_pct": meta.get("discount_pct"), "uses": meta.get("uses", 0),
             "max_uses": meta.get("max_uses", 1), "active": meta.get("active", True),
             "expires_at": meta.get("expires_at"), "created_at": meta.get("created_at")}
@@ -304,6 +305,7 @@ class Store:
     def code_create(self, code_hash: str, meta: dict) -> None: ...
     def list_codes(self) -> list: ...
     def code_redeem(self, code_hash: str, uid: str, now: Optional[datetime] = None) -> dict: ...
+    def code_set_active(self, code_hash: str, active: bool) -> bool: ...
     def set_discount(self, uid: str, pct: int, code_hash: Optional[str] = None) -> None: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
@@ -531,6 +533,12 @@ class MemoryStore(Store):
         meta["uses"] = int(meta.get("uses", 0)) + 1
         meta.setdefault("redeemed_by", []).append(uid)
         return {"ok": True, "meta": dict(meta)}
+
+    def code_set_active(self, code_hash, active):
+        if code_hash in self.codes:
+            self.codes[code_hash]["active"] = bool(active)
+            return True
+        return False
 
     def set_discount(self, uid, pct, code_hash=None):
         u = self.users.setdefault(uid, {"email": "", "tier": "free"})
@@ -887,6 +895,13 @@ class FirestoreStore(Store):
             return {"ok": True, "meta": meta}
 
         return _run(self._db.transaction())
+
+    def code_set_active(self, code_hash, active):
+        ref = self._db.collection("codes").document(code_hash)
+        if not ref.get().exists:
+            return False
+        ref.set({"active": bool(active)}, merge=True)
+        return True
 
     def set_discount(self, uid, pct, code_hash=None):
         doc = {"discount_pct": int(pct)}

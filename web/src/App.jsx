@@ -5,6 +5,7 @@ import { getTiers, apiGet } from "./lib/api.js";
 import SignIn from "./components/SignIn.jsx";
 import CreditsWidget from "./components/CreditsWidget.jsx";
 import RedeemCode from "./components/RedeemCode.jsx";
+import CheckoutButton from "./components/CheckoutButton.jsx";
 import ReadingTab from "./tabs/ReadingTab.jsx";
 import ChatTab from "./tabs/ChatTab.jsx";
 import PrashnaTab from "./tabs/PrashnaTab.jsx";
@@ -153,6 +154,7 @@ function Paywall({ tab, tiers, onRedeemed }) {
         <p className="note">{name} includes: {t.sections.join(" · ")}</p>
       )}
       {t && t.allowance_note && <p className="note">{t.allowance_note}</p>}
+      <div style={{ marginTop: 16 }}><CheckoutButton tier={tab.min} label={name} onPaid={onRedeemed} /></div>
       <RedeemCode onRedeemed={onRedeemed} />
     </div>
   );

@@ -61,4 +61,17 @@ def test_list_codes_never_exposes_plaintext():
     assert len(listed) == 1
     row = listed[0]
     assert normalize(code) not in str(row)          # plaintext never present
-    assert len(row["id"]) == 10                       # only a hash prefix id
+    assert row["id"] == hash_code(code)              # the hash (irreversible), never the code
+
+
+def test_deactivate_blocks_redemption():
+    s = MemoryStore()
+    code = generate_plaintext()
+    h = hash_code(code)
+    s.code_create(h, {"kind": "beta", "tier": "pro", "max_uses": 5, "uses": 0,
+                      "redeemed_by": [], "active": True})
+    assert s.code_set_active(h, False) is True
+    assert s.code_redeem(h, "u1")["ok"] is False     # deactivated -> unredeemable
+    assert s.code_set_active(h, True) is True
+    assert s.code_redeem(h, "u1")["ok"] is True       # reactivated -> works again
+    assert s.code_set_active("nonexistent", False) is False
