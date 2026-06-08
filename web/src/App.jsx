@@ -1,7 +1,7 @@
 import React, { useEffect, useState, lazy, Suspense } from "react";
 import { auth, firebaseReady, PREVIEW } from "./lib/firebase.js";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { getTiers, apiGet } from "./lib/api.js";
+import { getTiers, apiGet, apiPost } from "./lib/api.js";
 import SignIn from "./components/SignIn.jsx";
 import CreditsWidget from "./components/CreditsWidget.jsx";
 import RedeemCode from "./components/RedeemCode.jsx";
@@ -76,6 +76,8 @@ export default function App() {
 
   if (user === undefined) return <div className="wrap"><p className="loader" style={{ paddingTop: 40 }}>Loading…</p></div>;
 
+  const dismissNotice = () => apiPost("/v1/birth-change-request/dismiss", {}).then(refreshMe).catch(() => {});
+  const notice = me?.birth_change_notice;
   const userTier = me?.tier || "free";                // real tier (falls back to free until /v1/me loads)
   const features = me?.features || [];
   // After a cast the server may lock the birth details; refresh entitlements so
@@ -118,6 +120,14 @@ export default function App() {
         <SignIn />
       ) : (
         <>
+          {notice && (
+            <div className="notice-bar">
+              <span>{notice.status === "approved"
+                ? "Your birth-details change was approved, you can re-enter your details on the Natal tab."
+                : "Your birth-details change request was declined. Contact support if you need help."}</span>
+              <button className="ghost sm" onClick={dismissNotice}>Dismiss</button>
+            </div>
+          )}
           <nav className="tabs">
             {tabs.map((t) => (
               <button key={t.key} className={`tab ${tab === t.key ? "active" : ""}`} onClick={() => setTab(t.key)}>

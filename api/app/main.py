@@ -107,11 +107,16 @@ def me(p: Principal = Depends(require_principal)):
     """The signed-in user's profile + entitlements + balance (frontend reads its real tier here)."""
     store = get_store()
     user = store.get_user(p.user_id) or {}
+    latest = store.user_latest_change_request(p.user_id)
+    notice = None
+    if latest and latest.get("status") in ("approved", "rejected") and not latest.get("acked"):
+        notice = {"id": latest.get("id"), "status": latest.get("status")}
     return {"user_id": p.user_id, "tier": p.tier.key,
             "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
             "discount_pct": int(user.get("discount_pct") or 0),
             "birth_lock": user.get("birth_lock"),
             "birth_change_pending": bool(store.user_open_change_request(p.user_id)),
+            "birth_change_notice": notice,
             "has_subscription": bool(user.get("subscription_id")),
             "balance": store.credit_balance(p.user_id, p.tier)}
 
@@ -467,6 +472,20 @@ def _enqueue_cloud_task(job_id: str, birth: BirthDetails, p: Principal):
 # --------------------------------------------------------------------------- #
 # admin + payments
 # --------------------------------------------------------------------------- #
+def _audit(admin: str, action: str, target: Optional[str] = None, **details) -> None:
+    """Append an admin action to the audit log (best-effort; never blocks the action)."""
+    try:
+        get_store().audit_log({"ts": datetime.now(timezone.utc).isoformat(), "admin": admin,
+                               "action": action, "target": target, "details": details})
+    except Exception:  # noqa: BLE001
+        log.warning("audit write failed action=%s", action)
+
+
+@app.get("/admin/audit")
+def admin_audit(limit: int = 100, _: None = Depends(require_admin)):
+    return {"entries": get_store().list_audit(min(max(int(limit), 1), 500))}
+
+
 class KeyRequest(BaseModel):
     user_id: str
     tier: str = "basic"
@@ -488,13 +507,14 @@ class UserTierRequest(BaseModel):
 
 
 @app.post("/admin/users/tier")
-def set_user_tier(req: UserTierRequest, _: None = Depends(require_admin)):
+def set_user_tier(req: UserTierRequest, admin: str = Depends(require_admin)):
     """Set a Firebase user's tier by uid (payment webhook / ops use this)."""
     if req.tier not in TIERS:
         raise HTTPException(400, f"Unknown tier; choose from {list(TIERS)}")
     store = get_store()
     store.upsert_user(req.uid, None)
     store.set_tier(req.uid, req.tier, source=req.source)
+    _audit(admin, "set_tier", req.uid, tier=req.tier, source=req.source)
     return {"uid": req.uid, "tier": req.tier, "source": req.source}
 
 
@@ -508,13 +528,14 @@ class BetaGrantRequest(BaseModel):
 
 
 @app.post("/admin/beta/grant")
-def beta_grant(req: BetaGrantRequest, _: None = Depends(require_admin)):
+def beta_grant(req: BetaGrantRequest, admin: str = Depends(require_admin)):
     """Grant a user elevated access tagged tier_source='beta' (reversible later)."""
     if req.tier not in TIERS:
         raise HTTPException(400, f"Unknown tier; choose from {list(TIERS)}")
     store = get_store()
     store.upsert_user(req.uid, None)
     store.set_tier(req.uid, req.tier, source="beta")
+    _audit(admin, "beta_grant", req.uid, tier=req.tier)
     return {"uid": req.uid, "tier": req.tier, "source": "beta"}
 
 
@@ -528,7 +549,7 @@ def beta_list(_: None = Depends(require_admin)):
 
 
 @app.post("/admin/beta/revoke")
-def beta_revoke(_: None = Depends(require_admin)):
+def beta_revoke(admin: str = Depends(require_admin)):
     """Revoke ALL beta-tagged users back to free (run when going live on Razorpay).
     Only touches users tagged tier_source='beta', real paying users are untouched."""
     store = get_store()
@@ -539,6 +560,7 @@ def beta_revoke(_: None = Depends(require_admin)):
             if uid:
                 store.set_tier(uid, "free", source="revoked")
                 revoked.append(uid)
+    _audit(admin, "beta_revoke", count=len(revoked))
     return {"revoked": len(revoked), "uids": revoked}
 
 
@@ -557,7 +579,7 @@ class CodeGenRequest(BaseModel):
 
 
 @app.post("/admin/codes/generate")
-def codes_generate(req: CodeGenRequest, _: None = Depends(require_admin)):
+def codes_generate(req: CodeGenRequest, admin: str = Depends(require_admin)):
     if req.kind == "beta" and req.tier not in TIERS:
         raise HTTPException(400, f"Unknown tier; choose from {list(TIERS)}")
     if req.kind == "discount" and not (1 <= req.discount_pct <= 100):
@@ -576,6 +598,9 @@ def codes_generate(req: CodeGenRequest, _: None = Depends(require_admin)):
             meta["discount_pct"] = req.discount_pct
         store.code_create(hash_code(code), meta)
         plaintext.append(code)
+    _audit(admin, "codes_generate", kind=req.kind, count=len(plaintext),
+           tier=req.tier if req.kind == "beta" else None,
+           discount_pct=req.discount_pct if req.kind == "discount" else None)
     return {"kind": req.kind, "count": len(plaintext), "codes": plaintext,
             "note": "Shown once. Copy and share now, only salted hashes are stored."}
 
@@ -615,10 +640,11 @@ def redeem(req: RedeemRequest, p: Principal = Depends(require_principal)):
 
 
 @app.post("/admin/users/{uid}/reset-birth")
-def admin_reset_birth(uid: str, _: None = Depends(require_admin)):
+def admin_reset_birth(uid: str, admin: str = Depends(require_admin)):
     """Clear a user's saved birth lock (support: typo in DOB/place, or a genuine
     re-assignment). The next birth-based call re-locks to the new person."""
     get_store().clear_birth_lock(uid)
+    _audit(admin, "reset_birth", uid)
     return {"uid": uid, "birth_lock": None}
 
 
@@ -649,12 +675,22 @@ def birth_change_request(req: BirthChangeRequestIn, p: Principal = Depends(requi
             "message": "Your change request has been submitted for review."}
 
 
+@app.post("/v1/birth-change-request/dismiss")
+def dismiss_change_notice(p: Principal = Depends(require_principal)):
+    """Acknowledge the resolved change-request banner so it stops showing."""
+    store = get_store()
+    latest = store.user_latest_change_request(p.user_id)
+    if latest and latest.get("status") in ("approved", "rejected"):
+        store.update_change_request(latest["id"], {"acked": True})
+    return {"ok": True}
+
+
 @app.get("/admin/birth-change-requests")
 def admin_list_change_requests(_: None = Depends(require_admin)):
     return {"requests": get_store().list_change_requests(status="pending")}
 
 
-def _resolve_change_request(rid: str, decision: str) -> dict:
+def _resolve_change_request(rid: str, decision: str, admin: str) -> dict:
     store = get_store()
     r = store.get_change_request(rid)
     if not r:
@@ -663,32 +699,35 @@ def _resolve_change_request(rid: str, decision: str) -> dict:
         raise HTTPException(409, f"Request already {r.get('status')}.")
     if decision == "approved":
         store.clear_birth_lock(r["uid"])     # unlock so the user can re-enter details
-    store.update_change_request(rid, {"status": decision,
+    store.update_change_request(rid, {"status": decision, "acked": False,
                                       "resolved_at": datetime.now(timezone.utc).isoformat()})
+    _audit(admin, f"birth_change_{decision}", r["uid"])
     return {"id": rid, "uid": r["uid"], "status": decision}
 
 
 @app.post("/admin/birth-change-requests/{rid}/approve")
-def admin_approve_change(rid: str, _: None = Depends(require_admin)):
-    return _resolve_change_request(rid, "approved")
+def admin_approve_change(rid: str, admin: str = Depends(require_admin)):
+    return _resolve_change_request(rid, "approved", admin)
 
 
 @app.post("/admin/birth-change-requests/{rid}/reject")
-def admin_reject_change(rid: str, _: None = Depends(require_admin)):
-    return _resolve_change_request(rid, "rejected")
+def admin_reject_change(rid: str, admin: str = Depends(require_admin)):
+    return _resolve_change_request(rid, "rejected", admin)
 
 
 @app.post("/admin/codes/{code_id}/deactivate")
-def codes_deactivate(code_id: str, _: None = Depends(require_admin)):
+def codes_deactivate(code_id: str, admin: str = Depends(require_admin)):
     if not get_store().code_set_active(code_id, False):
         raise HTTPException(404, "Unknown code id")
+    _audit(admin, "code_deactivate", code_id[:10])
     return {"id": code_id, "active": False}
 
 
 @app.post("/admin/codes/{code_id}/reactivate")
-def codes_reactivate(code_id: str, _: None = Depends(require_admin)):
+def codes_reactivate(code_id: str, admin: str = Depends(require_admin)):
     if not get_store().code_set_active(code_id, True):
         raise HTTPException(404, "Unknown code id")
+    _audit(admin, "code_reactivate", code_id[:10])
     return {"id": code_id, "active": True}
 
 
@@ -817,7 +856,7 @@ def _process_refund(payment_id: str) -> dict:
 
 
 @app.post("/admin/refunds/{rid}/approve")
-def admin_approve_refund(rid: str, _: None = Depends(require_admin)):
+def admin_approve_refund(rid: str, admin: str = Depends(require_admin)):
     r = get_store().refund_request_get(rid)
     if not r:
         raise HTTPException(404, "Unknown refund request")
@@ -825,15 +864,17 @@ def admin_approve_refund(rid: str, _: None = Depends(require_admin)):
         raise HTTPException(409, f"Request already {r.get('status')}")
     result = _process_refund(r["payment_id"])
     get_store().refund_request_set_status(rid, "approved")
+    _audit(admin, "refund_approved", r.get("uid"), payment_id=r.get("payment_id"))
     return {"status": "approved", "refund": result}
 
 
 @app.post("/admin/refunds/{rid}/reject")
-def admin_reject_refund(rid: str, _: None = Depends(require_admin)):
+def admin_reject_refund(rid: str, admin: str = Depends(require_admin)):
     r = get_store().refund_request_get(rid)
     if not r:
         raise HTTPException(404, "Unknown refund request")
     get_store().refund_request_set_status(rid, "rejected")
+    _audit(admin, "refund_rejected", r.get("uid"), payment_id=r.get("payment_id"))
     return {"status": "rejected"}
 
 
