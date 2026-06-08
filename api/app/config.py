@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     anomaly_token_day_flag: int = 1_000_000   # tokens/day above this flags a user
     anomaly_refund_flag: int = 3              # >= this many refund requests flags a user
     anomaly_ip_accounts_flag: int = 5         # >= this many accounts on one IP flags them
+    anomaly_jailbreak_flag: int = 3           # >= this many jailbreak/injection attempts flags a user
 
     # --- auth / billing ---
     # No usable default: admin/internal endpoints stay disabled until a real

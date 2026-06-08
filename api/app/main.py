@@ -311,6 +311,15 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     chat_id = req.chat_id or uuid.uuid4().hex
     history = (store.chat_get_turns(p.user_id, chat_id, limit=16)
                if (req.chat_id and s.persist_chat) else [])
+    # Flag jailbreak/injection attempts against the user (every modus operandi the
+    # guard catches). Repeat offenders surface in Admin → Flagged users.
+    injected = looks_like_injection(req.message)
+    if injected:
+        try:
+            n = store.record_jailbreak(p.user_id, req.message, kind="chat")
+            log.warning("jailbreak attempt uid=%s count=%s", p.user_id, n)
+        except Exception:  # noqa: BLE001, never fail the request on flagging
+            pass
     answer, _model, ti, to = chat_answer(findings, history, req.message, s.chat_max_output)
     cost = int(ti) + int(to)
 
@@ -321,7 +330,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     # --- persist the turn (best-effort, opt-out via PERSIST_CHAT; not the money path).
     # Never persist an injection attempt: keep attack text out of the grounding history
     # so a single jailbreak can't poison the rest of the conversation. ---
-    if s.persist_chat and not looks_like_injection(req.message):
+    if s.persist_chat and not injected:
         try:
             store.chat_save_turn(p.user_id, chat_id, req.birth.chart_hash(),
                                  req.message, answer, cost, msg_id)
@@ -364,6 +373,12 @@ def prashna(req: PrashnaRequest, p: Principal = Depends(require_principal)):
         raise HTTPException(402, "Prashna (KP horary) is available on Pro and Enterprise.")
     enforce_quota(p)
     enforce_global_breaker()
+    if looks_like_injection(req.question):                 # the free-text question is an injection vector too
+        try:
+            get_store().record_jailbreak(p.user_id, req.question, kind="prashna")
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(400, "Please ask a genuine horary question about your life.")
     _meter_precheck(p)                                     # credits + daily ceiling
     d, t = _now_in_tz(req.tz)                              # cast for the moment of asking
     birth = BirthDetails(date=d, time=t, tz=req.tz, lat=req.lat, lon=req.lon)
@@ -1101,6 +1116,9 @@ def _scan_anomalies() -> list[dict]:
         ip = a.get("last_ip")
         if ip and len(ip_map.get(ip, [])) >= s.anomaly_ip_accounts_flag:
             reasons.append(f"{len(ip_map[ip])} accounts share IP {ip}")
+        jb = int(u.get("jailbreak_count") or 0)
+        if jb >= s.anomaly_jailbreak_flag:
+            reasons.append(f"{jb} jailbreak attempts")
         if reasons:
             flagged.append({"uid": uid, "reasons": reasons, "last_ip": ip,
                             "last_seen": _iso(a.get("last_seen")), "tier": u.get("tier"),
@@ -1161,10 +1179,12 @@ def admin_overview(_: None = Depends(require_admin)):
     for c in codes:
         by_kind[c.get("kind", "?")] = by_kind.get(c.get("kind", "?"), 0) + 1
     paid = by_tier.get("basic", 0) + by_tier.get("pro", 0) + by_tier.get("enterprise", 0)
+    jailbreakers = sum(1 for u in users if int(u.get("jailbreak_count") or 0) > 0)
     return {
         "users": {"total": len(users), "by_tier": by_tier, "active_7d": active7,
                   "active_30d": active30, "birth_locked": locked, "with_subscription": subs,
-                  "paid": paid, "conversion_pct": round(100 * paid / max(len(users), 1), 1)},
+                  "paid": paid, "conversion_pct": round(100 * paid / max(len(users), 1), 1),
+                  "jailbreakers": jailbreakers},
         "revenue": {"captured_inr": captured, "refunded_inr": refunded,
                     "net_inr": captured - refunded, "mrr_inr": mrr},
         "codes": {"total": len(codes), "redemptions": sum(int(c.get("uses", 0)) for c in codes),
@@ -1253,6 +1273,7 @@ def admin_users(_: None = Depends(require_admin)):
             "has_subscription": bool(u.get("subscription_id")),
             "discount_pct": int(u.get("discount_pct") or 0),
             "birth_locked": bool(u.get("birth_lock")),
+            "jailbreak_count": int(u.get("jailbreak_count") or 0),
         })
     out.sort(key=lambda x: x.get("last_seen") or "", reverse=True)
     return {"count": len(out), "users": out}
@@ -1278,6 +1299,9 @@ def admin_user_detail(uid: str, _: None = Depends(require_admin)):
         "activity": {"last_ip": a.get("last_ip"), "last_seen": _iso(a.get("last_seen")),
                      "count": a.get("count")},
         "ban": store.get_ban(uid),
+        "jailbreak_count": int(u.get("jailbreak_count") or 0),
+        "jailbreak_last": u.get("jailbreak_last"),
+        "jailbreaks": store.list_jailbreaks(uid, 20),
         "payments": [p for p in store.all_payments() if p.get("uid") == uid],
         "refunds": [r for r in store.list_refund_requests() if r.get("uid") == uid],
         "audit": [e for e in store.list_audit(500) if e.get("target") == uid][:30],

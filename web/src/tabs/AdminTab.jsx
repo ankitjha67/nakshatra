@@ -144,6 +144,7 @@ export default function AdminTab() {
     ["Codes redeemed", `${ocd.redemptions ?? 0} / ${ocd.total ?? 0}`],
     ["Pending refunds", orq.refunds_pending ?? 0],
     ["Pending changes", orq.birth_changes_pending ?? 0],
+    ["Jailbreak flags", ou.jailbreakers ?? 0],
     ["Banned", stats.banned ?? 0],
   ];
   const byTier = ou.by_tier || {};
@@ -275,7 +276,8 @@ export default function AdminTab() {
                 <td>{u.tier}<span className="mono" style={{ color: "var(--muted)" }}>{srcLabel(u.tier_source)}</span></td>
                 <td className="mono">{u.last_seen ? new Date(u.last_seen).toLocaleString() : "—"}</td>
                 <td>{(u.tokens_today || 0).toLocaleString()}</td>
-                <td>{u.banned ? "banned" : u.birth_locked ? "active · locked" : "active"}</td>
+                <td>{u.banned ? "banned" : u.birth_locked ? "active · locked" : "active"}
+                  {u.jailbreak_count > 0 && <span style={{ color: "var(--danger, #c0392b)", fontWeight: 600 }}> · ⚑{u.jailbreak_count}</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -298,6 +300,9 @@ export default function AdminTab() {
             <tr><td>Last activity</td><td className="mono">{detail.activity?.last_seen ? new Date(detail.activity.last_seen).toLocaleString() : "—"} · {detail.activity?.last_ip || "no ip"}</td></tr>
             <tr><td>Birth lock</td><td>{detail.birth_lock ? `${detail.birth_lock.name || "—"} · ${detail.birth_lock.date} · ${detail.birth_lock.place || ""}` : "none"}</td></tr>
             <tr><td>Banned</td><td>{detail.ban ? `${detail.ban.kind} · ${detail.ban.reason || ""}` : "no"}</td></tr>
+            <tr><td>Jailbreak attempts</td><td>{detail.jailbreak_count
+              ? <b style={{ color: "var(--danger, #c0392b)" }}>⚑ {detail.jailbreak_count}{detail.jailbreak_last ? ` · last ${new Date(detail.jailbreak_last).toLocaleString()}` : ""}</b>
+              : "none"}</td></tr>
             <tr><td>Payments</td><td>{(detail.payments || []).length} · Refund requests {(detail.refunds || []).length}</td></tr>
           </tbody></table>
           <div className="actions">
@@ -307,6 +312,19 @@ export default function AdminTab() {
             {detail.birth_lock && <button className="ghost sm" disabled={busy} onClick={() => userAction(detail.uid, `/admin/users/${detail.uid}/reset-birth`, {}, "Birth lock cleared.")}>Reset birth lock</button>}
             <button className="ghost sm" disabled={busy} onClick={() => { if (window.confirm(`Delete user ${detail.email || detail.uid}? This removes their profile, keys and chats.`)) userAction(detail.uid, `/admin/users/${detail.uid}/delete`, {}, "User deleted.", () => { setDetail(null); load(); }); }}>Delete user</button>
           </div>
+          {(detail.jailbreaks || []).length > 0 && (
+            <>
+              <p className="data-h" style={{ marginTop: 16 }}>Jailbreak / injection attempts</p>
+              <table className="data-tbl"><tbody>
+                {detail.jailbreaks.map((j, i) => (
+                  <tr key={i}>
+                    <td className="mono" style={{ whiteSpace: "nowrap" }}>{j.ts ? new Date(j.ts).toLocaleString() : ""}<br /><span style={{ color: "var(--muted)" }}>{j.kind}</span></td>
+                    <td style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{j.text}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </>
+          )}
           {(detail.audit || []).length > 0 && (
             <>
               <p className="data-h" style={{ marginTop: 16 }}>Recent admin actions on this user</p>
