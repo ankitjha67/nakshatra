@@ -222,7 +222,7 @@ class Store:
     # api keys (programmatic / B2B)
     def get_key(self, key: str) -> Optional[ApiKeyRecord]: ...
     def create_key(self, key: str, user_id: str, tier: str) -> ApiKeyRecord: ...
-    def set_tier(self, user_id: str, tier: str) -> None: ...
+    def set_tier(self, user_id: str, tier: str, source: Optional[str] = None) -> None: ...
     # users (Firebase-authenticated; keyed by uid)
     def get_user(self, uid: str) -> Optional[dict]: ...
     def upsert_user(self, uid: str, email: Optional[str], tier: Optional[str] = None) -> dict: ...
@@ -271,6 +271,8 @@ class Store:
     def chat_save_turn(self, uid: str, chat_id: str, chart_hash: str, user_text: str,
                        assistant_text: str, tokens: int, msg_id: str,
                        now: Optional[datetime] = None) -> str: ...
+    # server-authoritative history for grounding (never trust client-supplied turns)
+    def chat_get_turns(self, uid: str, chat_id: str, limit: int = 16) -> list: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -305,12 +307,14 @@ class MemoryStore(Store):
         self.keys[key] = rec
         return rec
 
-    def set_tier(self, user_id, tier):
+    def set_tier(self, user_id, tier, source=None):
         for r in self.keys.values():
             if r.user_id == user_id:
                 r.tier = tier
-        if user_id in self.users:
-            self.users[user_id]["tier"] = tier
+        u = self.users.setdefault(user_id, {"email": "", "tier": tier})
+        u["tier"] = tier
+        if source is not None:
+            u["tier_source"] = source
 
     def get_user(self, uid):
         return self.users.get(uid)
@@ -465,12 +469,18 @@ class MemoryStore(Store):
     def chat_save_turn(self, uid, chat_id, chart_hash, user_text, assistant_text, tokens, msg_id, now=None):
         now = now or _now()
         exp = _chat_expire_at(now)
+        base = int(now.timestamp() * 1_000_000)   # seq: total order, user before assistant
         c = self.chats.setdefault(uid, {}).setdefault(
             chat_id, {"chart_hash": chart_hash, "created_at": now, "messages": []})
-        c["messages"].append({"role": "user", "text": user_text, "tokens": None, "ts": now, "expireAt": exp})
-        c["messages"].append({"role": "assistant", "text": assistant_text,
-                              "tokens": int(tokens), "ts": now, "id": msg_id, "expireAt": exp})
+        c["messages"].append({"role": "user", "text": user_text, "tokens": None, "ts": now, "seq": base, "expireAt": exp})
+        c["messages"].append({"role": "assistant", "text": assistant_text, "tokens": int(tokens),
+                              "ts": now, "seq": base + 1, "id": msg_id, "expireAt": exp})
         return chat_id
+
+    def chat_get_turns(self, uid, chat_id, limit=16):
+        msgs = self.chats.get(uid, {}).get(chat_id, {}).get("messages", [])
+        msgs = sorted(msgs, key=lambda m: m.get("seq", 0))[-limit:]
+        return [{"role": m["role"], "text": m["text"]} for m in msgs]
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -527,10 +537,14 @@ class FirestoreStore(Store):
             {"user_id": user_id, "tier": tier, "disabled": False, "prefix": key[:8]})
         return ApiKeyRecord(key=key, user_id=user_id, tier=tier)
 
-    def set_tier(self, user_id, tier):
-        self._db.collection("users").document(user_id).set({"tier": tier}, merge=True)
-        for doc in self._db.collection("api_keys").where("user_id", "==", user_id).stream():
-            doc.reference.set({"tier": tier}, merge=True)
+    def set_tier(self, user_id, tier, source=None):
+        doc = {"tier": tier}
+        if source is not None:
+            doc["tier_source"] = source
+            doc["tier_set_at"] = _now()
+        self._db.collection("users").document(user_id).set(doc, merge=True)
+        for d in self._db.collection("api_keys").where("user_id", "==", user_id).stream():
+            d.reference.set({"tier": tier}, merge=True)
 
     # --- users ---
     def get_user(self, uid):
@@ -771,14 +785,24 @@ class FirestoreStore(Store):
         chat_ref.set({"chart_hash": chart_hash, "created_at": now}, merge=True)
         msgs = chat_ref.collection("messages")
         exp = _chat_expire_at(now)   # set a Firestore TTL policy on `expireAt` to auto-purge
-        u = {"role": "user", "text": user_text, "tokens": None, "ts": now}
-        a = {"role": "assistant", "text": assistant_text, "tokens": int(tokens), "ts": now, "id": msg_id}
+        base = int(now.timestamp() * 1_000_000)   # seq: total order for server-side history
+        u = {"role": "user", "text": user_text, "tokens": None, "ts": now, "seq": base}
+        a = {"role": "assistant", "text": assistant_text, "tokens": int(tokens), "ts": now, "seq": base + 1, "id": msg_id}
         if exp:
             u["expireAt"] = exp
             a["expireAt"] = exp
         msgs.document().set(u)
         msgs.document().set(a)
         return chat_id
+
+    def chat_get_turns(self, uid, chat_id, limit=16):
+        msgs = (self._db.collection("users").document(uid)
+                .collection("chats").document(chat_id).collection("messages"))
+        try:
+            rows = [d.to_dict() for d in msgs.order_by("seq").stream()]
+        except Exception:  # noqa: BLE001, missing index / legacy docs without seq -> best effort
+            rows = sorted((d.to_dict() for d in msgs.stream()), key=lambda m: m.get("seq", 0))
+        return [{"role": m.get("role"), "text": m.get("text")} for m in rows[-limit:]]
 
     def mark_payment_processed(self, payment_id):
         # Atomic check-and-set so concurrent webhook retries can't double-credit.

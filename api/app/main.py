@@ -206,7 +206,12 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     # model can't reveal a higher tier (or anything else) that isn't in its context.
     chart = get_chart(req.birth).chart
     findings = filter_findings(derive_findings(chart), p.tier.sections)
-    history = [m.model_dump() for m in req.history]
+    # Server-authoritative history: load prior turns from the store by chat_id; the
+    # client-supplied req.history is IGNORED for grounding so a crafted client can't
+    # inject fake turns. (Stateless if persistence is off or it's a new conversation.)
+    chat_id = req.chat_id or uuid.uuid4().hex
+    history = (store.chat_get_turns(p.user_id, chat_id, limit=16)
+               if (req.chat_id and s.persist_chat) else [])
     answer, _model, ti, to = chat_answer(findings, history, req.message, s.chat_max_output)
     cost = int(ti) + int(to)
 
@@ -215,7 +220,6 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     bal2 = store.credit_debit(p.user_id, p.tier, cost, reason="chat turn", ref=msg_id)
 
     # --- persist the turn (best-effort, opt-out via PERSIST_CHAT; not the money path) ---
-    chat_id = req.chat_id or uuid.uuid4().hex
     if s.persist_chat:
         try:
             store.chat_save_turn(p.user_id, chat_id, req.birth.chart_hash(),
@@ -445,6 +449,7 @@ def create_key(req: KeyRequest, _: None = Depends(require_admin)):
 class UserTierRequest(BaseModel):
     uid: str
     tier: str
+    source: Optional[str] = Field(None, max_length=32, description="e.g. 'payment', 'beta', 'admin'")
 
 
 @app.post("/admin/users/tier")
@@ -454,8 +459,52 @@ def set_user_tier(req: UserTierRequest, _: None = Depends(require_admin)):
         raise HTTPException(400, f"Unknown tier; choose from {list(TIERS)}")
     store = get_store()
     store.upsert_user(req.uid, None)
-    store.set_tier(req.uid, req.tier)
-    return {"uid": req.uid, "tier": req.tier}
+    store.set_tier(req.uid, req.tier, source=req.source)
+    return {"uid": req.uid, "tier": req.tier, "source": req.source}
+
+
+# --------------------------------------------------------------------------- #
+# beta cohort: grant a few users elevated access for feedback, tagged so they
+# can be revoked en masse before switching to live Razorpay billing.
+# --------------------------------------------------------------------------- #
+class BetaGrantRequest(BaseModel):
+    uid: str
+    tier: str = "enterprise"
+
+
+@app.post("/admin/beta/grant")
+def beta_grant(req: BetaGrantRequest, _: None = Depends(require_admin)):
+    """Grant a user elevated access tagged tier_source='beta' (reversible later)."""
+    if req.tier not in TIERS:
+        raise HTTPException(400, f"Unknown tier; choose from {list(TIERS)}")
+    store = get_store()
+    store.upsert_user(req.uid, None)
+    store.set_tier(req.uid, req.tier, source="beta")
+    return {"uid": req.uid, "tier": req.tier, "source": "beta"}
+
+
+@app.get("/admin/beta")
+def beta_list(_: None = Depends(require_admin)):
+    """List the current beta-tagged users (for review before revoking)."""
+    users = [u for u in get_store().list_users() if (u or {}).get("tier_source") == "beta"]
+    return {"count": len(users),
+            "users": [{"uid": u.get("uid") or u.get("id"), "email": u.get("email"),
+                       "tier": u.get("tier")} for u in users]}
+
+
+@app.post("/admin/beta/revoke")
+def beta_revoke(_: None = Depends(require_admin)):
+    """Revoke ALL beta-tagged users back to free (run when going live on Razorpay).
+    Only touches users tagged tier_source='beta', real paying users are untouched."""
+    store = get_store()
+    revoked = []
+    for u in store.list_users():
+        if (u or {}).get("tier_source") == "beta":
+            uid = u.get("uid") or u.get("id")
+            if uid:
+                store.set_tier(uid, "free", source="revoked")
+                revoked.append(uid)
+    return {"revoked": len(revoked), "uids": revoked}
 
 
 @app.post("/webhooks/payments")
