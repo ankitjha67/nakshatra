@@ -19,13 +19,30 @@ async function authHeaders(path = "") {
   return { Authorization: `Bearer ${await user.getIdToken(true)}` };
 }
 
+// FastAPI errors come in two shapes: {detail: "msg"} (our HTTPExceptions) and
+// {detail: [{loc, msg}, ...]} (422 validation). Normalize BOTH to a readable string
+// so the UI never renders "[object Object]".
+function extractDetail(body) {
+  const d = body && body.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    return d.map((e) => (e && e.msg) ? e.msg.replace(/^Value error,\s*/i, "") : (typeof e === "string" ? e : ""))
+      .filter(Boolean).join("; ");
+  }
+  if (d && typeof d === "object" && d.msg) return d.msg;
+  return "";
+}
+
 async function handle(res) {
   if (!res.ok) {
     let detail = "";
-    try { detail = (await res.json()).detail || ""; } catch {}
+    try { detail = extractDetail(await res.json()); } catch {}
     const map = {
+      400: detail || "That request couldn't be processed.",
       401: "Session expired, sign out and back in.",
       402: detail || "Your plan doesn't include this yet.",
+      413: "That message is too long, please shorten it.",
+      422: detail || "Please check your input and try again.",
       429: detail || "Limit reached, try again shortly.",
     };
     const err = new Error(map[res.status] || detail || `Request failed (${res.status}).`);
