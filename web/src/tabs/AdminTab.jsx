@@ -15,12 +15,21 @@ export default function AdminTab() {
   const [tierUid, setTierUid] = useState("");
   const [tierVal, setTierVal] = useState("enterprise");
   const [betaUid, setBetaUid] = useState("");
+  const [codes, setCodes] = useState([]);
+  const [generated, setGenerated] = useState([]);     // plaintext, shown once
+  const [cKind, setCKind] = useState("beta");
+  const [cCount, setCCount] = useState(20);
+  const [cTier, setCTier] = useState("enterprise");
+  const [cDiscount, setCDiscount] = useState(20);
+  const [cUses, setCUses] = useState(1);
+  const [cExpiry, setCExpiry] = useState(30);
 
   const load = () => {
     setErr("");
     apiGet("/admin/stats").then(setStats).catch((e) => setErr(e.message));
     apiGet("/admin/anomalies").then((d) => setFlagged(d.flagged || [])).catch(() => {});
     apiGet("/admin/beta").then(setBeta).catch(() => {});
+    apiGet("/admin/codes").then((d) => setCodes(d.codes || [])).catch(() => {});
   };
   useEffect(load, []);
 
@@ -41,6 +50,14 @@ export default function AdminTab() {
     if (!window.confirm(`Revoke ALL ${beta.count} beta users back to free? Paying users are not affected.`)) return;
     act(() => apiPost("/admin/beta/revoke", {}), (r) => `Revoked ${r.revoked} beta user(s).`);
   };
+  const genCodes = () => act(async () => {
+    const body = { kind: cKind, count: Number(cCount), max_uses: Number(cUses) };
+    if (cExpiry) body.expires_days = Number(cExpiry);
+    if (cKind === "beta") body.tier = cTier; else body.discount_pct = Number(cDiscount);
+    const r = await apiPost("/admin/codes/generate", body);
+    setGenerated(r.codes || []);
+    return r;
+  }, (r) => `Generated ${r.count} ${r.kind} code(s) — copy them now.`);
 
   if (err) {
     return (
@@ -109,6 +126,51 @@ export default function AdminTab() {
             </table>
           ) : <p className="note">No beta users yet. Grant access by Firebase uid; revoke all in one click before going live.</p>}
         </div>
+      </div>
+
+      <p className="kicker" style={{ marginTop: 26 }}>Access codes</p>
+      <div className="admin-panel">
+        <p className="data-h">Generate codes (beta = unlock a tier, discount = % off)</p>
+        <div className="admin-row">
+          <select value={cKind} onChange={(e) => setCKind(e.target.value)}>
+            <option value="beta">beta</option><option value="discount">discount</option>
+          </select>
+          {cKind === "beta" ? (
+            <select value={cTier} onChange={(e) => setCTier(e.target.value)}>
+              {TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          ) : (
+            <input type="number" min="1" max="100" value={cDiscount} onChange={(e) => setCDiscount(e.target.value)} title="discount %" style={{ maxWidth: 90 }} />
+          )}
+          <input type="number" min="1" max="200" value={cCount} onChange={(e) => setCCount(e.target.value)} title="how many" style={{ maxWidth: 90 }} />
+          <input type="number" min="1" max="100000" value={cUses} onChange={(e) => setCUses(e.target.value)} title="uses per code" style={{ maxWidth: 90 }} />
+          <input type="number" min="1" max="3650" value={cExpiry} onChange={(e) => setCExpiry(e.target.value)} title="expires in days" style={{ maxWidth: 110 }} />
+          <button className="sm" disabled={busy} onClick={genCodes}>Generate</button>
+        </div>
+        <p className="note">count · uses/code · expiry(days). Codes are shown once below; only salted hashes are stored.</p>
+        {generated.length > 0 && (
+          <>
+            <p className="note" style={{ color: "var(--brass)" }}>Copy & share now — these won't be shown again:</p>
+            <textarea readOnly rows={Math.min(10, generated.length)} className="mono"
+                      style={{ width: "100%" }} value={generated.join("\n")} onFocus={(e) => e.target.select()} />
+          </>
+        )}
+        {codes.length > 0 && (
+          <table className="admin-tbl" style={{ marginTop: 12 }}>
+            <thead><tr><th>Code id</th><th>Kind</th><th>Grants</th><th>Uses</th><th>Status</th></tr></thead>
+            <tbody>
+              {codes.map((c) => (
+                <tr key={c.id}>
+                  <td className="mono">{c.id}…</td>
+                  <td>{c.kind}</td>
+                  <td>{c.kind === "discount" ? `${c.discount_pct}% off` : c.tier}</td>
+                  <td>{c.uses}/{c.max_uses}</td>
+                  <td>{!c.active ? "inactive" : c.uses >= c.max_uses ? "spent" : "active"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <p className="kicker" style={{ marginTop: 26 }}>Flagged users ({flagged.length})</p>

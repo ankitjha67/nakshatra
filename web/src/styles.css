@@ -173,7 +173,15 @@ button.sm{padding:5px 11px;font-size:12px}
 .admin-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 .admin-row input{flex:1 1 180px;min-width:140px}
 .admin-row select{flex:0 0 auto;width:auto}
+.admin-panel textarea.mono{font-family:"IBM Plex Mono",monospace;font-size:12px;margin-top:8px;
+  background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px}
 @media(max-width:640px){.admin-panels{grid-template-columns:1fr}}
+/* redeem-a-code box (paywall) */
+.redeem{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
+.redeem-label{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.redeem-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.redeem-row input{flex:1 1 220px;font-family:"IBM Plex Mono",monospace;letter-spacing:.04em}
 footer.site{padding:28px 0;border-top:1px solid var(--hair-dark);color:var(--cream-faint);font-size:12px;font-family:"IBM Plex Mono",monospace;margin-top:30px}
 
 /* ------------------------------------------------------------------ */

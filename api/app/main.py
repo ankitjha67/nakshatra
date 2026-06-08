@@ -38,6 +38,7 @@ from .auth import require_principal, delete_firebase_user, require_admin
 from .pipeline import get_chart, get_reading
 from .anchor import derive_anchor
 from .gating import filter_chart_for_features, filter_findings
+from .codes import generate_plaintext, hash_code
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
@@ -505,6 +506,78 @@ def beta_revoke(_: None = Depends(require_admin)):
                 store.set_tier(uid, "free", source="revoked")
                 revoked.append(uid)
     return {"revoked": len(revoked), "uids": revoked}
+
+
+# --------------------------------------------------------------------------- #
+# access codes: hashed beta / discount codes. Admin generates (plaintext shown
+# once); users redeem to unlock. Only salted hashes are stored, so a DB leak
+# reveals neither the codes nor the order issued.
+# --------------------------------------------------------------------------- #
+class CodeGenRequest(BaseModel):
+    kind: Literal["beta", "discount"] = "beta"
+    count: int = Field(1, ge=1, le=200)
+    tier: str = "enterprise"                      # beta codes grant this tier
+    discount_pct: int = Field(0, ge=0, le=100)    # discount codes give this % off
+    max_uses: int = Field(1, ge=1, le=100_000)
+    expires_days: Optional[int] = Field(None, ge=1, le=3650)
+
+
+@app.post("/admin/codes/generate")
+def codes_generate(req: CodeGenRequest, _: None = Depends(require_admin)):
+    if req.kind == "beta" and req.tier not in TIERS:
+        raise HTTPException(400, f"Unknown tier; choose from {list(TIERS)}")
+    if req.kind == "discount" and not (1 <= req.discount_pct <= 100):
+        raise HTTPException(400, "discount_pct must be 1-100 for a discount code")
+    store = get_store()
+    now = datetime.now(timezone.utc)
+    exp = (now + timedelta(days=req.expires_days)).isoformat() if req.expires_days else None
+    plaintext = []
+    for _i in range(req.count):
+        code = generate_plaintext()
+        meta = {"kind": req.kind, "max_uses": req.max_uses, "uses": 0, "redeemed_by": [],
+                "active": True, "expires_at": exp, "created_at": now.isoformat()}
+        if req.kind == "beta":
+            meta["tier"] = req.tier
+        else:
+            meta["discount_pct"] = req.discount_pct
+        store.code_create(hash_code(code), meta)
+        plaintext.append(code)
+    return {"kind": req.kind, "count": len(plaintext), "codes": plaintext,
+            "note": "Shown once. Copy and share now, only salted hashes are stored."}
+
+
+@app.get("/admin/codes")
+def codes_list(_: None = Depends(require_admin)):
+    """Redacted code list (hash-prefix id + metadata; never the plaintext)."""
+    return {"codes": get_store().list_codes()}
+
+
+class RedeemRequest(BaseModel):
+    code: str = Field(..., min_length=4, max_length=64)
+
+
+@app.post("/v1/redeem")
+def redeem(req: RedeemRequest, p: Principal = Depends(require_principal)):
+    """Redeem a beta (tier-granting) or discount code. Rate-limited; generic
+    errors so it can't be used to enumerate codes."""
+    enforce_quota(p)
+    store = get_store()
+    res = store.code_redeem(hash_code(req.code), p.user_id)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("reason") or "Invalid code.")
+    meta = res["meta"]
+    if meta.get("kind") == "discount":
+        pct = int(meta.get("discount_pct", 0))
+        store.set_discount(p.user_id, pct)
+        return {"kind": "discount", "discount_pct": pct,
+                "message": f"{pct}% discount applied to your next subscription."}
+    tier = meta.get("tier", "enterprise")
+    if tier not in TIERS:
+        tier = "enterprise"
+    store.upsert_user(p.user_id, None)
+    store.set_tier(p.user_id, tier, source="beta")   # revocable via /admin/beta/revoke
+    return {"kind": "beta", "granted": tier,
+            "message": f"Access unlocked: {TIERS[tier].label}."}
 
 
 @app.post("/webhooks/payments")
