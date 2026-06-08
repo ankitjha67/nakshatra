@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, lazy, Suspense } from "react";
 import { auth, firebaseReady, PREVIEW } from "./lib/firebase.js";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getTiers, apiGet } from "./lib/api.js";
 import SignIn from "./components/SignIn.jsx";
 import CreditsWidget from "./components/CreditsWidget.jsx";
+import RedeemCode from "./components/RedeemCode.jsx";
 import ReadingTab from "./tabs/ReadingTab.jsx";
 import ChatTab from "./tabs/ChatTab.jsx";
 import PrashnaTab from "./tabs/PrashnaTab.jsx";
 import BtrTab from "./tabs/BtrTab.jsx";
-import AdminTab from "./tabs/AdminTab.jsx";
+// Admin is a SEPARATE lazy chunk: a non-admin's browser never downloads the admin
+// code, and every /admin endpoint is server-side admin-gated (403) regardless.
+const AdminTab = lazy(() => import("./tabs/AdminTab.jsx"));
 
 const RANK = { free: 0, basic: 1, pro: 2, enterprise: 3 };
 
@@ -33,8 +36,9 @@ const TABS = [
     render: () => <BtrTab /> },
 ];
 
-// Shown only to admins (gated by /admin/ping).
-const ADMIN_TAB = { key: "admin", label: "Admin", min: "free", render: () => <AdminTab /> };
+// Shown only to admins (gated by /admin/ping); lazy chunk loads only when opened.
+const ADMIN_TAB = { key: "admin", label: "Admin", min: "free",
+  render: () => <Suspense fallback={<p className="loader" style={{ paddingTop: 20 }}>Loading admin…</p>}><AdminTab /></Suspense> };
 
 export default function App() {
   const [user, setUser] = useState(undefined);
@@ -54,6 +58,11 @@ export default function App() {
   // Tier catalog (pricing + per-tier sections) drives the paywall cards.
   useEffect(() => { getTiers().then((r) => setTiers(r?.tiers || [])).catch(() => {}); }, []);
 
+  // Refetch entitlements + balance (after redeeming a code, tier/credits change).
+  const refreshMe = () => {
+    apiGet("/v1/me").then(setMe).catch(() => {});
+    apiGet("/v1/credits").then(setBalance).catch(() => {});
+  };
   // Load the credit balance once signed in (chat turns then keep it live).
   useEffect(() => { if (user) apiGet("/v1/credits").then(setBalance).catch(() => {}); }, [user]);
   // The user's real tier + feature entitlements drive paywalls and feature gating.
@@ -110,7 +119,7 @@ export default function App() {
             ))}
           </nav>
 
-          {locked(active.min) ? <Paywall tab={active} tiers={tiers} /> : active.render(ctx)}
+          {locked(active.min) ? <Paywall tab={active} tiers={tiers} onRedeemed={refreshMe} /> : active.render(ctx)}
         </>
       )}
 
@@ -130,7 +139,7 @@ function LockIcon() {
 }
 
 // Paywall card for a locked tab, pricing and included sections come from /v1/tiers.
-function Paywall({ tab, tiers }) {
+function Paywall({ tab, tiers, onRedeemed }) {
   const t = tiers.find((x) => x.key === tab.min);
   const name = t ? t.label : tab.min;
   return (
@@ -144,6 +153,7 @@ function Paywall({ tab, tiers }) {
         <p className="note">{name} includes: {t.sections.join(" · ")}</p>
       )}
       {t && t.allowance_note && <p className="note">{t.allowance_note}</p>}
+      <RedeemCode onRedeemed={onRedeemed} />
     </div>
   );
 }

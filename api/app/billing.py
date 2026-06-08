@@ -32,6 +32,33 @@ def _chat_expire_at(now: datetime) -> Optional[datetime]:
     return now + timedelta(days=days) if days and days > 0 else None
 
 
+def _code_redeem_check(meta: Optional[dict], uid: str, now: datetime) -> Optional[str]:
+    """Return an error reason if a code can't be redeemed by `uid`, else None.
+    Errors are deliberately generic so the endpoint can't be used to enumerate codes."""
+    if not meta or not meta.get("active", True):
+        return "Invalid or inactive code."
+    exp = meta.get("expires_at")
+    if exp:
+        try:
+            if now > datetime.fromisoformat(exp):
+                return "This code has expired."
+        except Exception:  # noqa: BLE001, bad/legacy stamp -> treat as non-expiring
+            pass
+    if uid in (meta.get("redeemed_by") or []):
+        return "You have already redeemed this code."
+    if int(meta.get("uses", 0)) >= int(meta.get("max_uses", 1)):
+        return "This code has been fully redeemed."
+    return None
+
+
+def _code_redacted(code_hash: str, meta: dict) -> dict:
+    """Admin-facing view of a code: never the plaintext (only a hash prefix id)."""
+    return {"id": code_hash[:10], "kind": meta.get("kind"), "tier": meta.get("tier"),
+            "discount_pct": meta.get("discount_pct"), "uses": meta.get("uses", 0),
+            "max_uses": meta.get("max_uses", 1), "active": meta.get("active", True),
+            "expires_at": meta.get("expires_at"), "created_at": meta.get("created_at")}
+
+
 # --------------------------------------------------------------------------- #
 # tiers
 # --------------------------------------------------------------------------- #
@@ -273,6 +300,11 @@ class Store:
                        now: Optional[datetime] = None) -> str: ...
     # server-authoritative history for grounding (never trust client-supplied turns)
     def chat_get_turns(self, uid: str, chat_id: str, limit: int = 16) -> list: ...
+    # access codes (beta / discount), persisted hashed
+    def code_create(self, code_hash: str, meta: dict) -> None: ...
+    def list_codes(self) -> list: ...
+    def code_redeem(self, code_hash: str, uid: str, now: Optional[datetime] = None) -> dict: ...
+    def set_discount(self, uid: str, pct: int, code_hash: Optional[str] = None) -> None: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -294,6 +326,7 @@ class MemoryStore(Store):
     chats: dict[str, dict] = field(default_factory=dict)
     processed_payments: set = field(default_factory=set)
     global_usage: dict = field(default_factory=dict)   # date -> total tokens
+    codes: dict[str, dict] = field(default_factory=dict)   # code_hash -> meta (beta/discount)
     payments: dict = field(default_factory=dict)        # payment_id -> record
     refund_requests: dict = field(default_factory=dict)  # req_id -> record
     activity: dict = field(default_factory=dict)         # uid -> {last_ip, ips, last_seen, requests}
@@ -481,6 +514,29 @@ class MemoryStore(Store):
         msgs = self.chats.get(uid, {}).get(chat_id, {}).get("messages", [])
         msgs = sorted(msgs, key=lambda m: m.get("seq", 0))[-limit:]
         return [{"role": m["role"], "text": m["text"]} for m in msgs]
+
+    # --- access codes ---
+    def code_create(self, code_hash, meta):
+        self.codes[code_hash] = dict(meta)
+
+    def list_codes(self):
+        return [_code_redacted(h, m) for h, m in self.codes.items()]
+
+    def code_redeem(self, code_hash, uid, now=None):
+        now = now or _now()
+        meta = self.codes.get(code_hash)
+        err = _code_redeem_check(meta, uid, now)
+        if err:
+            return {"ok": False, "reason": err}
+        meta["uses"] = int(meta.get("uses", 0)) + 1
+        meta.setdefault("redeemed_by", []).append(uid)
+        return {"ok": True, "meta": dict(meta)}
+
+    def set_discount(self, uid, pct, code_hash=None):
+        u = self.users.setdefault(uid, {"email": "", "tier": "free"})
+        u["discount_pct"] = int(pct)
+        if code_hash:
+            u["discount_code"] = code_hash[:10]
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -803,6 +859,40 @@ class FirestoreStore(Store):
         except Exception:  # noqa: BLE001, missing index / legacy docs without seq -> best effort
             rows = sorted((d.to_dict() for d in msgs.stream()), key=lambda m: m.get("seq", 0))
         return [{"role": m.get("role"), "text": m.get("text")} for m in rows[-limit:]]
+
+    # --- access codes ---
+    def code_create(self, code_hash, meta):
+        self._db.collection("codes").document(code_hash).set(dict(meta))
+
+    def list_codes(self):
+        return [_code_redacted(d.id, d.to_dict() or {}) for d in self._db.collection("codes").stream()]
+
+    def code_redeem(self, code_hash, uid, now=None):
+        now = now or _now()
+        ref = self._db.collection("codes").document(code_hash)
+        fs = self._fs
+
+        @fs.transactional
+        def _run(transaction):
+            snap = ref.get(transaction=transaction)
+            meta = snap.to_dict() if snap.exists else None
+            err = _code_redeem_check(meta, uid, now)
+            if err:
+                return {"ok": False, "reason": err}
+            transaction.update(ref, {
+                "uses": int(meta.get("uses", 0)) + 1,
+                "redeemed_by": (meta.get("redeemed_by") or []) + [uid],
+            })
+            meta["uses"] = int(meta.get("uses", 0)) + 1
+            return {"ok": True, "meta": meta}
+
+        return _run(self._db.transaction())
+
+    def set_discount(self, uid, pct, code_hash=None):
+        doc = {"discount_pct": int(pct)}
+        if code_hash:
+            doc["discount_code"] = code_hash[:10]
+        self._db.collection("users").document(uid).set(doc, merge=True)
 
     def mark_payment_processed(self, payment_id):
         # Atomic check-and-set so concurrent webhook retries can't double-credit.
