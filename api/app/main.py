@@ -36,6 +36,7 @@ from .billing import (
 )
 from .auth import require_principal, delete_firebase_user, require_admin
 from .pipeline import get_chart, get_reading
+from .anchor import derive_anchor
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
@@ -125,6 +126,17 @@ def chart(birth: BirthDetails, p: Principal = Depends(require_principal)):
     resp = get_chart(birth)
     get_store().record(p.key, 0, 0, reading=False)
     return resp
+
+
+@app.post("/v1/anchor")
+def anchor(birth: BirthDetails, p: Principal = Depends(require_principal)):
+    """Maha-Jyotish anchor verification block (Tropical vs Sidereal Asc/Moon,
+    Nakshatra lock, danger flags). Cheap, engine-only, no LLM, no credit debit,
+    shown for the user to verify against an external panchang before the reading."""
+    enforce_quota(p)
+    resp = get_chart(birth)
+    get_store().record(p.key, 0, 0, reading=False)
+    return {"anchor": derive_anchor(resp.chart, birth), "meta": resp.meta}
 
 
 @app.post("/v1/reading", response_model=ReadingResponse)

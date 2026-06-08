@@ -1,0 +1,142 @@
+import React from "react";
+
+// Factual chart-data tables shown alongside the reading (like the birth charts,
+// these are raw computed facts for trust, not interpretation, that stays in the
+// reading). Reads the engine chart JSON defensively; each block hides itself if
+// its data isn't present, so it works with the mock and the real engine alike.
+const GRAHA_ORDER = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"];
+const KP_HIGHLIGHT = ["H1", "H6", "H7", "H10", "H11", "H12"];
+
+function fmtStatus(st) {
+  if (!st) return "Normal";
+  const bits = [];
+  const dig = st.dignity || "Normal";
+  if (dig && dig !== "Normal") bits.push(dig);
+  if (st.retrograde) bits.push("Retrograde");
+  if (st.combust) bits.push("Combust");
+  if (st.gandanta) bits.push("Gandanta");
+  if (st.mrityu_bhaga) bits.push("Mrityu Bhaga");
+  return bits.length ? bits.join(", ") : "Normal";
+}
+
+function date(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  return isNaN(d) ? s : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+export default function ChartData({ chart }) {
+  if (!chart) return null;
+  const cb = chart.chart || chart;
+  const planets = cb.planets || {};
+  const asc = cb.asc || {};
+  const karakas = chart.jaimini_karakas || {};
+  const ds = chart.dasha_systems || {};
+  const vim = (ds.vimshottari || {}).current || {};
+  const yog = (ds.yogini || {}).current || {};
+  const jc = (ds.jaimini_chara || {}).current || {};
+  const cusps = (chart.kp_significators || {}).cusps || {};
+  const num = chart.numerology || {};
+
+  const hasPlanets = Object.keys(planets).length > 0;
+  const hasKarakas = Object.keys(karakas).length > 0;
+  const hasDasha = vim.mahadasha || yog.yogini || jc.sign;
+  const hasKp = Object.keys(cusps).length > 0;
+  const hasNum = num.psychic != null || num.destiny != null;
+  if (!hasPlanets && !hasDasha && !hasKp && !hasNum) return null;
+
+  return (
+    <div className="sheet">
+      <p className="kicker">Chart data</p>
+
+      {hasPlanets && (
+        <div className="data-block">
+          <p className="data-h">Planetary positions</p>
+          <table className="data-tbl">
+            <thead><tr><th>Body</th><th>Sign</th><th>Nakshatra</th><th>Status</th></tr></thead>
+            <tbody>
+              {asc.sign && (
+                <tr><td>Ascendant</td><td>{asc.sign}</td><td>{asc.nakshatra || ""}</td><td>—</td></tr>
+              )}
+              {GRAHA_ORDER.filter((g) => planets[g]).map((g) => {
+                const p = planets[g];
+                return (
+                  <tr key={g}>
+                    <td>{g}</td><td>{p.sign}</td>
+                    <td>{p.nakshatra || ""}{p.pada ? ` (${p.pada})` : ""}</td>
+                    <td>{fmtStatus(p.status)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasKarakas && (
+        <div className="data-block">
+          <p className="data-h">Jaimini karakas</p>
+          <table className="data-tbl">
+            <thead><tr><th>Karaka</th><th>Planet</th><th>Sign</th></tr></thead>
+            <tbody>
+              {Object.keys(karakas).map((k) => (
+                <tr key={k}><td>{k}</td><td>{karakas[k].planet}</td><td>{karakas[k].sign}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasDasha && (
+        <div className="data-block">
+          <p className="data-h">Dasha periods</p>
+          <table className="data-tbl">
+            <thead><tr><th>System</th><th>Running</th><th>Window</th></tr></thead>
+            <tbody>
+              {vim.mahadasha && (
+                <tr><td>Vimshottari Maha</td><td>{vim.mahadasha}</td><td>{date(vim.md_start)} – {date(vim.md_end)}</td></tr>
+              )}
+              {vim.antardasha && (
+                <tr><td>Vimshottari Antar</td><td>{vim.mahadasha} / {vim.antardasha}</td><td>{date(vim.ad_start)} – {date(vim.ad_end)}</td></tr>
+              )}
+              {yog.yogini && (
+                <tr><td>Yogini</td><td>{yog.yogini}{yog.lord ? ` (${yog.lord})` : ""}</td><td>{date(yog.start)} – {date(yog.end)}</td></tr>
+              )}
+              {jc.sign && (
+                <tr><td>Jaimini Chara</td><td>{jc.sign}</td><td>{date(jc.start)} – {date(jc.end)}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasKp && (
+        <div className="data-block">
+          <p className="data-h">KP cusp highlights</p>
+          <table className="data-tbl">
+            <thead><tr><th>House</th><th>Sign</th><th>Star</th><th>Sub</th><th>SSL</th></tr></thead>
+            <tbody>
+              {KP_HIGHLIGHT.filter((h) => cusps[h]).map((h) => {
+                const c = cusps[h];
+                return <tr key={h}><td>{h}</td><td>{c.sign || ""}</td><td>{c.star || ""}</td><td>{c.sub || ""}</td><td>{c.ssl || ""}</td></tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasNum && (
+        <div className="data-block">
+          <p className="data-h">Chaldean numerology</p>
+          <table className="data-tbl">
+            <tbody>
+              {num.psychic != null && <tr><td>Psychic number</td><td>{num.psychic}</td></tr>}
+              {num.destiny != null && <tr><td>Destiny number</td><td>{num.destiny}</td></tr>}
+              {num.name_compound != null && <tr><td>Name compound</td><td>{num.name_compound}{num.name_reduced ? ` → ${num.name_reduced}` : ""}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

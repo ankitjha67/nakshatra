@@ -205,6 +205,73 @@ def compute_mock_chart(birth: dict) -> dict[str, Any]:
             break
         ad_cursor = end
 
+    # --- divisional charts (illustrative mock; the real engine gives true vargas) ---
+    def _vsign(longitude: float, n: int) -> int:
+        part = int((longitude % 30) / (30.0 / n))
+        return (int(longitude // 30) + part) % 12
+    vargas: dict[str, dict] = {}
+    for tag, n in (("D9", 9), ("D10", 10), ("D24", 24)):
+        v = {"Lagna": {"sign": SIGNS[_vsign(asc_lon, n)]}}
+        for g in GRAHAS:
+            v[g] = {"sign": SIGNS[_vsign(lon[g], n)]}
+        vargas[tag] = v
+
+    # --- full 7-karaka Jaimini scheme (highest degree-in-sign = Atmakaraka) ---
+    kara_order = sorted(seven, key=lambda g: deg[g], reverse=True)
+    kara_names = ["Atmakaraka", "Amatyakaraka", "Bhratrikaraka", "Matrikaraka",
+                  "Putrakaraka", "Gnatikaraka", "Darakaraka"]
+    jaimini = {nm: {"planet": g, "sign": SIGNS[sign_idx[g] - 1], "degree_in_sign": deg[g]}
+               for nm, g in zip(kara_names, kara_order)}
+
+    # --- Yogini dasha (8-fold) ---
+    YOGINI = [("Mangala", "Moon"), ("Pingala", "Sun"), ("Dhanya", "Jupiter"),
+              ("Bhramari", "Mars"), ("Bhadrika", "Mercury"), ("Ulka", "Saturn"),
+              ("Siddha", "Venus"), ("Sankata", "Rahu")]
+    yi = (NAKSHATRAS.index(moon_nak) + 3) % 8
+    yc, yk, yseq = bdate, yi, []
+    while yc <= today + timedelta(days=1):
+        nm, ld = YOGINI[yk % 8]
+        ye = yc + timedelta(days=int(((yk % 8) + 1) * 365.25))
+        yseq.append((nm, ld, yc, ye)); yc, yk = ye, yk + 1
+    ycur = next((p for p in yseq if p[2] <= today < p[3]), yseq[-1])
+
+    # --- Jaimini Chara dasha (sign-based) ---
+    cc, ci, cseq = bdate, asc_idx - 1, []
+    while cc <= today + timedelta(days=1):
+        ce = cc + timedelta(days=int(((ci % 12) + 1) * 365.25))
+        cseq.append((SIGNS[ci % 12], cc, ce)); cc, ci = ce, ci + 1
+    ccur = next((p for p in cseq if p[1] <= today < p[2]), cseq[-1])
+
+    # --- Chaldean numerology ---
+    CHALDEAN = {**dict.fromkeys("AIJQY", 1), **dict.fromkeys("BKR", 2),
+                **dict.fromkeys("CGLS", 3), **dict.fromkeys("DMT", 4),
+                **dict.fromkeys("EHNX", 5), **dict.fromkeys("UVW", 6),
+                **dict.fromkeys("OZ", 7), **dict.fromkeys("FP", 8)}
+
+    def _reduce(num: int) -> int:
+        while num > 9:
+            num = sum(int(d) for d in str(num))
+        return num
+    nm_raw = (birth.get("name") or "").upper()
+    name_compound = sum(CHALDEAN.get(ch, 0) for ch in nm_raw if ch.isalpha())
+    numerology = {
+        "psychic": _reduce(bdate.day),
+        "destiny": _reduce(sum(int(c) for c in bdate.strftime("%d%m%Y"))),
+        "name_compound": name_compound,
+        "name_reduced": _reduce(name_compound) if name_compound else 0,
+    }
+
+    # --- KP cuspal sub-lords (mock star/sub/ssl per house) ---
+    kp_cusps = {}
+    for h in range(1, 13):
+        csign = (asc_idx - 1 + (h - 1)) % 12
+        kp_cusps[f"H{h}"] = {
+            "sign": SIGNS[csign],
+            "star": NAKSHATRA_LORD[(csign * 2 + h) % 27 + 1],
+            "sub": order[(h + 1) % 9],
+            "ssl": order[(h + 4) % 9],
+        }
+
     return {
         "engine": "mock",
         "input": {k: birth.get(k) for k in ("name", "date", "time", "tz", "lat", "lon")},
@@ -216,17 +283,29 @@ def compute_mock_chart(birth: dict) -> dict[str, Any]:
         },
         "yogas": {"detected": detected},
         "conjunctions": conjunctions,
-        "jaimini_karakas": {"Atmakaraka": {"planet": ak, "sign": SIGNS[sign_idx[ak] - 1]}},
+        "vargas": vargas,
+        "jaimini_karakas": jaimini,
+        "numerology": numerology,
+        "kp_significators": {"cusps": kp_cusps},
         "sade_sati": {"active": ss_active, "phase": ss_phase},
         "danger_zones": {"gandanta_planets": gz},
-        "dasha_systems": {"vimshottari": {"current": {
-            "mahadasha": maha_lord,
-            "md_start": m_start.isoformat(),
-            "md_end": m_end.isoformat(),
-            "antardasha": antar_lord,
-            "ad_start": ad_start.isoformat(),
-            "ad_end": ad_end.isoformat(),
-        }}},
+        "dasha_systems": {
+            "vimshottari": {"current": {
+                "mahadasha": maha_lord,
+                "md_start": m_start.isoformat(),
+                "md_end": m_end.isoformat(),
+                "antardasha": antar_lord,
+                "ad_start": ad_start.isoformat(),
+                "ad_end": ad_end.isoformat(),
+            }},
+            "yogini": {"current": {
+                "yogini": ycur[0], "lord": ycur[1],
+                "start": ycur[2].isoformat(), "end": ycur[3].isoformat(),
+            }},
+            "jaimini_chara": {"current": {
+                "sign": ccur[0], "start": ccur[1].isoformat(), "end": ccur[2].isoformat(),
+            }},
+        },
         "_engine": "mock",
     }
 

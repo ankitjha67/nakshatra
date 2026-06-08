@@ -1,25 +1,42 @@
-import React from "react";
+import React, { useState } from "react";
 
 // Original, code-rendered birth-chart diagrams (no images): North Indian (diamond),
 // South Indian (grid), and Western (wheel). All whole-sign, computed from the
-// engine chart JSON (ascendant + planet signs).
+// engine chart JSON (ascendant + planet signs). Supports the D1 Rashi chart and
+// the divisional vargas (D9 Navamsa, D10 Dasamsa, ...) when the engine supplies them.
 const SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
   "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"];
 const ABBR = { Sun: "Su", Moon: "Mo", Mars: "Ma", Mercury: "Me", Jupiter: "Ju", Venus: "Ve", Saturn: "Sa", Rahu: "Ra", Ketu: "Ke" };
+const VARGA_LABEL = { D1: "D1 Rashi", D9: "D9 Navamsa", D10: "D10 Dasamsa", D24: "D24 Chaturvimsamsa" };
 const sidx = (s) => SIGNS.indexOf(s);
 
-function placements(chart) {
+// Source signs for a varga: D1 reads chart.asc + chart.planets; Dxx reads
+// chart.vargas[Dxx] = {Lagna:{sign}, NAME:{sign}}.
+function placements(chart, varga = "D1") {
   const cb = (chart && chart.chart) || chart || {};
-  const ascSign = (cb.asc && cb.asc.sign) || cb.ascendant || "Aries";
+  let ascSign, planets;
+  if (varga === "D1") {
+    ascSign = (cb.asc && cb.asc.sign) || cb.ascendant || "Aries";
+    planets = cb.planets || {};
+  } else {
+    const v = ((chart && chart.vargas) || cb.vargas || {})[varga] || {};
+    ascSign = (v.Lagna && v.Lagna.sign) || "Aries";
+    planets = v;
+  }
   const ascIdx = Math.max(0, sidx(ascSign));
-  const planets = cb.planets || {};
   const bySign = Array.from({ length: 12 }, () => []);
   Object.keys(planets).forEach((name) => {
+    if (name === "Lagna") return;
     const s = planets[name] && planets[name].sign;
     const i = sidx(s);
     if (i >= 0 && ABBR[name]) bySign[i].push(ABBR[name]);
   });
   return { ascIdx, bySign };
+}
+
+function availableVargas(chart) {
+  const v = (chart && (chart.vargas || (chart.chart && chart.chart.vargas))) || {};
+  return ["D1", ...["D9", "D10", "D24"].filter((k) => v[k])];
 }
 const houseOfSign = (signIdx, ascIdx) => (((signIdx - ascIdx) % 12) + 12) % 12 + 1;
 
@@ -113,16 +130,33 @@ function Western({ ascIdx, bySign, S = 240 }) {
 
 export default function Charts({ chart }) {
   if (!chart) return null;
-  const { ascIdx, bySign } = placements(chart);
+  const vargas = availableVargas(chart);
+  const [varga, setVarga] = useState("D1");
+  const active = vargas.includes(varga) ? varga : "D1";
+  const { ascIdx, bySign } = placements(chart, active);
   return (
     <div className="sheet">
-      <p className="kicker">Birth charts</p>
-      <div className="charts">
+      <div className="sec-head">
+        <p className="kicker" style={{ marginBottom: 0 }}>Birth charts</p>
+        {vargas.length > 1 && (
+          <div className="varga-tabs">
+            {vargas.map((v) => (
+              <button key={v} className={`varga-tab${v === active ? " on" : ""}`} onClick={() => setVarga(v)}>
+                {VARGA_LABEL[v] || v}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="charts" style={{ marginTop: 16 }}>
         <figure><North ascIdx={ascIdx} bySign={bySign} /><figcaption>North Indian</figcaption></figure>
         <figure><South ascIdx={ascIdx} bySign={bySign} /><figcaption>South Indian</figcaption></figure>
         <figure><Western ascIdx={ascIdx} bySign={bySign} /><figcaption>Western</figcaption></figure>
       </div>
-      <p className="note">Whole-sign houses from a {SIGNS[ascIdx]} ascendant. Su Mo Ma Me Ju Ve Sa Ra Ke = the grahas; the number is the sign (1 = Aries … 12 = Pisces).</p>
+      <p className="note">
+        {VARGA_LABEL[active] || active} · whole-sign houses from a {SIGNS[ascIdx]} {active === "D1" ? "ascendant" : "varga lagna"}.
+        Su Mo Ma Me Ju Ve Sa Ra Ke = the grahas; the number is the sign (1 = Aries … 12 = Pisces).
+      </p>
     </div>
   );
 }

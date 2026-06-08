@@ -98,6 +98,11 @@ class ReadingSection(BaseModel):
     title: str
     body: str
     citations: list[str] = []                   # finding codes this section is grounded in
+    # Maha-Kundali dual framing (optional; older clients ignore these):
+    light: str = ""                             # the supportive movement (strengths)
+    shadow: str = ""                            # the growth edge / caution (a tendency, never doom)
+    verdict: str = ""                           # deterministic, e.g. "Supported" / "Mixed" / "Needs care"
+    confidence: str = ""                        # "High" / "Medium-High" / "Medium" / "Low"
 
 
 class ReadingResponse(BaseModel):
