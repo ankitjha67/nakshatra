@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import BirthForm from "../components/BirthForm.jsx";
 import Reading from "../components/Reading.jsx";
 import Charts from "../components/Charts.jsx";
+import ChartData from "../components/ChartData.jsx";
 import AnchorBlock from "../components/AnchorBlock.jsx";
 import { apiPost } from "../lib/api.js";
 
@@ -64,6 +65,7 @@ export default function ReadingTab({ reportType, blurb, extra, onCast }) {
       <p className="err">{err}</p>
       {anchor && <AnchorBlock anchor={anchor} busy={busy} onConfirm={proceed} onReject={reject} />}
       <Charts chart={chart} />
+      <ChartData chart={chart} />
       <Reading data={data} birth={birth} />
     </div>
   );

@@ -50,6 +50,19 @@ header.site{display:flex;align-items:baseline;justify-content:space-between;padd
 .anchor-tbl td:first-child{color:var(--ink-dim,#555);white-space:nowrap}
 .anchor-nak{margin:14px 0 4px;font-size:14px;color:var(--ink)}
 .anchor-flags{margin-top:18px}
+/* divisional-chart selector + chart-data tables */
+.varga-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.varga-tab{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;
+  padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:transparent;
+  color:var(--muted);cursor:pointer}
+.varga-tab.on{color:var(--brass);border-color:var(--brass);background:#faf5e8}
+.data-block{margin-top:20px}
+.data-h{font-family:"Cormorant Garamond",serif;font-weight:600;font-size:19px;margin:0 0 8px;color:var(--ink)}
+.data-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.data-tbl th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--brass);border-bottom:1px solid var(--line);padding:6px 12px 6px 0}
+.data-tbl td{padding:6px 12px 6px 0;border-bottom:1px solid var(--line);color:var(--ink-soft)}
+.data-tbl td:first-child{color:var(--ink);white-space:nowrap}
 /* transparent "glass" panel: the celestial render shows through the birth-details area */
 .card.glass{background:rgba(8,8,18,.40);color:var(--cream);border-color:var(--hair-dark);
   backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
