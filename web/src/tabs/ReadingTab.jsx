@@ -3,6 +3,7 @@ import BirthForm from "../components/BirthForm.jsx";
 import Reading from "../components/Reading.jsx";
 import Charts from "../components/Charts.jsx";
 import ChartData from "../components/ChartData.jsx";
+import VarshphalData from "../components/VarshphalData.jsx";
 import AnchorBlock from "../components/AnchorBlock.jsx";
 import { apiPost } from "../lib/api.js";
 
@@ -55,6 +56,7 @@ export default function ReadingTab({ reportType, blurb, extra, onCast }) {
       {anchor && <AnchorBlock anchor={anchor} />}
       <Charts chart={chart} />
       <ChartData chart={chart} />
+      {data?.varshphal && <VarshphalData varshphal={data.varshphal} />}
       <Reading data={data} birth={birth} />
     </div>
   );

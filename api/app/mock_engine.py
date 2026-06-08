@@ -373,19 +373,27 @@ def rectify_mock(payload: dict) -> dict:
     cands.sort(key=lambda c: c["confidence"], reverse=True)
     recommended = cands[0]
     times = [c["time"] for c in cands]
+    matches = 2 * n_ev
+    score = min(7, 3 + n_ev)
+    rating = "Strong" if score >= 6 else "Good" if score >= 5 else "Fair" if score >= 4 else "Weak"
+    methods = {
+        "Kunda": {"verdict": "Strong", "detail": "Kunda lagna aligns, trine to the Moon nakshatra."},
+        "Event Verification": {"verdict": "High", "detail": f"{n_ev} event(s); {matches} transit matches found."},
+        "KP Ruling Planets": {"verdict": "Medium", "detail": "Common ruling factors at the recommended moment."},
+        "Trutine of Hermes": {"verdict": "Supportive", "detail": "Moon-Ascendant reciprocity holds."},
+        "Tattva Shuddhi": {"verdict": "Mixed", "detail": "Element signal partially matches."},
+        "Animodar": {"verdict": "Outlier", "detail": "Suggests a large correction; treated as an outlier."},
+        "Physiognomy": {"verdict": "Confirm", "detail": "Ascendant traits, needs the native's confirmation."},
+    }
     return {
         "input_time": time_str,
         "recommended": recommended,
         "candidates": cands,
-        "methods": {
-            "Tattva": {"time": cands[0]["time"]},
-            "Kunda": {"time": cands[min(1, len(cands) - 1)]["time"]},
-            "Trutine": {"applied": True},
-            "Animodar": {"applied": True},
-            "KP-RP": {"applied": True},
-            "EventVerification": {"events": n_ev, "agreement_pct": recommended["confidence"]},
-        },
+        "methods": methods,
         "events_used": n_ev,
+        "confidence_score": f"{score} / 7",
+        "confidence_pct": recommended["confidence"],
+        "rating": rating,
         "window": {"start": min(times), "end": max(times)},
         "_engine": "mock",
     }

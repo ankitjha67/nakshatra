@@ -1015,10 +1015,8 @@ def _remedies(chart, by) -> list[Finding]:
         out.append(Finding(
             code=f"REMEDY.{p.upper()}", category="remedies", polarity="supportive", weight=4,
             title=f"For {p}",
-            detail=(f"Traditional, optional supports for {p} {why}: chant {mantra}; in daily life, {beh}. "
-                    f"These are supportive practices offered in the tradition, not requirements, "
-                    f"directives, or guarantees of outcome."),
-            evidence=[f"Remedy for {p} ({why})"],
+            detail=(f"Traditional and optional, for {p} {why}: chant {mantra}; in daily life, {beh}."),
+            evidence=[f"Chant {mantra}", f"In daily life, {beh}", f"Target: {p} ({why})"],
         ))
         if len(out) >= 4:
             break
@@ -1462,13 +1460,27 @@ def derive_btr(rect: dict, payload: dict) -> tuple[list[Finding], dict]:
 
     m = rect.get("methods")
     methods = list(m.keys()) if isinstance(m, dict) else [str(x) for x in m] if isinstance(m, list) else []
+    # Per-method breakdown (name, verdict, detail) when the engine supplies a dict.
+    method_rows = []
+    if isinstance(m, dict):
+        for name, info in m.items():
+            info = info if isinstance(info, dict) else {}
+            method_rows.append({"method": name,
+                                "verdict": info.get("verdict") or ("Applied" if info.get("applied") else ""),
+                                "detail": info.get("detail") or ""})
     input_time = rect.get("input_time") or payload.get("time")
     n_ev = rect.get("events_used")
     if not isinstance(n_ev, int):
         n_ev = len(_l(payload.get("events")))
+    events = [{"date": e.get("date"), "type": e.get("type")}
+              for e in _l(payload.get("events")) if isinstance(e, dict) and e.get("date")]
 
     norm = {"recommended": rec, "candidates": cands, "methods": methods,
-            "input_time": input_time, "events_used": n_ev, "window": rect.get("window")}
+            "method_rows": method_rows, "input_time": input_time, "events_used": n_ev,
+            "events": events, "window": rect.get("window"),
+            "confidence_score": rect.get("confidence_score"),
+            "confidence_pct": rect.get("confidence_pct"),
+            "rating": rect.get("rating")}
 
     out: list[Finding] = []
     if rec.get("time"):
