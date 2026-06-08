@@ -58,7 +58,7 @@ export default function ReadingTab({ reportType, blurb, extra, onCast, features 
   ) : null;
   return (
     <div>
-      {blurb && <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>{blurb}</p>}
+      {blurb && <p className="note lead" style={{ marginTop: 0, marginBottom: 16 }}>{blurb}</p>}
       <BirthForm onSubmit={cast} busy={busy} extra={isYearly ? yearPicker : extra} locked={locked} />
       <p className="err">{err}</p>
       {anchor && <AnchorBlock anchor={anchor} />}

@@ -28,7 +28,7 @@ export default function PrashnaTab() {
 
   return (
     <div>
-      <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>
+      <p className="note lead" style={{ marginTop: 0, marginBottom: 16 }}>
         KP horary, a chart is cast for the moment you ask. Pose one clear question; the verdict is read
         from the relevant house's cuspal sub-lord, with a neutral “if-not” branch. No premise is assumed true.
       </p>
