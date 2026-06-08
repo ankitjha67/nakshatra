@@ -334,12 +334,22 @@ def _yogas(chart) -> list[Finding]:
             continue
         name = y.get("name", "Yoga")
         desc = y.get("description", "a recognised combination")
+        bits = [name]
+        pls = y.get("planets") or []
+        if pls:
+            bits.append("planets " + ", ".join(str(x) for x in pls))
+        hss = y.get("houses") or y.get("house")
+        if hss:
+            bits.append("houses " + (", ".join(str(x) for x in hss) if isinstance(hss, list) else str(hss)))
+        for k in ("strength", "type", "sign"):
+            if y.get(k):
+                bits.append(f"{k} {y[k]}")
         out.append(Finding(
             code=f"YOGA.{name.split()[0].upper()}", category="essence",
             polarity="supportive", weight=6,
             title=name,
             detail=f"{name} is present in the chart, classically linked to {desc.lower()}.",
-            evidence=[f"{name}: {', '.join(y.get('planets', []))}".strip(": ")],
+            evidence=["; ".join(bits)],
         ))
     return out
 
@@ -542,6 +552,7 @@ def _career_houses(chart, by, asc_sign) -> list[Finding]:
         sp = _strength_phrase(lp.get("dignity"))
         d10 = _varga_sign(chart, "D10", lord10)        # dasamsa = the career divisional chart
         sub10 = _kp_sub(chart, 10)
+        bindus10 = _sav_bindus(chart, 10)
         ev = f"10th lord {lord10} in {lp['sign']}{_at(lp)}, {_ord(hL)} house, dignity {lp.get('dignity','Normal')}"
         if lp.get("nakshatra"):
             ev += f", nakshatra {lp['nakshatra']}"
@@ -549,6 +560,8 @@ def _career_houses(chart, by, asc_sign) -> list[Finding]:
             ev += f"; D10 (dasamsa) {d10}"
         if sub10:
             ev += f"; KP 10th-cusp sub-lord {sub10}"
+        if bindus10 is not None:
+            ev += f"; ashtakavarga {bindus10} bindus in the 10th house"
         out.append(Finding(
             code="CAREER.10THLORD", category="career", polarity="neutral", weight=7,
             title=f"10th lord {lord10} in the {_ord(hL)} house",
@@ -602,13 +615,16 @@ def _ninth_spirit(by, asc_sign) -> list[Finding]:
         return []
     hL = _house_ws(lp["sign"], asc_sign)
     sp = _strength_phrase(lp.get("dignity"))
+    ev = f"9th lord {lord9} in {lp['sign']}{_at(lp)}, {_ord(hL)} house, dignity {lp.get('dignity','Normal')}"
+    if lp.get("nakshatra"):
+        ev += f", nakshatra {lp['nakshatra']}"
     return [Finding(
         code="SPIRIT.NINTH", category="spirit", polarity="neutral", weight=5,
         title=f"9th lord {lord9} in the {_ord(hL)} house",
         detail=(f"Belief, meaning and dharma are read from the 9th house ({sign9}), whose lord is "
                 f"{lord9}, placed in the {_ord(hL)} house in {lp['sign']}{sp} - connecting your sense "
                 f"of faith and guiding principles to {HOUSE_MEANING.get(hL,'that house')}."),
-        evidence=[f"9th lord {lord9} in {lp['sign']}, {_ord(hL)} house"],
+        evidence=[ev],
     )]
 
 
@@ -775,7 +791,18 @@ def _star_meaning(m: str | None) -> str:
     return m or "a notable fixed star"
 
 
-def _house_lord_finding(by, asc_sign, house, code, category, weight, lead) -> Finding | None:
+def _sav_bindus(chart, house: int | None) -> int | None:
+    """Sarvashtakavarga bindu total for a house (transit/result strength, 0-56-ish)."""
+    sav = _d(chart.get("ashtakavarga")).get("sav")
+    if isinstance(sav, list) and house and 1 <= house <= 12:
+        try:
+            return int(sav[house - 1])
+        except (ValueError, TypeError, IndexError):
+            return None
+    return None
+
+
+def _house_lord_finding(chart, by, asc_sign, house, code, category, weight, lead) -> Finding | None:
     if not asc_sign:
         return None
     sign_h = _sign_in_house(asc_sign, house)
@@ -785,12 +812,21 @@ def _house_lord_finding(by, asc_sign, house, code, category, weight, lead) -> Fi
         return None
     hL = _house_ws(lp["sign"], asc_sign)
     sp = _strength_phrase(lp.get("dignity"))
+    ev = f"{_ord(house)} lord {lord} in {lp['sign']}{_at(lp)}, {_ord(hL)} house, dignity {lp.get('dignity','Normal')}"
+    if lp.get("nakshatra"):
+        ev += f", nakshatra {lp['nakshatra']}"
+    nav = _varga_sign(chart, "D9", lord)               # divisional-gated downstream
+    if nav:
+        ev += f"; navamsa {nav}" + (" (vargottama)" if nav == lp.get("sign") else "")
+    bindus = _sav_bindus(chart, house)                 # ashtakavarga-gated downstream
+    if bindus is not None:
+        ev += f"; ashtakavarga {bindus} bindus in the {_ord(house)} house"
     return Finding(
         code=code, category=category, polarity="neutral", weight=weight,
         title=f"{_ord(house)} lord {lord} in the {_ord(hL)} house",
         detail=(f"{lead} ({sign_h}), whose lord is {lord}, placed in the {_ord(hL)} house in "
                 f"{lp['sign']}{sp} - connecting it to {HOUSE_MEANING.get(hL,'that house')}."),
-        evidence=[f"{_ord(house)} lord {lord} in {lp['sign']}, {_ord(hL)} house"],
+        evidence=[ev],
     )
 
 
@@ -814,11 +850,11 @@ def _house_occ_finding(by, asc_sign, house, code, category, weight, label) -> Fi
 # --------------------------------------------------------------------------- #
 def _wealth(chart, by, asc_sign) -> list[Finding]:
     out: list[Finding] = []
-    f2 = _house_lord_finding(by, asc_sign, 2, "WEALTH.SECOND", "wealth", 7,
+    f2 = _house_lord_finding(chart, by, asc_sign, 2, "WEALTH.SECOND", "wealth", 7,
                              "Earnings, savings and family wealth are read from the 2nd house")
     if f2:
         out.append(f2)
-    f11 = _house_lord_finding(by, asc_sign, 11, "WEALTH.ELEVENTH", "wealth", 6,
+    f11 = _house_lord_finding(chart, by, asc_sign, 11, "WEALTH.ELEVENTH", "wealth", 6,
                               "Gains, income and fulfilment of desires are read from the 11th house")
     if f11:
         out.append(f11)
@@ -846,7 +882,7 @@ def _wealth(chart, by, asc_sign) -> list[Finding]:
 
 def _family(chart, by, asc_sign) -> list[Finding]:
     out: list[Finding] = []
-    f4 = _house_lord_finding(by, asc_sign, 4, "FAMILY.FOURTH", "family", 7,
+    f4 = _house_lord_finding(chart, by, asc_sign, 4, "FAMILY.FOURTH", "family", 7,
                              "Home, mother, property and emotional roots are read from the 4th house")
     if f4:
         out.append(f4)
@@ -854,7 +890,7 @@ def _family(chart, by, asc_sign) -> list[Finding]:
                             "home, mother and emotional foundations")
     if o4:
         out.append(o4)
-    f5 = _house_lord_finding(by, asc_sign, 5, "FAMILY.FIFTH", "family", 6,
+    f5 = _house_lord_finding(chart, by, asc_sign, 5, "FAMILY.FIFTH", "family", 6,
                              "Children, creativity and intelligence are read from the 5th house")
     if f5:
         out.append(f5)
@@ -873,7 +909,7 @@ def _family(chart, by, asc_sign) -> list[Finding]:
 def _health(chart, by, asc_sign) -> list[Finding]:
     # Astrological wellness tendencies only, not medical guidance. Kept gentle and hedged.
     out: list[Finding] = []
-    f6 = _house_lord_finding(by, asc_sign, 6, "HEALTH.SIXTH", "health", 6,
+    f6 = _house_lord_finding(chart, by, asc_sign, 6, "HEALTH.SIXTH", "health", 6,
                              "Health, immunity, routine and the capacity to overcome illness are read from the 6th house")
     if f6:
         out.append(f6)
@@ -1208,7 +1244,7 @@ def _double_transit(chart) -> list[Finding]:
 
 
 def _twelfth_spirit(chart, by, asc_sign) -> list[Finding]:
-    f12 = _house_lord_finding(by, asc_sign, 12, "SPIRIT.TWELFTH", "spirit", 5,
+    f12 = _house_lord_finding(chart, by, asc_sign, 12, "SPIRIT.TWELFTH", "spirit", 5,
                               "Retreat, foreign lands, rest, expenditure and liberation are read from the 12th house")
     return [f12] if f12 else []
 

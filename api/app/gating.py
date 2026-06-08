@@ -14,6 +14,7 @@ visible on the free D1 diagram, so there is nothing to protect server-side).
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # blocks unlocked only by the "tables_full" capability (Pro+)
@@ -61,8 +62,61 @@ def section_categories(section_keys) -> set[str]:
     return cats
 
 
-def filter_findings(findings, section_keys):
-    """Return only the findings whose category is unlocked by `section_keys`.
+# Evidence fragments that belong to paid capabilities. Stripped from findings for
+# tiers that lack the feature, so e.g. a Basic user's relationship finding can't leak
+# its Navamsa/KP sub-lord facts into chat or the reading.
+_DIVISIONAL_RE = re.compile(r"navamsa|dasamsa|vargottama|\bD9\b|\bD10\b|\bD-?\d{1,2}\b", re.IGNORECASE)
+_KP_RE = re.compile(r"\bKP\b|sub-?lord", re.IGNORECASE)
+_AV_RE = re.compile(r"ashtakavarga|\bbindus?\b|\bSAV\b|\bBAV\b", re.IGNORECASE)
+
+
+def _strip_evidence(ev, features) -> list:
+    """Drop tier-locked fact fragments from an evidence list. Each evidence string
+    is segmented on '; '; segments naming a locked capability are removed."""
+    feats = set(features or ())
+    out = []
+    for line in ev or []:
+        segs = []
+        for seg in str(line).split("; "):
+            if "divisional" not in feats and _DIVISIONAL_RE.search(seg):
+                continue
+            if "tables_full" not in feats and (_KP_RE.search(seg) or _AV_RE.search(seg)):
+                continue
+            segs.append(seg)
+        if segs:
+            out.append("; ".join(segs))
+    return out
+
+
+# Chat questions that target a paid technique. If the user's tier lacks the feature,
+# we refuse BEFORE calling the model, so it can't be coaxed into fabricating locked
+# analysis (e.g. a Basic user asking for their Navamsa D9 sign).
+_TOPIC_FEATURE = [
+    ("divisional", re.compile(r"navamsa|dasamsa|drekkana|saptamsa|dwadasamsa|trimsamsa|shashtiamsa|"
+                              r"\bvarga\b|divisional\s+chart|\bD-?\d{1,2}\b", re.IGNORECASE)),
+    ("tables_full", re.compile(r"\bKP\b|sub-?lord|cuspal|ashtakavarga|\bbindus?\b|\bSAV\b|\bBAV\b", re.IGNORECASE)),
+    ("varshphal", re.compile(r"varsh?phal|varshaphal|annual\s+(chart|forecast)|solar\s+return|muntha", re.IGNORECASE)),
+]
+_TOPIC_LABEL = {
+    "divisional": "divisional charts (Navamsa D9, Dasamsa D10, and other vargas)",
+    "tables_full": "the detailed KP and Ashtakavarga tables",
+    "varshphal": "the annual Varshphal forecast",
+}
+
+
+def locked_topic(message: str, features) -> str | None:
+    """Return the locked feature a chat question targets (else None)."""
+    feats = set(features or ())
+    for feat, rx in _TOPIC_FEATURE:
+        if feat not in feats and rx.search(message or ""):
+            return feat
+    return None
+
+
+def filter_findings(findings, section_keys, features=None):
+    """Return only the findings whose category is unlocked by `section_keys`, AND
+    strip locked-capability evidence (Navamsa/Dasamsa/KP/Ashtakavarga) when
+    `features` is given.
 
     This is the anti-leak gate for BOTH the reading response (so the network
     payload never contains locked-tier evidence) and the chat context (so the LLM
@@ -70,4 +124,11 @@ def filter_findings(findings, section_keys):
     'tell me everything'). Interpretation a tier hasn't unlocked never leaves the
     server."""
     cats = section_categories(section_keys)
-    return [f for f in findings if getattr(f, "category", None) in cats]
+    kept = [f for f in findings if getattr(f, "category", None) in cats]
+    if features is None:
+        return kept
+    out = []
+    for f in kept:
+        ev = _strip_evidence(getattr(f, "evidence", None), features)
+        out.append(f.model_copy(update={"evidence": ev}) if hasattr(f, "model_copy") else f)
+    return out
