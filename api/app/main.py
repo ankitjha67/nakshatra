@@ -41,7 +41,7 @@ from .anchor import derive_anchor
 from .gating import filter_chart_for_features, filter_findings, locked_topic, _TOPIC_LABEL
 from .codes import generate_plaintext, hash_code
 from .engine import rectify_birth_time, engine_version
-from .rules import derive_findings, derive_prashna, derive_btr
+from .rules import derive_findings, derive_prashna, derive_btr, chart_facts
 from .llm import chat_answer, render_reading, looks_like_injection, DISCLAIMERS
 from . import fraud
 from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
@@ -344,6 +344,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     enforce_birth_lock(p.user_id, req.birth)
     chart = get_chart(req.birth).chart
     findings = filter_findings(derive_findings(chart), p.tier.sections, p.tier.features)
+    facts = chart_facts(chart, p.tier.features)   # tier-gated literal positions for factual answers
     # Server-authoritative history: load prior turns from the store by chat_id; the
     # client-supplied req.history is IGNORED for grounding so a crafted client can't
     # inject fake turns. (Stateless if persistence is off or it's a new conversation.)
@@ -359,7 +360,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
             log.warning("jailbreak attempt uid=%s count=%s", p.user_id, n)
         except Exception:  # noqa: BLE001, never fail the request on flagging
             pass
-    answer, _model, ti, to = chat_answer(findings, history, req.message, s.chat_max_output)
+    answer, _model, ti, to = chat_answer(findings, history, req.message, s.chat_max_output, facts)
     cost = int(ti) + int(to)
 
     # --- atomic debit on the ledger (grant first, then topup; never below 0) ---
