@@ -181,6 +181,12 @@ button.sm{padding:5px 11px;font-size:12px}
 .spark{display:flex;align-items:flex-end;gap:3px;height:80px;margin:6px 0}
 .spark-bar{flex:1;background:var(--brass);border-radius:2px 2px 0 0;min-height:2px;opacity:.85}
 .spark-bar:hover{opacity:1;background:var(--marigold)}
+/* on-void intro blurbs (above the glass forms) need a light colour, not dark muted */
+.lead{color:var(--cream-dim)}
+/* admin/chat now sit on a paper .sheet; nested cards use white so they read as cards */
+.sheet .stat,.sheet .admin-panel,.sheet .user-detail{background:var(--field);box-shadow:none}
+.sheet .msg{background:var(--field)}
+.sheet .msg.user{background:var(--cream)}
 .admin-panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
 .admin-panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 16px 44px rgba(0,0,0,.4)}
 .admin-panel .data-h{margin-top:0}

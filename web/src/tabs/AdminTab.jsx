@@ -4,6 +4,9 @@ import { apiGet, apiPost } from "../lib/api.js";
 // Admin dashboard, platform health + analytics + flagged users with ban controls.
 // Authorized by the admin's Firebase `admin` custom claim (or X-Admin-Key in dev).
 const TIERS = ["free", "basic", "pro", "enterprise"];
+// How a tier was assigned (NOT a role). "admin" = set manually by an admin.
+const SRC = { payment: "paid", beta: "beta", admin: "manual", revoked: "revoked" };
+const srcLabel = (s) => (s ? ` · ${SRC[s] || s}` : "");
 
 export default function AdminTab() {
   const [stats, setStats] = useState(null);
@@ -141,7 +144,7 @@ export default function AdminTab() {
     });
 
   return (
-    <div>
+    <div className="sheet">
       <p className="kicker">Admin · platform health</p>
       <div className="stat-grid">
         {cards.map(([k, v]) => (
@@ -203,7 +206,7 @@ export default function AdminTab() {
             {shownUsers.map((u) => (
               <tr key={u.uid} className="rowlink" onClick={() => openUser(u.uid)}>
                 <td>{u.email || <span className="mono">{u.uid}</span>}</td>
-                <td>{u.tier}{u.tier_source ? <span className="mono"> ({u.tier_source})</span> : ""}</td>
+                <td>{u.tier}<span className="mono" style={{ color: "var(--muted)" }}>{srcLabel(u.tier_source)}</span></td>
                 <td className="mono">{u.last_seen ? new Date(u.last_seen).toLocaleString() : "—"}</td>
                 <td>{(u.tokens_today || 0).toLocaleString()}</td>
                 <td>{u.banned ? "banned" : u.birth_locked ? "active · locked" : "active"}</td>
@@ -221,7 +224,7 @@ export default function AdminTab() {
           </div>
           <table className="data-tbl"><tbody>
             <tr><td>UID</td><td className="mono">{detail.uid}</td></tr>
-            <tr><td>Tier</td><td>{detail.tier}{detail.tier_source ? ` (${detail.tier_source})` : ""}</td></tr>
+            <tr><td>Tier</td><td>{detail.tier}{srcLabel(detail.tier_source)}</td></tr>
             <tr><td>AI credits</td><td>{(detail.balance?.available ?? 0).toLocaleString()} available</td></tr>
             <tr><td>Tokens today</td><td>{(detail.tokens_today || 0).toLocaleString()}</td></tr>
             <tr><td>Discount</td><td>{detail.discount_pct ? `${detail.discount_pct}%` : "—"}</td></tr>
@@ -262,7 +265,7 @@ export default function AdminTab() {
             </select>
             <button className="sm" disabled={busy || !tierUid.trim()} onClick={setTier}>Set tier</button>
           </div>
-          <p className="note">Manual grant (tagged “admin”). Use for support/comps; not the beta program.</p>
+          <p className="note">Manual grant (tagged “manual”), this assigns a tier, it does NOT make the user an admin. Use for support/comps; beta uses the panel beside this.</p>
         </div>
 
         <div className="admin-panel">

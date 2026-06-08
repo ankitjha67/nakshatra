@@ -45,7 +45,7 @@ export default function BtrTab() {
 
   return (
     <div>
-      <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>
+      <p className="note lead" style={{ marginTop: 0, marginBottom: 16 }}>
         Birth-Time Rectification, narrow an uncertain birth time from dated life events, triangulated
         across the classical methods. The result is a confident window, not a certainty.
       </p>

@@ -40,7 +40,7 @@ export default function ChatTab({ lastBirth, onBalance }) {
   };
 
   return (
-    <div>
+    <div className="sheet">
       <p className="note" style={{ marginTop: 0, marginBottom: 16 }}>
         Grounded in your last cast chart, each turn is metered in tokens against your balance.
       </p>
