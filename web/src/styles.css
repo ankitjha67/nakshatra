@@ -36,6 +36,20 @@ header.site{display:flex;align-items:baseline;justify-content:space-between;padd
 /* a cream "sheet" floating on the void: holds reading prose so ink text stays readable */
 .sheet{background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:14px;
   padding:24px 26px;box-shadow:0 24px 64px rgba(0,0,0,.45);margin-top:24px}
+/* anchor verification block */
+.anchor .anchor-title{margin:0 0 2px;font-size:18px;font-weight:600;color:var(--ink)}
+.anchor-meta{display:flex;flex-wrap:wrap;gap:6px 22px;margin:14px 0 6px;
+  font-size:12.5px;color:var(--ink-dim,#555)}
+.anchor-meta b{color:var(--brass);font-weight:600;margin-right:5px;
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.04em}
+.anchor-tbl{width:100%;border-collapse:collapse;margin:12px 0 4px;font-size:13.5px}
+.anchor-tbl th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:10.5px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--brass);
+  border-bottom:1px solid var(--line);padding:6px 10px 6px 0}
+.anchor-tbl td{padding:7px 10px 7px 0;border-bottom:1px solid var(--line);color:var(--ink)}
+.anchor-tbl td:first-child{color:var(--ink-dim,#555);white-space:nowrap}
+.anchor-nak{margin:14px 0 4px;font-size:14px;color:var(--ink)}
+.anchor-flags{margin-top:18px}
 /* transparent "glass" panel: the celestial render shows through the birth-details area */
 .card.glass{background:rgba(8,8,18,.40);color:var(--cream);border-color:var(--hair-dark);
   backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
