@@ -42,7 +42,7 @@ from .gating import filter_chart_for_features, filter_findings
 from .codes import generate_plaintext, hash_code
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
-from .llm import chat_answer, render_reading, DISCLAIMERS
+from .llm import chat_answer, render_reading, looks_like_injection, DISCLAIMERS
 from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
                        create_razorpay_order, create_razorpay_subscription,
                        cancel_razorpay_subscription, keys_configured)
@@ -318,8 +318,10 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     msg_id = uuid.uuid4().hex
     bal2 = store.credit_debit(p.user_id, p.tier, cost, reason="chat turn", ref=msg_id)
 
-    # --- persist the turn (best-effort, opt-out via PERSIST_CHAT; not the money path) ---
-    if s.persist_chat:
+    # --- persist the turn (best-effort, opt-out via PERSIST_CHAT; not the money path).
+    # Never persist an injection attempt: keep attack text out of the grounding history
+    # so a single jailbreak can't poison the rest of the conversation. ---
+    if s.persist_chat and not looks_like_injection(req.message):
         try:
             store.chat_save_turn(p.user_id, chat_id, req.birth.chart_hash(),
                                  req.message, answer, cost, msg_id)

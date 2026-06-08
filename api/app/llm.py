@@ -503,10 +503,11 @@ def chat_answer(findings: list[Finding], history: list[dict], message: str,
                 max_output: int) -> tuple[str, str, int, int]:
     """Return (answer, model_name, tokens_in, tokens_out). Grounded in findings."""
     provider = get_provider()
-    # Layer 1: screen the user message AND any client-supplied history turn for
-    # injection/exfiltration; refuse without calling the model (no token cost).
-    scan = " \n ".join([str(message or "")] + [str(m.get("text", "")) for m in (history or [])])
-    if looks_like_injection(scan):
+    # Layer 1: screen the NEW user message for injection/exfiltration; refuse without
+    # calling the model (no token cost). We scan only the new message — the history is
+    # server-authoritative (each turn was already screened when it arrived), so
+    # re-scanning it would let one past attempt permanently brick the conversation.
+    if looks_like_injection(message):
         log.warning("chat injection attempt blocked (len=%d)", len(message or ""))
         return _CHAT_REFUSAL, provider.model or provider.name, 0, 0
     user = _chat_payload(findings, history, message)
