@@ -37,7 +37,7 @@ from .billing import (
 from .auth import require_principal, delete_firebase_user, require_admin
 from .pipeline import get_chart, get_reading
 from .anchor import derive_anchor
-from .gating import filter_chart_for_features
+from .gating import filter_chart_for_features, filter_findings
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr
 from .llm import chat_answer, render_reading, DISCLAIMERS
@@ -201,9 +201,11 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
     if bal["daily_used"] >= s.daily_token_ceiling:
         raise HTTPException(429, "Daily chat limit reached, please try again tomorrow.")
 
-    # --- grounded answer: only from THIS chart's findings ---
+    # --- grounded answer: only from THIS chart's findings, AND only the ones the
+    # user's tier unlocks. Context minimization is the core jailbreak defense, the
+    # model can't reveal a higher tier (or anything else) that isn't in its context.
     chart = get_chart(req.birth).chart
-    findings = derive_findings(chart)
+    findings = filter_findings(derive_findings(chart), p.tier.sections)
     history = [m.model_dump() for m in req.history]
     answer, _model, ti, to = chat_answer(findings, history, req.message, s.chat_max_output)
     cost = int(ti) + int(to)

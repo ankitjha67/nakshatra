@@ -12,6 +12,7 @@ from datetime import date
 from .engine import compute_chart, engine_version
 from .rules import derive_findings
 from .varshphal import compute_varshphal
+from .gating import filter_findings
 from .llm import render_reading, get_provider, DISCLAIMERS
 from .models import BirthDetails, ChartResponse, ReadingResponse, Meta
 from .billing import Tier, get_store, report_sections
@@ -60,7 +61,10 @@ def get_reading(birth: BirthDetails, tier: Tier) -> ReadingResponse:
                                    varshphal=cached.get("varshphal"))
 
     chart = compute_chart(birth)
-    findings = derive_findings(chart, year=year)
+    # Anti-leak: filter to the UNLOCKED sections BEFORE rendering, so neither the
+    # prose, the summary seed, nor the response's `findings` array can carry
+    # higher-tier evidence (nothing extra is reachable via the network/Inspect).
+    findings = filter_findings(derive_findings(chart, year=year), eff_sections)
     summary, sections, model_name, ti, to = render_reading(chart, findings, eff_sections)
     meta = Meta(engine_version=ev, rules_version=RULES_VERSION, renderer_version=RENDERER_VERSION,
                 model=model_name, tier=tier.key, report_type=report_type, year=year, cache_hit=False,

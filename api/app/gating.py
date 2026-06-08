@@ -43,3 +43,26 @@ def filter_chart_for_features(chart: dict, features: set[str] | frozenset[str]) 
         out.pop("dasha_systems", None)                # free: no dasha table at all
 
     return out
+
+
+def section_categories(section_keys) -> set[str]:
+    """The Finding categories that belong to a set of unlocked section keys."""
+    from .llm import SECTION_SPEC  # lazy: avoid import cycle at module load
+    keys = set(section_keys or ())
+    cats: set[str] = set()
+    for key, _title, cs in SECTION_SPEC:
+        if key in keys:
+            cats.update(cs)
+    return cats
+
+
+def filter_findings(findings, section_keys):
+    """Return only the findings whose category is unlocked by `section_keys`.
+
+    This is the anti-leak gate for BOTH the reading response (so the network
+    payload never contains locked-tier evidence) and the chat context (so the LLM
+    physically cannot reveal a tier the user hasn't paid for, even if asked to
+    'tell me everything'). Interpretation a tier hasn't unlocked never leaves the
+    server."""
+    cats = section_categories(section_keys)
+    return [f for f in findings if getattr(f, "category", None) in cats]
