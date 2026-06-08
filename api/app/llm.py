@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from .config import get_settings
@@ -101,6 +102,7 @@ You are given FINDINGS already computed from this user's chart, the recent conve
 
 ABSOLUTE RULES
 - Answer ONLY from the FINDINGS. If the findings do not address the question, say so plainly, do not guess or invent.
+- TIMING questions ("today", "now", "this period", "how is/will my day/week/month/year be", "what's going on for me"): do NOT just decline. Answer with the ACTIVE PERIOD already in the findings, the current Mahadasha/Antardasha (use TODAY, given below, to place where you are in its window) and any active Sade Sati or Saturn-Jupiter double transit, and describe what that chapter tends to emphasize. The findings describe periods and tendencies, not specific dated daily events, so frame it as the prevailing influence of the current period, never a day-by-day forecast or specific events for a single day.
 - Never introduce a planet, sign, house, nakshatra, yoga, dasha, aspect, date, or prediction that is not in the findings.
 - No generic horoscope filler, no flattery, no fear or doom, no absolute predictions.
 - Never give medical, legal, financial, or psychological directives. Describe tendencies, not instructions.
@@ -492,6 +494,7 @@ def sanitize_chat_output(answer: str) -> str:
 
 def _chat_payload(findings: list[Finding], history: list[dict], message: str) -> str:
     return json.dumps({
+        "today": datetime.now(timezone.utc).date().isoformat(),  # to place "today" within the active dasha window
         "findings": [{"code": f.code, "title": f.title, "detail": f.detail} for f in findings],
         "history": [{"role": m.get("role"), "text": m.get("text")} for m in history][-8:],
         "question": message,
