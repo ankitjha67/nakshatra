@@ -7,7 +7,7 @@ This is the ONE place your calculation code plugs in. Set in the environment:
     ENGINE_VERSION=maha-jyotish-7.0
 
 Your callable receives a plain dict (the BirthDetails fields) and must return a
-JSON-serialisable dict — whatever your engine already emits. The rules layer is
+JSON-serialisable dict, whatever your engine already emits. The rules layer is
 written defensively, so it adapts to common shapes; see app/rules.py for the
 fields it looks for. If the import fails for any reason, the bundled mock engine
 runs instead so the service always boots (handy in CI and for the frontend).
@@ -21,7 +21,7 @@ from typing import Any, Callable
 from .config import get_settings
 from .models import BirthDetails
 from . import ENGINE_VERSION_FALLBACK
-from .mock_engine import compute_mock_chart
+from .mock_engine import compute_mock_chart, rectify_mock
 
 log = logging.getLogger("engine")
 
@@ -29,13 +29,16 @@ _ENGINE: Callable[[dict], dict] | None = None
 _ENGINE_VERSION: str = ENGINE_VERSION_FALLBACK
 _LOADED = False
 
+_RECTIFY: Callable[[dict], dict] | None = None
+_RECTIFY_LOADED = False
+
 
 def _load() -> None:
     global _ENGINE, _ENGINE_VERSION, _LOADED
     _LOADED = True
     s = get_settings()
     if not s.engine_module:
-        log.warning("No ENGINE_MODULE set — using bundled mock engine.")
+        log.warning("No ENGINE_MODULE set, using bundled mock engine.")
         _ENGINE = compute_mock_chart
         _ENGINE_VERSION = s.engine_version or ENGINE_VERSION_FALLBACK
         return
@@ -45,7 +48,7 @@ def _load() -> None:
         _ENGINE = fn
         _ENGINE_VERSION = s.engine_version or getattr(mod, "__version__", "engine-unknown")
         log.info("Loaded engine %s.%s (v%s)", s.engine_module, s.engine_callable, _ENGINE_VERSION)
-    except Exception as exc:  # noqa: BLE001 — never let a bad import take the service down
+    except Exception as exc:  # noqa: BLE001, never let a bad import take the service down
         log.error("Engine import failed (%s); falling back to mock.", exc)
         _ENGINE = compute_mock_chart
         _ENGINE_VERSION = ENGINE_VERSION_FALLBACK
@@ -65,4 +68,34 @@ def compute_chart(birth: BirthDetails) -> dict[str, Any]:
     out = _ENGINE(birth.model_dump())
     if not isinstance(out, dict):
         raise TypeError("Engine must return a JSON-serialisable dict")
+    return out
+
+
+def _load_rectify() -> None:
+    """Bind the engine's rectify_birth_time callable; fall back to the mock so the
+    BTR endpoint always responds (the proprietary engine isn't present in dev/CI)."""
+    global _RECTIFY, _RECTIFY_LOADED
+    _RECTIFY_LOADED = True
+    s = get_settings()
+    if not s.engine_module:
+        _RECTIFY = rectify_mock
+        return
+    try:
+        mod = importlib.import_module(s.engine_module)
+        _RECTIFY = getattr(mod, s.engine_rectify_callable)
+        log.info("Loaded rectifier %s.%s", s.engine_module, s.engine_rectify_callable)
+    except Exception as exc:  # noqa: BLE001
+        log.error("Rectifier import failed (%s); falling back to mock.", exc)
+        _RECTIFY = rectify_mock
+
+
+def rectify_birth_time(payload: dict) -> dict[str, Any]:
+    """Run the active rectifier on a BTR payload; returns the engine's
+    birth_time_rectification block (candidates + confidence across methods)."""
+    if not _RECTIFY_LOADED:
+        _load_rectify()
+    assert _RECTIFY is not None
+    out = _RECTIFY(payload)
+    if not isinstance(out, dict):
+        raise TypeError("Rectifier must return a JSON-serialisable dict")
     return out

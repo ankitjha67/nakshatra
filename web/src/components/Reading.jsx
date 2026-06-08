@@ -7,7 +7,7 @@ export default function Reading({ data, birth }) {
   (data.findings || []).forEach((f) => { titleByCode[f.code] = f.title; });
   const m = data.meta || {};
   return (
-    <div style={{ marginTop: 24 }}>
+    <div className="sheet">
       <p className="kicker">Your reading</p>
       {birth && <p className="note" style={{ marginTop: 0 }}>{birth.name} · {birth.date} {birth.time} · {Number(birth.lat).toFixed(2)}, {Number(birth.lon).toFixed(2)} · UTC {birth.tz}</p>}
       {data.summary && <p className="summary">{data.summary}</p>}

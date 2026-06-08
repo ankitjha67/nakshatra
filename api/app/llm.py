@@ -1,10 +1,10 @@
-"""LLM layer — a constrained *writer*, never an interpreter.
+"""LLM layer, a constrained *writer*, never an interpreter.
 
 The renderer hands the model a fixed set of computed findings and asks only for
 prose. The system prompt forbids new placements/predictions, requires a citation
 (finding code) behind every section, and bans horoscope filler, flattery, fear,
 and medical/financial/legal directives. After generation we validate every
-citation against the real finding codes and discard anything unsupported — so a
+citation against the real finding codes and discard anything unsupported, so a
 hallucinated claim cannot survive even if the model produces one.
 
 Providers are pluggable. `mock` composes the reading deterministically from the
@@ -26,6 +26,9 @@ log = logging.getLogger("llm")
 
 # ordered sections and which finding categories feed each
 SECTION_SPEC: list[tuple[str, str, list[str]]] = [
+    ("yearly",        "The Year, Varshphal",    ["yearly"]),
+    ("prashna",       "The Question, KP Verdict", ["prashna"]),
+    ("btr",           "Birth-Time Rectification", ["btr"]),
     ("essence",       "Your Essence",            ["essence"]),
     ("mind",          "Mind & Emotions",         ["mind"]),
     ("relationships", "Love & Relationships",    ["relationships"]),
@@ -33,7 +36,7 @@ SECTION_SPEC: list[tuple[str, str, list[str]]] = [
     ("wealth",        "Wealth & Resources",      ["wealth"]),
     ("family",        "Home & Family",           ["family"]),
     ("health",        "Health & Vitality",       ["health"]),
-    ("timing",        "This Chapter — Timing",   ["timing"]),
+    ("timing",        "This Chapter, Timing",   ["timing"]),
     ("fortune",       "Fortune & Karma",         ["fortune"]),
     ("spirit",        "Inner Life",              ["spirit"]),
     ("strengths",     "Strengths & Stars",       ["strengths"]),
@@ -72,6 +75,31 @@ BAD (invented placement, not in findings): "Your Mars in Aries makes you impulsi
 BAD (filler): "The cosmos has wonderful things in store for you." (cites nothing -> forbidden)"""
 
 
+# Common words the mock chat must NOT treat as chart keywords (keeps the
+# deterministic fallback honest; the real LLM does its own grounding).
+_CHAT_STOPWORDS = {
+    "about", "what", "does", "tell", "with", "from", "this", "that", "they", "them",
+    "have", "will", "would", "could", "should", "your", "yours", "mine", "more",
+    "much", "when", "where", "which", "into", "like", "some", "very", "just", "than",
+    "then", "there", "here", "also", "each", "other", "over", "under",
+    # meta words about asking, not chart topics
+    "chart", "charts", "say", "says", "said", "mean", "means", "show", "shows",
+    "anything", "something", "everything", "know", "give", "want", "please",
+}
+
+# Grounded chat: the model answers follow-ups ONLY from the user's findings.
+CHAT_SYSTEM_PROMPT = """You are a careful Vedic astrology (Jyotisha) assistant answering a user's follow-up questions about THEIR OWN birth chart.
+
+You are given FINDINGS already computed from this user's chart, the recent conversation, and a new question.
+
+ABSOLUTE RULES
+- Answer ONLY from the FINDINGS. If the findings do not address the question, say so plainly, do not guess or invent.
+- Never introduce a planet, sign, house, nakshatra, yoga, dasha, aspect, date, or prediction that is not in the findings.
+- No generic horoscope filler, no flattery, no fear or doom, no absolute predictions.
+- Never give medical, legal, financial, or psychological directives. Describe tendencies, not instructions.
+- Warm, literate, second person ("you"). Brief and specific, a few sentences. Do not use the person's name. No emojis. No headings."""
+
+
 def _group(findings: list[Finding], allowed_keys: set[str]) -> list[dict[str, Any]]:
     out = []
     for key, title, cats in SECTION_SPEC:
@@ -104,9 +132,13 @@ class Provider:
     def render(self, system: str, user: str, payload: dict) -> tuple[dict, int, int]:
         raise NotImplementedError
 
+    def chat(self, system: str, user: str, max_output: int) -> tuple[str, int, int]:
+        """Free-text grounded answer. Returns (text, tokens_in, tokens_out)."""
+        raise NotImplementedError
+
 
 class MockProvider(Provider):
-    """Deterministic, grounded composition — no external call, no slop."""
+    """Deterministic, grounded composition, no external call, no slop."""
     name = "mock"
     model = "mock-writer"
 
@@ -119,6 +151,34 @@ class MockProvider(Provider):
                              "citations": [f["code"] for f in sec["findings"]]})
         summary = payload.get("chart_summary", "").strip()
         return {"summary": summary, "sections": sections}, 0, 0
+
+    def chat(self, system, user, max_output):
+        """Deterministic, grounded answer composed from the findings in `user`.
+        Estimates tokens (~4 chars/token) so local/dev metering is non-zero."""
+        try:
+            data = json.loads(user)
+        except Exception:
+            data = {}
+        findings = data.get("findings", [])
+        q = (data.get("question") or "").lower()
+        words = set(re.findall(r"[a-z]{4,}", q)) - _CHAT_STOPWORDS
+
+        def score(f):
+            text = (str(f.get("title", "")) + " " + str(f.get("detail", ""))).lower()
+            return sum(1 for w in words if w in text)
+
+        best = [f for f in sorted(findings, key=score, reverse=True) if score(f) > 0][:2]
+        if best:
+            answer = "From your chart: " + " ".join(f.get("detail", "") for f in best)
+        elif findings:
+            topics = ", ".join(sorted({f.get("title", "") for f in findings})[:4])
+            answer = ("Your chart's findings don't directly speak to that. They do cover: "
+                      f"{topics}. Ask about one of those and I can ground an answer in your chart.")
+        else:
+            answer = "I don't have computed findings for your chart yet, cast a reading first."
+        ti = (len(system) + len(user)) // 4
+        to = max(1, len(answer) // 4)
+        return answer, ti, to
 
 
 class AnthropicProvider(Provider):
@@ -136,6 +196,14 @@ class AnthropicProvider(Provider):
         )
         text = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
         return _parse_json(text), r.usage.input_tokens, r.usage.output_tokens
+
+    def chat(self, system, user, max_output):
+        r = self._c.messages.create(
+            model=self.model, max_tokens=max(int(max_output), 64), temperature=self.temp,
+            system=system, messages=[{"role": "user", "content": user}],
+        )
+        text = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
+        return text, r.usage.input_tokens, r.usage.output_tokens
 
 
 class OpenAIProvider(Provider):
@@ -155,6 +223,15 @@ class OpenAIProvider(Provider):
         text = r.choices[0].message.content or "{}"
         u = r.usage
         return _parse_json(text), u.prompt_tokens, u.completion_tokens
+
+    def chat(self, system, user, max_output):
+        r = self._c.chat.completions.create(
+            model=self.model, temperature=self.temp, max_tokens=max(int(max_output), 64),
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        )
+        text = r.choices[0].message.content or ""
+        u = r.usage
+        return text, u.prompt_tokens, u.completion_tokens
 
 
 class VertexProvider(Provider):
@@ -181,7 +258,7 @@ class VertexProvider(Provider):
         try:
             budget = 128 if "pro" in (self.model or "").lower() else 0
             cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=budget)
-        except Exception:  # SDK without ThinkingConfig — proceed without it
+        except Exception:  # SDK without ThinkingConfig, proceed without it
             pass
 
         r = self._c.models.generate_content(
@@ -197,6 +274,29 @@ class VertexProvider(Provider):
             log.warning("Vertex returned empty text (finish_reason=%s, out_tokens=%s)",
                         getattr(cand, "finish_reason", "?"), to)
         return _parse_json(text), ti, to
+
+    def chat(self, system, user, max_output):
+        from google.genai import types
+        # Free-text (not JSON). Hard per-turn output cap bounds the turn size.
+        cfg_kwargs = dict(
+            system_instruction=system,
+            temperature=self.temp,
+            max_output_tokens=max(int(max_output), 64),
+        )
+        try:
+            budget = 128 if "pro" in (self.model or "").lower() else 0
+            cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=budget)
+        except Exception:
+            pass
+        r = self._c.models.generate_content(
+            model=self.model, contents=user,
+            config=types.GenerateContentConfig(**cfg_kwargs),
+        )
+        text = r.text or ""
+        um = getattr(r, "usage_metadata", None)
+        ti = getattr(um, "prompt_token_count", 0) or 0
+        to = getattr(um, "candidates_token_count", 0) or 0
+        return text, ti, to
 
 
 def _parse_json(text: str) -> dict:
@@ -225,7 +325,7 @@ def get_provider() -> Provider:
             _PROVIDER = VertexProvider(s.vertex_project, s.vertex_location, s.vertex_model, s.llm_temperature, s.llm_max_tokens)
         else:
             _PROVIDER = MockProvider()
-    except Exception as exc:  # noqa: BLE001 — never fail the request on provider init
+    except Exception as exc:  # noqa: BLE001, never fail the request on provider init
         log.error("LLM provider init failed (%s); using mock.", exc)
         _PROVIDER = MockProvider()
     log.info("LLM provider: %s (%s)", _PROVIDER.name, _PROVIDER.model)
@@ -269,3 +369,27 @@ def render_reading(chart: dict, findings: list[Finding], allowed_sections: set[s
     out_sections.sort(key=lambda s: order.get(s.key, 99))
     summary = (data.get("summary") or summary_seed).strip()
     return summary, out_sections, provider.model or provider.name, ti, to
+
+
+# --------------------------------------------------------------------------- #
+# grounded chat (Phase 5), answers ONLY from the user's findings
+# --------------------------------------------------------------------------- #
+def _chat_payload(findings: list[Finding], history: list[dict], message: str) -> str:
+    return json.dumps({
+        "findings": [{"code": f.code, "title": f.title, "detail": f.detail} for f in findings],
+        "history": [{"role": m.get("role"), "text": m.get("text")} for m in history][-8:],
+        "question": message,
+    }, ensure_ascii=False)
+
+
+def chat_answer(findings: list[Finding], history: list[dict], message: str,
+                max_output: int) -> tuple[str, str, int, int]:
+    """Return (answer, model_name, tokens_in, tokens_out). Grounded in findings."""
+    provider = get_provider()
+    user = _chat_payload(findings, history, message)
+    try:
+        answer, ti, to = provider.chat(CHAT_SYSTEM_PROMPT, user, max_output)
+    except Exception as exc:  # noqa: BLE001, never fail the request on provider error
+        log.error("chat render failed (%s); using deterministic mock.", exc)
+        answer, ti, to = MockProvider().chat(CHAT_SYSTEM_PROMPT, user, max_output)
+    return (answer or "").strip(), provider.model or provider.name, ti, to

@@ -2,10 +2,10 @@
 
 It emits a plausible, internally-consistent Vedic chart in the SAME nested JSON
 shape your real engine produces, so the whole pipeline (engine -> rules -> LLM)
-runs over the exact structure it will see in production — before the real engine
+runs over the exact structure it will see in production, before the real engine
 is connected. It is seeded by the birth-detail hash, so the same input always
 yields the same chart (which is what makes caching meaningful). It is NOT
-astronomically accurate — it is a faithful *shape* stand-in, not an ephemeris.
+astronomically accurate, it is a faithful *shape* stand-in, not an ephemeris.
 
 Shape emitted (subset of Maha-Jyotish v7 that the rules layer consumes):
 
@@ -227,5 +227,57 @@ def compute_mock_chart(birth: dict) -> dict[str, Any]:
             "ad_start": ad_start.isoformat(),
             "ad_end": ad_end.isoformat(),
         }}},
+        "_engine": "mock",
+    }
+
+
+def rectify_mock(payload: dict) -> dict:
+    """Deterministic, plausible birth_time_rectification block (a shape stand-in
+    for the proprietary engine's rectify_birth_time). Seeded by the inputs so the
+    same request yields the same candidates; confidence rises with the number of
+    dated life events supplied. NOT astronomically real."""
+    time_str = str(payload.get("time") or "12:00")
+    try:
+        hh, mm = (int(x) for x in time_str.split(":")[:2])
+        base_min = hh * 60 + mm
+    except Exception:
+        base_min = 720
+    events = [e for e in (payload.get("events") or []) if isinstance(e, dict)]
+    n_ev = len(events)
+
+    seed = hashlib.sha256(
+        f"{payload.get('date')}|{time_str}|{payload.get('lat')}|{payload.get('lon')}"
+        f"|{payload.get('gender')}|{n_ev}".encode()
+    ).hexdigest()
+    rng = random.Random(int(seed[:8], 16))
+
+    def fmt(total: int) -> str:
+        total %= 1440
+        return f"{total // 60:02d}:{total % 60:02d}"
+
+    offsets = {0, rng.choice([-6, -4, -3]), rng.choice([3, 4, 6])}
+    top_conf = min(92, 60 + 6 * min(n_ev, 5)) + rng.randint(-3, 3)
+    cands = []
+    for i, off in enumerate(sorted(offsets, key=lambda o: abs(o))):
+        conf = max(20, top_conf - i * rng.randint(10, 18))
+        cands.append({"time": fmt(base_min + off), "confidence": int(conf),
+                      "ascendant_sign": SIGNS[rng.randrange(12)]})
+    cands.sort(key=lambda c: c["confidence"], reverse=True)
+    recommended = cands[0]
+    times = [c["time"] for c in cands]
+    return {
+        "input_time": time_str,
+        "recommended": recommended,
+        "candidates": cands,
+        "methods": {
+            "Tattva": {"time": cands[0]["time"]},
+            "Kunda": {"time": cands[min(1, len(cands) - 1)]["time"]},
+            "Trutine": {"applied": True},
+            "Animodar": {"applied": True},
+            "KP-RP": {"applied": True},
+            "EventVerification": {"events": n_ev, "agreement_pct": recommended["confidence"]},
+        },
+        "events_used": n_ev,
+        "window": {"start": min(times), "end": max(times)},
         "_engine": "mock",
     }

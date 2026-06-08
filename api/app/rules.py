@@ -1,4 +1,4 @@
-"""Rules layer — the anti-slop engine, tuned for the Maha-Jyotish v7 output.
+"""Rules layer, the anti-slop engine, tuned for the Maha-Jyotish v7 output.
 
 It reads the engine's JSON and emits `Finding`s: factual, jyotish-correct
 statements with explicit evidence. All interpretation lives here; the LLM
@@ -13,10 +13,10 @@ Maha-Jyotish v7 shape this reads:
   chart["yogas"]["detected"], chart["conjunctions"], chart["jaimini_karakas"],
   chart["sade_sati"], chart["danger_zones"]
 
-Houses are computed whole-sign (rashi) from the ascendant — the standard frame
+Houses are computed whole-sign (rashi) from the ascendant, the standard frame
 for narrative Vedic interpretation. (Switch to chart["bhava_chalit"] if you
 prefer Placidus bhava.) The mundane/financial blocks (CSP, Nava Nayaka, Sapta
-Nadi, etc.) are intentionally NOT used for a personal reading — they describe
+Nadi, etc.) are intentionally NOT used for a personal reading, they describe
 the world/markets, not the individual, and would be noise here.
 """
 from __future__ import annotations
@@ -31,12 +31,12 @@ from .models import Finding
 # defensive readers for the v7 shape
 # --------------------------------------------------------------------------- #
 def _d(x: Any) -> dict:
-    """Coerce to dict — guards against an engine emitting a list/None where we expect a map."""
+    """Coerce to dict, guards against an engine emitting a list/None where we expect a map."""
     return x if isinstance(x, dict) else {}
 
 
 def _l(x: Any) -> list:
-    """Coerce to list — guards against an engine emitting a dict/None where we expect a sequence."""
+    """Coerce to list, guards against an engine emitting a dict/None where we expect a sequence."""
     return x if isinstance(x, list) else []
 
 
@@ -132,7 +132,7 @@ def _strength_phrase(dignity: str | None) -> str:
     if d == "moolatrikona":
         return " in moolatrikona (strong)"
     if d == "debilitated":
-        return " where it is debilitated — a tested placement that matures with conscious effort"
+        return " where it is debilitated, a tested placement that matures with conscious effort"
     return ""
 
 
@@ -161,7 +161,7 @@ def _lagna(chart, by, asc_sign) -> list[Finding]:
             code="LAGNA.LORD", category="essence", polarity="neutral", weight=9,
             title=f"Chart ruler {lord} in the {_ord(h)} house",
             detail=(f"{lord}, ruler of the {asc_sign} ascendant, sits in the {_ord(h)} house "
-                    f"in {lp['sign']}{strength} — so the themes of {HOUSE_MEANING.get(h,'that house')} "
+                    f"in {lp['sign']}{strength} - so the themes of {HOUSE_MEANING.get(h,'that house')} "
                     f"are central to how this life unfolds."),
             evidence=[f"{lord} (lagna lord) in {lp['sign']}, {_ord(h)} house"],
         ))
@@ -181,7 +181,7 @@ def _dignities(by, asc_sign) -> list[Finding]:
         where = f", {_ord(h)} house" if h else ""
         if dig == "debilitated":
             detail = (f"{name} is debilitated in {p.get('sign')}{where}. The matters it governs "
-                      f"— {_karaka(name)} — are tested earlier and tend to mature later, often "
+                      f"- {_karaka(name)} - are tested earlier and tend to mature later, often "
                       f"becoming a real source of depth once consciously worked with.")
         else:
             detail = (f"{name} is strong ({dig}) in {p.get('sign')}{where}, supporting "
@@ -241,7 +241,7 @@ def _dasha(chart, by) -> list[Finding]:
         detail += f" Within it, the sub-period (Antardasha) of {al}{aw} adds a layer of {_karaka(al)}."
     return [Finding(
         code="DASHA.CURRENT", category="timing", polarity="neutral", weight=9,
-        title=f"{ml}{'–' + al if al else ''} period",
+        title=f"{ml}{'-' + al if al else ''} period",
         detail=detail,
         evidence=[f"Vimshottari: Mahadasha {ml}" + (f", Antardasha {al}" if al else "")],
     )]
@@ -260,7 +260,7 @@ def _yogas(chart) -> list[Finding]:
             code=f"YOGA.{name.split()[0].upper()}", category="essence",
             polarity="supportive", weight=6,
             title=name,
-            detail=f"{name} is present in the chart — classically linked to {desc.lower()}.",
+            detail=f"{name} is present in the chart, classically linked to {desc.lower()}.",
             evidence=[f"{name}: {', '.join(y.get('planets', []))}".strip(": ")],
         ))
     return out
@@ -276,7 +276,7 @@ def _retro(by) -> list[Finding]:
         code="MOTION.RETRO", category="mind", polarity="mixed", weight=4,
         title=f"Retrograde: {names}",
         detail=(f"{names} {'is' if is_one else 'are'} retrograde, which classically turns "
-                f"{'its' if is_one else 'their'} energy inward — more reflective, revisiting and "
+                f"{'its' if is_one else 'their'} energy inward, more reflective, revisiting and "
                 f"refining {'its' if is_one else 'their'} themes rather than rushing them."),
         evidence=[f"Retrograde: {names}"],
     )]
@@ -291,8 +291,8 @@ def _combust(by) -> list[Finding]:
         code="MOTION.COMBUST", category="essence", polarity="challenging", weight=5,
         title=f"Combust: {names}",
         detail=(f"{names} {'is' if len(comb)==1 else 'are'} combust (very close to the Sun), so "
-                f"{'its' if len(comb)==1 else 'their'} expression tends to be internalised — strongly "
-                f"felt within, less visible outwardly — until consciously developed."),
+                f"{'its' if len(comb)==1 else 'their'} expression tends to be internalised, strongly "
+                f"felt within, less visible outwardly, until consciously developed."),
         evidence=[f"Combust: {names}"],
     )]
 
@@ -313,9 +313,9 @@ def _conjunctions(chart, asc_sign) -> list[Finding]:
         cat = "relationships" if "Venus" in (p1, p2) else "mind" if "Moon" in (p1, p2) else "essence"
         out.append(Finding(
             code=f"CONJ.{p1.upper()}.{p2.upper()}", category=cat, polarity="mixed", weight=6,
-            title=f"{p1}–{p2} conjunction",
+            title=f"{p1}-{p2} conjunction",
             detail=(f"{p1} and {p2} sit in close conjunction (about {sep}° apart), blending "
-                    f"{_karaka(p1)} with {_karaka(p2)} — these two themes operate together rather "
+                    f"{_karaka(p1)} with {_karaka(p2)} - these two themes operate together rather "
                     f"than separately in this life."),
             evidence=[f"{p1} conjunct {p2} (~{sep}°)"],
         ))
@@ -333,8 +333,8 @@ def _atmakaraka(chart) -> list[Finding]:
     return [Finding(
         code="JAIMINI.AK", category="spirit", polarity="neutral", weight=6,
         title=f"Atmakaraka: {p}",
-        detail=(f"By Jaimini, the Atmakaraka — the soul significator, the planet at the highest "
-                f"degree — is {p}{f' in {sign}' if sign else ''}. It points to {_karaka(p)} as the "
+        detail=(f"By Jaimini, the Atmakaraka, the soul significator, the planet at the highest "
+                f"degree, is {p}{f' in {sign}' if sign else ''}. It points to {_karaka(p)} as the "
                 f"core inner agenda this life keeps returning to."),
         evidence=[f"Atmakaraka: {p}{f' in {sign}' if sign else ''}"],
     )]
@@ -368,8 +368,8 @@ def _gandanta(chart, by) -> list[Finding]:
             code=f"GANDANTA.{p.upper()}", category=GRAHA_CATEGORY.get(p, "essence"),
             polarity="mixed", weight=3,
             title=f"{p} at a gandanta degree",
-            detail=(f"{p} sits at a gandanta point (a sensitive water–fire sign junction), which can "
-                    f"give the matters it rules — {_karaka(p)} — an added depth and intensity that "
+            detail=(f"{p} sits at a gandanta point (a sensitive water-fire sign junction), which can "
+                    f"give the matters it rules - {_karaka(p)} - an added depth and intensity that "
                     f"tends to settle and mature with time."),
             evidence=[f"{p} gandanta"],
         ))
@@ -377,13 +377,13 @@ def _gandanta(chart, by) -> list[Finding]:
 
 
 # --------------------------------------------------------------------------- #
-# enriched coverage — house lords / karakas so every life-area has substance
+# enriched coverage, house lords / karakas so every life-area has substance
 # --------------------------------------------------------------------------- #
 def _relationships(chart, by, asc_sign) -> list[Finding]:
     out: list[Finding] = []
     if not asc_sign:
         return out
-    # 7th-house lord — the primary marriage/partnership indicator
+    # 7th-house lord, the primary marriage/partnership indicator
     sign7 = _sign_in_house(asc_sign, 7)
     lord7 = _lord_of(sign7)
     lp = by.get(lord7) if lord7 else None
@@ -408,10 +408,10 @@ def _relationships(chart, by, asc_sign) -> list[Finding]:
             code="RELATION.7THOCC", category="relationships", polarity="mixed", weight=6,
             title=f"{names} in the 7th house",
             detail=(f"{names} occupies the 7th house of partnership, so {'its' if len(occ)==1 else 'their'} "
-                    f"significations colour one-to-one relationships directly — {kk}."),
+                    f"significations colour one-to-one relationships directly - {kk}."),
             evidence=[f"In 7th house: {names}"],
         ))
-    # Venus — natural significator of love and attraction
+    # Venus, natural significator of love and attraction
     v = by.get("Venus")
     if v and v.get("sign"):
         hV = _house_ws(v["sign"], asc_sign)
@@ -426,7 +426,7 @@ def _relationships(chart, by, asc_sign) -> list[Finding]:
                     f"{HOUSE_MEANING.get(hV,'that house')}."),
             evidence=[f"Venus in {v['sign']}, {_ord(hV)} house" + (f", {nak}" if nak else "")],
         ))
-    # Darakaraka — spouse significator (only if the engine provides it)
+    # Darakaraka, spouse significator (only if the engine provides it)
     dk = _d(_d(chart.get("jaimini_karakas")).get("Darakaraka"))
     dp = dk.get("planet")
     if dp:
@@ -434,8 +434,8 @@ def _relationships(chart, by, asc_sign) -> list[Finding]:
         out.append(Finding(
             code="RELATION.DK", category="relationships", polarity="neutral", weight=6,
             title=f"Darakaraka: {dp}",
-            detail=(f"By Jaimini, the Darakaraka — significator of the spouse, the planet at the lowest "
-                    f"degree — is {dp}{f' in {ds}' if ds else ''}. Its nature, {_karaka(dp)}, describes "
+            detail=(f"By Jaimini, the Darakaraka, significator of the spouse, the planet at the lowest "
+                    f"degree, is {dp}{f' in {ds}' if ds else ''}. Its nature, {_karaka(dp)}, describes "
                     f"qualities that tend to come forward through partnership."),
             evidence=[f"Darakaraka: {dp}{f' in {ds}' if ds else ''}"],
         ))
@@ -468,7 +468,7 @@ def _career_houses(by, asc_sign) -> list[Finding]:
             code="CAREER.10THOCC", category="career", polarity="mixed", weight=6,
             title=f"{names} in the 10th house",
             detail=(f"{names} occupies the 10th house of career and visible action, bringing "
-                    f"{'its' if len(occ)==1 else 'their'} themes into professional life — {kk}."),
+                    f"{'its' if len(occ)==1 else 'their'} themes into professional life - {kk}."),
             evidence=[f"In 10th house: {names}"],
         ))
     return out
@@ -487,7 +487,7 @@ def _mercury_mind(by, asc_sign) -> list[Finding]:
     return [Finding(
         code="MIND.MERCURY", category="mind", polarity="neutral", weight=5,
         title=f"Mercury in the {_ord(h)} house",
-        detail=(f"Mercury — intellect, speech and how the mind processes — is in {m['sign']}{sp} in the "
+        detail=(f"Mercury, intellect, speech and how the mind processes, is in {m['sign']}{sp} in the "
                 f"{_ord(h)} house" + (f" in {nak}" if nak else "") + f", shaping the style of thinking "
                 f"and communication around {HOUSE_MEANING.get(h,'that house')}."),
         evidence=[f"Mercury in {m['sign']}, {_ord(h)} house" + (f", {nak}" if nak else "")],
@@ -508,7 +508,7 @@ def _ninth_spirit(by, asc_sign) -> list[Finding]:
         code="SPIRIT.NINTH", category="spirit", polarity="neutral", weight=5,
         title=f"9th lord {lord9} in the {_ord(hL)} house",
         detail=(f"Belief, meaning and dharma are read from the 9th house ({sign9}), whose lord is "
-                f"{lord9}, placed in the {_ord(hL)} house in {lp['sign']}{sp} — connecting your sense "
+                f"{lord9}, placed in the {_ord(hL)} house in {lp['sign']}{sp} - connecting your sense "
                 f"of faith and guiding principles to {HOUSE_MEANING.get(hL,'that house')}."),
         evidence=[f"9th lord {lord9} in {lp['sign']}, {_ord(hL)} house"],
     )]
@@ -544,7 +544,7 @@ def _chara_karakas(chart, by, asc_sign) -> list[Finding]:
         out.append(Finding(
             code=f"JAIMINI.{_CHARA_ABBR[name]}", category=cat, polarity="neutral", weight=wt,
             title=f"{name}: {p}",
-            detail=(f"By Jaimini, the {name} — a chara karaka derived from planetary degree — is "
+            detail=(f"By Jaimini, the {name} - a chara karaka derived from planetary degree, is "
                     f"{p}{f' in {sign}' if sign else ''}{where}{sp}. It signifies {sig}, a thread the "
                     f"chart asks you to develop."),
             evidence=[f"{name}: {p}{f' in {sign}' if sign else ''}"],
@@ -552,7 +552,7 @@ def _chara_karakas(chart, by, asc_sign) -> list[Finding]:
     return out
 
 
-# Chaldean numerology — read straight from the engine's numerology block.
+# Chaldean numerology, read straight from the engine's numerology block.
 _NUM_SINGLE = {
     1: ("the Sun", "individuality, leadership, and initiative"),
     2: ("the Moon", "sensitivity, cooperation, and a receptive mind"),
@@ -578,7 +578,7 @@ def _numerology(chart) -> list[Finding]:
         out.append(Finding(
             code="NUM.PSYCHIC", category="numbers", polarity="neutral", weight=6,
             title=f"Psychic number {psy}",
-            detail=(f"In Chaldean numerology the psychic number, taken from the birth day, is {psy} — "
+            detail=(f"In Chaldean numerology the psychic number, taken from the birth day, is {psy} - "
                     f"linked to {planet}: {q}. It describes the instinctive self and how one tends to "
                     f"act on first impulse."),
             evidence=[f"Psychic number {psy} (birth day {n.get('birth_day')})"],
@@ -589,7 +589,7 @@ def _numerology(chart) -> list[Finding]:
         out.append(Finding(
             code="NUM.DESTINY", category="numbers", polarity="neutral", weight=7,
             title=f"Destiny number {des}",
-            detail=(f"The destiny number, taken from the full date of birth, is {des} — linked to "
+            detail=(f"The destiny number, taken from the full date of birth, is {des} - linked to "
                     f"{planet}: {q}. It points to the broad direction life tends to pull toward."),
             evidence=[f"Destiny number {des}"],
         ))
@@ -604,7 +604,7 @@ def _numerology(chart) -> list[Finding]:
             code="NUM.NAME", category="numbers", polarity="neutral", weight=6,
             title=f"Name number {comp}" + (f"/{red}" if red else ""),
             detail=(f"The name read in the Chaldean system totals {comp}{red_txt}.{mean_txt} This is taken "
-                    f"as the vibration a name carries in how others meet you — descriptive of reputation, "
+                    f"as the vibration a name carries in how others meet you, descriptive of reputation, "
                     f"not a fixed fate."),
             evidence=[f"Name compound {comp}" + (f", reduced {red}" if red else "")],
         ))
@@ -637,7 +637,7 @@ def _dasha_upcoming(chart) -> list[Finding]:
         code="DASHA.NEXT", category="timing", polarity="neutral", weight=7,
         title=f"Next chapter: {np_} period",
         detail=(f"After the current {ml} period ends (around {md_end}), a major {np_} chapter begins, "
-                f"running roughly {ns} to {ne}. The long arc then shifts toward {_karaka(np_)} — worth "
+                f"running roughly {ns} to {ne}. The long arc then shifts toward {_karaka(np_)} - worth "
                 f"knowing now, so the coming years can be prepared for rather than met by surprise."),
         evidence=[f"Vimshottari next Mahadasha: {np_} ({ns} to {ne})"],
     )]
@@ -647,7 +647,7 @@ def _dasha_upcoming(chart) -> list[Finding]:
 # helpers for the expanded Maha-Kundali coverage
 # --------------------------------------------------------------------------- #
 def _dignity_of(planet: str | None, sign: str | None) -> str:
-    """Dignity of a planet in a given sign — used for divisional (varga) charts."""
+    """Dignity of a planet in a given sign, used for divisional (varga) charts."""
     si = _sidx(sign)
     if si is None or not planet:
         return "Normal"
@@ -691,7 +691,7 @@ def _house_lord_finding(by, asc_sign, house, code, category, weight, lead) -> Fi
         code=code, category=category, polarity="neutral", weight=weight,
         title=f"{_ord(house)} lord {lord} in the {_ord(hL)} house",
         detail=(f"{lead} ({sign_h}), whose lord is {lord}, placed in the {_ord(hL)} house in "
-                f"{lp['sign']}{sp} — connecting it to {HOUSE_MEANING.get(hL,'that house')}."),
+                f"{lp['sign']}{sp} - connecting it to {HOUSE_MEANING.get(hL,'that house')}."),
         evidence=[f"{_ord(house)} lord {lord} in {lp['sign']}, {_ord(hL)} house"],
     )
 
@@ -706,7 +706,7 @@ def _house_occ_finding(by, asc_sign, house, code, category, weight, label) -> Fi
         code=code, category=category, polarity="mixed", weight=weight,
         title=f"{names} in the {_ord(house)} house",
         detail=(f"{names} occupies the {_ord(house)} house of {label}, bringing "
-                f"{'its' if len(occ)==1 else 'their'} themes there — {kk}."),
+                f"{'its' if len(occ)==1 else 'their'} themes there - {kk}."),
         evidence=[f"In {_ord(house)} house: {names}"],
     )
 
@@ -729,7 +729,7 @@ def _wealth(chart, by, asc_sign) -> list[Finding]:
         out.append(Finding(
             code="WEALTH.INDU", category="wealth", polarity="neutral", weight=5,
             title=f"Indu Lagna in {indu['sign']}",
-            detail=(f"The Indu Lagna — a special point for wealth and prosperity — falls in "
+            detail=(f"The Indu Lagna, a special point for wealth and prosperity, falls in "
                     f"{indu['sign']}. Planets placed in or aspecting this sign are read as switches "
                     f"for financial flow."),
             evidence=[f"Indu Lagna: {indu['sign']}"],
@@ -739,7 +739,7 @@ def _wealth(chart, by, asc_sign) -> list[Finding]:
         out.append(Finding(
             code="WEALTH.DHANA", category="wealth", polarity="neutral", weight=3,
             title=f"Dhana Saham in {dh['sign']}",
-            detail=(f"The Dhana Saham, a fortuna-style point for wealth, falls in {dh['sign']} — a "
+            detail=(f"The Dhana Saham, a fortuna-style point for wealth, falls in {dh['sign']} - a "
                     f"supplementary marker for where money matters concentrate."),
             evidence=[f"Dhana Saham: {dh['sign']}"],
         ))
@@ -765,7 +765,7 @@ def _family(chart, by, asc_sign) -> list[Finding]:
         out.append(Finding(
             code="FAMILY.PUTRA", category="family", polarity="neutral", weight=3,
             title=f"Putra Saham in {pu['sign']}",
-            detail=(f"The Putra Saham, a point for children, falls in {pu['sign']} — a supplementary "
+            detail=(f"The Putra Saham, a point for children, falls in {pu['sign']} - a supplementary "
                     f"marker for that theme."),
             evidence=[f"Putra Saham: {pu['sign']}"],
         ))
@@ -773,7 +773,7 @@ def _family(chart, by, asc_sign) -> list[Finding]:
 
 
 def _health(chart, by, asc_sign) -> list[Finding]:
-    # Astrological wellness tendencies only — not medical guidance. Kept gentle and hedged.
+    # Astrological wellness tendencies only, not medical guidance. Kept gentle and hedged.
     out: list[Finding] = []
     f6 = _house_lord_finding(by, asc_sign, 6, "HEALTH.SIXTH", "health", 6,
                              "Health, immunity, routine and the capacity to overcome illness are read from the 6th house")
@@ -795,7 +795,7 @@ def _health(chart, by, asc_sign) -> list[Finding]:
             code="HEALTH.VITALITY", category="health", polarity="neutral", weight=4,
             title="Vitality and routine",
             detail=(f"Overall vitality tracks the chart ruler {asc_lord}; here that suggests {tone}. "
-                    f"This is a wellness tendency, not a diagnosis — physical concerns belong with a doctor."),
+                    f"This is a wellness tendency, not a diagnosis, physical concerns belong with a doctor."),
             evidence=[f"Chart ruler {asc_lord} condition"],
         ))
     return out
@@ -819,7 +819,7 @@ def _fortune(chart) -> list[Finding]:
         out.append(Finding(
             code="FORTUNE.BHRIGU", category="fortune", polarity="neutral", weight=5,
             title=f"Bhrigu Bindu in {bb['sign']}",
-            detail=(f"The Bhrigu Bindu — a sensitive destiny point (the midpoint of Moon and Rahu) — sits "
+            detail=(f"The Bhrigu Bindu, a sensitive destiny point (the midpoint of Moon and Rahu), sits "
                     f"in {bb['sign']}" + (f", {bb.get('nakshatra')}" if bb.get('nakshatra') else "")
                     + ". Transits and dashas touching this point often coincide with pivotal turns."),
             evidence=[f"Bhrigu Bindu: {bb['sign']}"],
@@ -829,7 +829,7 @@ def _fortune(chart) -> list[Finding]:
         out.append(Finding(
             code="FORTUNE.PUNYA", category="fortune", polarity="supportive", weight=4,
             title=f"Punya Saham in {pn['sign']}",
-            detail=(f"The Punya Saham, a point for merit and good fortune, falls in {pn['sign']} — a "
+            detail=(f"The Punya Saham, a point for merit and good fortune, falls in {pn['sign']} - a "
                     f"supplementary marker for where grace tends to accrue."),
             evidence=[f"Punya Saham: {pn['sign']}"],
         ))
@@ -855,8 +855,8 @@ def _strengths(chart) -> list[Finding]:
     av = _d(chart.get("ashtakavarga"))
     sh, wk = _l(av.get("strong_houses")), _l(av.get("weak_houses"))
     if sh or wk:
-        sh_t = ", ".join(_ord(h) for h in sh) or "—"
-        wk_t = ", ".join(_ord(h) for h in wk) or "—"
+        sh_t = ", ".join(_ord(h) for h in sh) or "-"
+        wk_t = ", ".join(_ord(h) for h in wk) or "-"
         out.append(Finding(
             code="STRENGTH.AV", category="strengths", polarity="neutral", weight=5,
             title="Ashtakavarga strong and weak houses",
@@ -873,7 +873,7 @@ def _strengths(chart) -> list[Finding]:
             code="STRENGTH.STAR", category="strengths", polarity="neutral", weight=4,
             title=f"{s0.get('star')} close to your {s0.get('planet')}",
             detail=(f"The fixed star {s0.get('star')} sits close to your {s0.get('planet')} "
-                    f"(orb about {s0.get('orb')}°) — {_star_meaning(s0.get('meaning'))}."),
+                    f"(orb about {s0.get('orb')}°) - {_star_meaning(s0.get('meaning'))}."),
             evidence=[f"{s0.get('star')} conjunct {s0.get('planet')} (orb {s0.get('orb')}°)"],
         ))
     return out
@@ -892,8 +892,8 @@ def _kp(chart) -> list[Finding]:
         out.append(Finding(
             code=f"KP.H{h}", category="kp", polarity="neutral", weight=5,
             title=f"KP {_ord(h)}-cusp sub-lord: {sub}",
-            detail=(f"In KP (Krishnamurti Paddhati), the sub-lord of the {_ord(h)} cusp — which governs "
-                    f"{label} — is {sub}. KP reads the outcome and timing of {label} chiefly from "
+            detail=(f"In KP (Krishnamurti Paddhati), the sub-lord of the {_ord(h)} cusp, which governs "
+                    f"{label} - is {sub}. KP reads the outcome and timing of {label} chiefly from "
                     f"{sub}'s house-significations and dasha, so {sub} is the planet to watch for that area."),
             evidence=[f"KP {_ord(h)} cusp sub-lord {sub}"],
         ))
@@ -912,7 +912,7 @@ def _panchang(chart) -> list[Finding]:
             detail=(f"You were born on a {va.get('name')} ({va.get('lord')}'s day), in the "
                     f"{ti.get('paksha')} fortnight on {ti.get('name')} tithi, under {nk.get('name')} "
                     f"nakshatra (pada {nk.get('pada')}, lord {nk.get('lord')}), with {yo.get('name')} "
-                    f"yoga and {ka.get('name')} karana — the living energies of the day at your first breath."),
+                    f"yoga and {ka.get('name')} karana, the living energies of the day at your first breath."),
             evidence=[f"{va.get('name')}, {ti.get('name')} tithi, {nk.get('name')} nakshatra"],
         ))
     mp = _d(chart.get("moon_phase"))
@@ -921,7 +921,7 @@ def _panchang(chart) -> list[Finding]:
             code="PANCHANG.MOON", category="panchang", polarity="neutral", weight=4,
             title=f"{mp.get('phase_name')} at birth",
             detail=(f"The Moon was at the {mp.get('phase_name')} (about {mp.get('illumination_pct')}% lit, "
-                    f"{'waxing' if mp.get('waxing') else 'waning'}) — "
+                    f"{'waxing' if mp.get('waxing') else 'waning'}), "
                     f"{'a building, outgoing lunar phase' if mp.get('waxing') else 'a culminating, reflective lunar phase'}."),
             evidence=[f"Moon phase: {mp.get('phase_name')}"],
         ))
@@ -970,7 +970,7 @@ def _alerts(chart, by) -> list[Finding]:
         code="ALERTS.SUMMARY", category="alerts", polarity="mixed", weight=5,
         title="Sensitive points to handle with awareness",
         detail=("Points worth handling with awareness rather than alarm: " + "; ".join(flags) +
-                ". These are the chart's tender spots — areas that tend to mature with patience and "
+                ". These are the chart's tender spots, areas that tend to mature with patience and "
                 "conscious care rather than force, and they are noted here for steadiness, not fear."),
         evidence=["; ".join(flags)],
     )]
@@ -1016,7 +1016,7 @@ def _remedies(chart, by) -> list[Finding]:
             code=f"REMEDY.{p.upper()}", category="remedies", polarity="supportive", weight=4,
             title=f"For {p}",
             detail=(f"Traditional, optional supports for {p} {why}: chant {mantra}; in daily life, {beh}. "
-                    f"These are supportive practices offered in the tradition — not requirements, "
+                    f"These are supportive practices offered in the tradition, not requirements, "
                     f"directives, or guarantees of outcome."),
             evidence=[f"Remedy for {p} ({why})"],
         ))
@@ -1026,7 +1026,7 @@ def _remedies(chart, by) -> list[Finding]:
         out.append(Finding(
             code="REMEDY.NOTE", category="remedies", polarity="neutral", weight=2,
             title="A note on gemstones",
-            detail=("Gemstones are not suggested casually — a stone over-amplifies its planet and should "
+            detail=("Gemstones are not suggested casually, a stone over-amplifies its planet and should "
                     "only follow a personal consultation with a qualified astrologer. Behavioural and "
                     "devotional remedies are gentler and carry no such risk."),
             evidence=["Gemstone caution"],
@@ -1044,8 +1044,8 @@ def _arudha(chart) -> list[Finding]:
         out.append(Finding(
             code="ESSENCE.AL", category="essence", polarity="neutral", weight=5,
             title=f"Arudha Lagna in {al}",
-            detail=(f"Your Arudha Lagna — the chart's projected image, how the world tends to perceive you "
-                    f"— falls in {al}. People often meet you through that sign's colours, even where your "
+            detail=(f"Your Arudha Lagna, the chart's projected image, how the world tends to perceive you "
+                    f"- falls in {al}. People often meet you through that sign's colours, even where your "
                     f"inner reality runs differently."),
             evidence=[f"Arudha Lagna: {al}"],
         ))
@@ -1073,7 +1073,7 @@ def _navamsa(chart) -> list[Finding]:
         bits.append(f"Venus is in {ven}{_strength_phrase(_dignity_of('Venus', ven))}")
     return [Finding(
         code="RELATION.D9", category="relationships", polarity="neutral", weight=6,
-        title="Navamsa (D9) — the marriage chart",
+        title="Navamsa (D9), the marriage chart",
         detail=("In the navamsa (D9), the classical chart of marriage and inner dharma, " +
                 " and ".join(bits) + ". The navamsa refines how partnership and commitment mature "
                 "beneath the surface chart."),
@@ -1088,8 +1088,8 @@ def _dasamsa(chart) -> list[Finding]:
         return []
     return [Finding(
         code="CAREER.D10", category="career", polarity="neutral", weight=5,
-        title="Dasamsa (D10) — the career chart",
-        detail=(f"In the dasamsa (D10), the chart of career and visible action, the ascendant is {lag} — "
+        title="Dasamsa (D10), the career chart",
+        detail=(f"In the dasamsa (D10), the chart of career and visible action, the ascendant is {lag} - "
                 f"refining the field and public shape that professional life tends to take."),
         evidence=[f"D10 ascendant: {lag}"],
     )]
@@ -1104,7 +1104,7 @@ def _double_transit(chart) -> list[Finding]:
     return [Finding(
         code="TIMING.DBL", category="timing", polarity="supportive", weight=6,
         title=f"Double transit on the {hs} house",
-        detail=(f"A Saturn–Jupiter double transit is currently active over the {hs} house — a recognised "
+        detail=(f"A Saturn-Jupiter double transit is currently active over the {hs} house, a recognised "
                 f"activation window, when the matters of that house tend to come forward for real "
                 f"development and decisions."),
         evidence=[f"Double transit active: {hs} house"],
@@ -1129,7 +1129,7 @@ def _section_sahams(chart) -> list[Finding]:
             out.append(Finding(
                 code=code, category=cat, polarity="neutral", weight=3,
                 title=f"{nm} Saham in {s['sign']}",
-                detail=(f"The {nm} Saham, a fortuna-style point for {topic}, falls in {s['sign']} — a "
+                detail=(f"The {nm} Saham, a fortuna-style point for {topic}, falls in {s['sign']} - a "
                         f"supplementary marker for that area of life."),
                 evidence=[f"{nm} Saham: {s['sign']}"],
             ))
@@ -1137,9 +1137,120 @@ def _section_sahams(chart) -> list[Finding]:
 
 
 # --------------------------------------------------------------------------- #
+# yearly (Varshphal), a year-scoped, timing-forward set (report_type="yearly")
+# --------------------------------------------------------------------------- #
+def _overlaps_year(start: Any, end: Any, year: int) -> bool:
+    """True if an ISO-date window [start, end] intersects the calendar `year`."""
+    if not (start and end):
+        return False
+    return str(start)[:10] <= f"{year:04d}-12-31" and f"{year:04d}-01-01" <= str(end)[:10]
+
+
+def _yearly(chart, year: int) -> list[Finding]:
+    """Year-scoped findings: which dasha periods govern the year, plus the slow
+    Saturn/Jupiter activations (double transit, ingresses) when the engine surfaces
+    them. Reads `dasha_systems.vimshottari` (.sequence / .all_antardashas / .current),
+    `double_transit`, and `planetary_ingress` - all read defensively.
+    """
+    out: list[Finding] = []
+    cur = _dasha_current(chart)
+    vim = _d(_d(chart.get("dasha_systems")).get("vimshottari"))
+    ml, md_s, md_e = cur.get("mahadasha"), cur.get("md_start"), cur.get("md_end")
+    al, ad_s, ad_e = cur.get("antardasha"), cur.get("ad_start"), cur.get("ad_end")
+
+    # 1) Mahadasha(s) governing the year, prefer the full sequence, else the current window.
+    seq = [r for r in _l(vim.get("sequence")) if isinstance(r, dict)]
+    md_rows = [r for r in seq if _overlaps_year(r.get("start"), r.get("end"), year)]
+    if not md_rows and ml and _overlaps_year(md_s, md_e, year):
+        md_rows = [{"planet": ml, "start": md_s, "end": md_e}]
+
+    if md_rows:
+        lords = [r.get("planet") for r in md_rows if r.get("planet")]
+        lords = list(dict.fromkeys(lords))
+        if len(lords) == 1:
+            win = next((r for r in md_rows if r.get("planet") == lords[0]), {})
+            title = f"{year}: {lords[0]} major period"
+            detail = (f"Through {year}, the Vimshottari major period (Mahadasha) of {lords[0]} sets the "
+                      f"backdrop (running {win.get('start')} to {win.get('end')}); the year's longer themes "
+                      f"lean toward {_karaka(lords[0])}.")
+        else:
+            title = f"{year}: {' → '.join(lords)} handover"
+            detail = (f"{year} spans a handover in the Vimshottari major period, from {' to '.join(lords)} - "
+                      f"so the year's backdrop shifts from {_karaka(lords[0])} toward {_karaka(lords[-1])}.")
+        out.append(Finding(
+            code="YEAR.MAHADASHA", category="yearly", polarity="neutral", weight=8,
+            title=title, detail=detail,
+            evidence=["Mahadasha in %d: " % year + "; ".join(
+                f"{r.get('planet')} ({r.get('start')}-{r.get('end')})" for r in md_rows)],
+        ))
+    elif ml:
+        out.append(Finding(
+            code="YEAR.CONTEXT", category="yearly", polarity="neutral", weight=7,
+            title=f"{year}: read against the {ml} period",
+            detail=(f"The current Vimshottari major period is {ml} ({md_s} to {md_e}); {year} falls outside it, "
+                    f"so a precise Mahadasha for that year comes from the engine's full dasha sequence. Here {year} "
+                    f"is framed against the present {ml} chapter."),
+            evidence=[f"Current Mahadasha: {ml} ({md_s}-{md_e})"],
+        ))
+
+    # 2) Antardasha (sub-period) texture across the year.
+    ad_rows: list[tuple[str, Any, Any]] = []
+    for r in _l(vim.get("all_antardashas")):
+        if not isinstance(r, dict):
+            continue
+        p = r.get("planet") or r.get("antardasha") or r.get("lord")
+        s, e = r.get("start") or r.get("ad_start"), r.get("end") or r.get("ad_end")
+        if p and _overlaps_year(s, e, year):
+            ad_rows.append((p, s, e))
+    if not ad_rows and al and _overlaps_year(ad_s, ad_e, year):
+        ad_rows.append((al, ad_s, ad_e))
+    if ad_rows:
+        lords = list(dict.fromkeys(p for p, _, _ in ad_rows))
+        txt = "; ".join(f"{p} ({s} to {e})" for p, s, e in ad_rows[:4])
+        out.append(Finding(
+            code="YEAR.ANTARDASHA", category="yearly", polarity="neutral", weight=7,
+            title=f"{year}: sub-period - {', '.join(lords)}",
+            detail=(f"Within that backdrop, the sub-period (Antardasha) running through {year} is {txt}. "
+                    f"This sets the year's nearer rhythm, foregrounding {_karaka(lords[0])}."),
+            evidence=[f"Antardasha in {year}: {txt}"],
+        ))
+
+    # 3) Saturn-Jupiter double transit (only if the engine surfaces it).
+    dt = _d(chart.get("double_transit"))
+    dhouses = [h for h in _l(dt.get("houses")) if isinstance(h, int)]
+    if dt.get("active") and dhouses:
+        hs = ", ".join(_ord(h) for h in dhouses)
+        out.append(Finding(
+            code="YEAR.DBL", category="yearly", polarity="supportive", weight=6,
+            title=f"{year}: double transit on the {hs} house",
+            detail=(f"A Saturn-Jupiter double transit activates the {hs} house in this window, a recognised "
+                    f"time when those matters come forward for real development during {year}."),
+            evidence=[f"Double transit: {hs} house"],
+        ))
+
+    # 4) Slow-planet ingresses landing in the year (only if the engine surfaces it).
+    ing = _l(chart.get("planetary_ingress")) or _l(_d(chart.get("planetary_ingress")).get("ingresses"))
+    for ev in ing:
+        if not isinstance(ev, dict):
+            continue
+        p = ev.get("planet")
+        s = ev.get("to_sign") or ev.get("sign")
+        when = ev.get("date") or ev.get("when")
+        if p in ("Jupiter", "Saturn", "Rahu", "Ketu") and s and when and str(when)[:4] == f"{year:04d}":
+            out.append(Finding(
+                code=f"YEAR.INGRESS.{str(p).upper()}", category="yearly", polarity="neutral", weight=5,
+                title=f"{year}: {p} enters {s}",
+                detail=(f"{p} changes sign into {s} during {year} ({when}); its slower, structural influence "
+                        f"begins to be felt from {s} for the months that follow."),
+                evidence=[f"{p} ingress to {s} on {when}"],
+            ))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # public
 # --------------------------------------------------------------------------- #
-def derive_findings(chart: dict[str, Any]) -> list[Finding]:
+def derive_findings(chart: dict[str, Any], year: int | None = None) -> list[Finding]:
     planets = _planets(chart)
     by = _by_name(planets)
     asc_sign = _asc_sign(chart)
@@ -1180,6 +1291,222 @@ def derive_findings(chart: dict[str, Any]) -> list[Finding]:
     findings += _double_transit(chart)
     findings += _twelfth_spirit(chart, by, asc_sign)
     findings += _section_sahams(chart)
+    if year is not None:                       # report_type="yearly" (Varshphal)
+        findings += _yearly(chart, year)
 
     findings.sort(key=lambda f: (-f.weight, f.code))
     return findings
+
+
+# --------------------------------------------------------------------------- #
+# Prashna / KP horary (POST /v1/prashna), a chart cast for the moment of asking
+# --------------------------------------------------------------------------- #
+# (keywords, house, label). First match wins; order matters where houses overlap.
+_QUESTION_MAP: list[tuple[tuple[str, ...], int, str]] = [
+    (("marri", "marry", "wed", "spouse", "wife", "husband", "partner", "relationship", "romance", "love"), 7, "marriage & partnership"),
+    (("child", "children", "progeny", "conceive", "pregnan", "baby"), 5, "children"),
+    (("education", "study", "studies", "exam", "degree", "admission", "college", "course"), 4, "education"),
+    (("property", "house", "home", "land", "flat", "vehicle", "car"), 4, "property & home"),
+    (("travel", "foreign", "abroad", "visa", "relocat", "immigrat"), 12, "travel & foreign matters"),
+    (("litigation", "court", "case", "dispute", "legal", "lawsuit", "enemy", "enemies"), 6, "disputes & litigation"),
+    (("money", "wealth", "finance", "loan", "debt", "gain", "income", "profit", "invest"), 11, "money & gains"),
+    (("career", "promotion", "business", "profession", "growth", "status"), 10, "career & status"),
+    (("job", "employment", "service", "interview", "hired", "appointment"), 6, "a job / employment"),
+    (("health", "illness", "disease", "recover", "surgery", "sick", "operation"), 6, "health & recovery"),
+]
+
+_BENEFIC = {"Jupiter", "Venus", "Mercury", "Moon"}
+# index % 3 of the sign: 0 movable (cardinal), 1 fixed, 2 dual (mutable)
+_MODALITY = {0: ("movable", "a relatively quick unfolding"),
+             1: ("fixed", "a slower, steady unfolding that rewards patience"),
+             2: ("dual", "an unfolding in phases, sometimes after some back-and-forth")}
+
+
+def _map_question(question: str, category: str | None) -> tuple[int, str]:
+    text = f"{category or ''} {question or ''}".lower()
+    for keys, house, label in _QUESTION_MAP:
+        if any(k in text for k in keys):
+            return house, label
+    return 1, "the matter as it stands"
+
+
+def _dignity_phrase(dignity: str | None) -> str:
+    d = (dignity or "").lower()
+    if "exalt" in d:
+        return " (exalted, strong)"
+    if "debil" in d:
+        return " (debilitated, under strain)"
+    if "own" in d:
+        return " (own sign, comfortable)"
+    return ""
+
+
+def derive_prashna(chart: dict[str, Any], question: str, category: str | None = None) -> list[Finding]:
+    """KP horary findings for a chart cast at the moment of asking. The verdict is
+    read from the relevant house's cuspal sub-lord (from `kp_significators.cusps`
+    when the engine provides it), else defensively from that house's ruler. Every
+    statement is grounded in real placements; nothing about the asker's premise is
+    assumed true (a neutral "if-not" branch is always given)."""
+    house, matter = _map_question(question, category)
+    asc = _asc_sign(chart)
+    by = _by_name(_planets(chart))
+    house_sign = _sign_in_house(asc, house)
+    ruler = _lord_of(house_sign)
+
+    # cuspal sub-lord from the engine's KP block, if present; else the house ruler
+    cusp = _d(_d(_d(chart.get("kp_significators")).get("cusps")).get(f"H{house}"))
+    csl = cusp.get("sub") or cusp.get("ssl")
+    if csl and csl in by:
+        sig, sig_kind = csl, "the cuspal sub-lord (KP)"
+    else:
+        sig, sig_kind = ruler, f"the {_ord(house)}-house ruler"
+
+    sp = by.get(sig) or {}
+    sig_sign = sp.get("sign")
+    if not (asc and sig and sig_sign):           # not enough to ground a verdict
+        return [Finding(
+            code="PRASHNA.HOUSE", category="prashna", polarity="neutral", weight=6,
+            title=f"Read from the {_ord(house)} house",
+            detail=(f"For {matter}, the question is read from the {_ord(house)} house "
+                    f"({HOUSE_MEANING.get(house, 'that area')}). The prashna chart did not expose "
+                    f"enough detail to ground a fuller KP verdict."),
+            evidence=[f"Question mapped to the {_ord(house)} house"],
+        )]
+
+    occ = _house_ws(sig_sign, asc)
+    owns = [h for h in range(1, 13) if _lord_of(_sign_in_house(asc, h)) == sig]
+    sig_houses = set(owns) | ({occ} if occ else set())
+
+    promising = {house, 11}                       # the matter's house + the 11th (fulfilment of desire)
+    twelfth_from = ((house - 2) % 12) + 1          # loss/negation of the matter
+    challenging = {6, 8, 12, twelfth_from}         # the trik houses + negation
+    p_hit = sorted(sig_houses & promising)
+    c_hit = sorted(sig_houses & challenging)
+    score = len(p_hit) - len(c_hit)
+    verdict = "favourable" if score > 0 else "challenging" if score < 0 else "mixed"
+
+    nature = "a natural benefic" if sig in _BENEFIC else "a natural malefic"
+    houses_txt = ", ".join(_ord(h) for h in sorted(sig_houses)) or "few clear houses"
+    out: list[Finding] = []
+
+    out.append(Finding(
+        code="PRASHNA.HOUSE", category="prashna", polarity="neutral", weight=6,
+        title=f"{matter.capitalize()} - read from the {_ord(house)} house",
+        detail=(f"Cast for the moment you asked (ascendant {asc}), {matter} is read from the "
+                f"{_ord(house)} house - {HOUSE_MEANING.get(house, 'that area of life')}. Its significator "
+                f"is {sig}, {sig_kind}, sitting in {sig_sign} in the {_ord(occ)} house{_dignity_phrase(sp.get('dignity'))}."),
+        evidence=[f"{matter}: {_ord(house)} house; significator {sig} in {sig_sign}, {_ord(occ)} house"],
+    ))
+
+    out.append(Finding(
+        code="PRASHNA.VERDICT", category="prashna",
+        polarity="supportive" if verdict == "favourable" else "challenging" if verdict == "challenging" else "mixed",
+        weight=9, title=f"KP indication: {verdict}",
+        detail=(f"{sig} ({nature}) connects to the {houses_txt} house(s). It "
+                f"{'touches the ' + ', '.join(_ord(h) for h in p_hit) + ' (supportive here)' if p_hit else 'does not clearly touch the supportive houses'}"
+                f", and {'touches the ' + ', '.join(_ord(h) for h in c_hit) + ' (obstructing here)' if c_hit else 'avoids the obstructing houses'} - "
+                f"so the indication for {matter} leans {verdict}. This is a focused KP read of the cusp's significator, not a guarantee."),
+        evidence=[f"Significator {sig} houses {sorted(sig_houses)}; promising∩={p_hit}, challenging∩={c_hit}"],
+    ))
+
+    if sig_sign in SIGNS:
+        mod, timing = _MODALITY[SIGNS.index(sig_sign) % 3]
+        out.append(Finding(
+            code="PRASHNA.TIMING", category="prashna", polarity="neutral", weight=7,
+            title="Timing by sign modality",
+            detail=(f"{sig} occupies a {mod} sign ({sig_sign}), which in KP timing points to {timing}."),
+            evidence=[f"{sig} in {sig_sign} ({mod})"],
+        ))
+
+    if verdict == "favourable":
+        alt = ("conditions tend to support it forming, especially as the timing above matures")
+    elif verdict == "challenging":
+        alt = ("conditions are not yet ripe, and pushing hard now is less likely to hold")
+    else:
+        alt = ("the matter stays genuinely open, it turns on the choices and effort you bring")
+    out.append(Finding(
+        code="PRASHNA.IFNOT", category="prashna", polarity="neutral", weight=8,
+        title="If the premise isn't settled",
+        detail=(f"Read this as guidance to weigh, not a fixed outcome. If the situation you describe "
+                f"has not actually settled, the same significator simply means {alt}. Nothing here assumes "
+                f"your premise is already true."),
+        evidence=["Premise-neutral horary branch"],
+    ))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Birth-Time Rectification (POST /v1/btr), reads the engine's
+# birth_time_rectification block defensively into findings + a normalised dict.
+# --------------------------------------------------------------------------- #
+def _btr_candidate(c: Any) -> dict:
+    c = _d(c)
+    conf = c.get("confidence", c.get("score"))
+    return {
+        "time": c.get("time") or c.get("birth_time") or c.get("tob"),
+        "confidence": int(conf) if isinstance(conf, (int, float)) else None,
+        "ascendant_sign": c.get("ascendant_sign") or c.get("asc") or c.get("lagna"),
+    }
+
+
+def derive_btr(rect: dict, payload: dict) -> tuple[list[Finding], dict]:
+    """Return (findings, normalised_rectification). Reads candidates + the
+    recommended time + confidence + the methods used, all defensively so it
+    adapts to the real engine's shape; nothing is invented."""
+    rect = _d(rect)
+    cands_raw = _l(rect.get("candidates")) or _l(rect.get("results")) or _l(rect.get("times"))
+    cands = [nc for nc in (_btr_candidate(c) for c in cands_raw) if nc["time"]]
+    rec = _btr_candidate(rect.get("recommended") or rect.get("best") or (cands_raw[0] if cands_raw else {}))
+    if not rec["time"] and cands:
+        rec = cands[0]
+
+    m = rect.get("methods")
+    methods = list(m.keys()) if isinstance(m, dict) else [str(x) for x in m] if isinstance(m, list) else []
+    input_time = rect.get("input_time") or payload.get("time")
+    n_ev = rect.get("events_used")
+    if not isinstance(n_ev, int):
+        n_ev = len(_l(payload.get("events")))
+
+    norm = {"recommended": rec, "candidates": cands, "methods": methods,
+            "input_time": input_time, "events_used": n_ev, "window": rect.get("window")}
+
+    out: list[Finding] = []
+    if rec.get("time"):
+        conf = rec.get("confidence")
+        conf_txt = f" (confidence {conf}%)" if isinstance(conf, int) else ""
+        asc_txt = f", giving a {rec['ascendant_sign']} ascendant" if rec.get("ascendant_sign") else ""
+        out.append(Finding(
+            code="BTR.RECOMMENDED", category="btr", polarity="neutral", weight=9,
+            title=f"Most likely birth time: {rec['time']}",
+            detail=(f"Across the classical rectification methods, the most likely birth time is "
+                    f"{rec['time']}{conf_txt}{asc_txt}. The time you provided was {input_time}."),
+            evidence=[f"Recommended {rec['time']}{conf_txt}; input {input_time}"],
+        ))
+    if cands:
+        listed = "; ".join(
+            f"{c['time']}" + (f" ({c['confidence']}%)" if isinstance(c.get("confidence"), int) else "")
+            for c in cands)
+        out.append(Finding(
+            code="BTR.CANDIDATES", category="btr", polarity="neutral", weight=7,
+            title="Candidate times considered",
+            detail=(f"The methods converged on these candidate times: {listed}. The spread is small, "
+                    f"so the ascendant and house cusps stay close across them."),
+            evidence=[f"Candidates: {listed}"],
+        ))
+    if methods:
+        out.append(Finding(
+            code="BTR.METHODS", category="btr", polarity="neutral", weight=6,
+            title="Methods triangulated",
+            detail=(f"This estimate triangulates {', '.join(methods)} against the {n_ev} life "
+                    f"event(s) you supplied, agreement across methods is what raises the confidence."),
+            evidence=[f"Methods: {', '.join(methods)}; events: {n_ev}"],
+        ))
+    out.append(Finding(
+        code="BTR.NOTE", category="btr", polarity="neutral", weight=8,
+        title="How to read this",
+        detail=("Rectification narrows a likely window; it is not a certainty. Confirm it against further "
+                "well-dated life events, even a few minutes can shift the ascendant degree and the house "
+                "cusps, so treat the recommended time as a strong working hypothesis, not a fixed fact."),
+        evidence=["Rectification is probabilistic"],
+    ))
+    return out, norm

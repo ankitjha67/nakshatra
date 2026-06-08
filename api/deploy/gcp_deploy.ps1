@@ -66,7 +66,8 @@ if ($OpenAiApiKey)    { $SecretArgs += ",OPENAI_API_KEY=openai-api-key:latest" }
 
 $EnvVars = "APP_ENV=prod,LLM_PROVIDER=$LlmProvider,STORE_BACKEND=$StoreBackend," +
            "FIRESTORE_PROJECT=$ProjectId,VERTEX_PROJECT=$ProjectId,VERTEX_LOCATION=$Region," +
-           "CLOUD_TASKS_QUEUE=$Queue"
+           "CLOUD_TASKS_QUEUE=$Queue,CORS_ORIGINS=https://$ProjectId.web.app," +
+           "DEFAULT_USER_TIER=free,VERIFY_TOKEN_REVOCATION=true,REQUIRE_EMAIL_VERIFIED=true"
 
 Write-Host "==> Deploy to Cloud Run"
 gcloud run deploy $Service `

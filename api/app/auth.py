@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 
 from .config import get_settings
-from .billing import Principal, TIERS, get_store, require_key
+from .billing import Principal, TIERS, get_store, require_key, require_admin as _key_admin
 
 log = logging.getLogger("auth")
 
@@ -40,10 +40,13 @@ def _verify_bearer(token: str) -> dict:
     _ensure_firebase()
     from firebase_admin import auth as fb_auth
     try:
-        return fb_auth.verify_id_token(token)
-    except Exception as exc:  # noqa: BLE001 — surface as 401, not 500
+        decoded = fb_auth.verify_id_token(token, check_revoked=get_settings().verify_token_revocation)
+    except Exception as exc:  # noqa: BLE001, surface as 401, not 500
         log.warning("Firebase token verification failed: %s", exc)
         raise HTTPException(401, "Invalid or expired sign-in token")
+    if get_settings().require_email_verified and not decoded.get("email_verified", False):
+        raise HTTPException(403, "Please verify your email address to continue.")
+    return decoded
 
 
 def _principal_from_uid(uid: str, email: str | None) -> Principal:
@@ -55,6 +58,19 @@ def _principal_from_uid(uid: str, email: str | None) -> Principal:
     return Principal(user_id=uid, key=uid, tier=tier)
 
 
+def delete_firebase_user(uid: str) -> bool:
+    """Best-effort deletion of the Firebase Auth identity (GDPR erasure). No-op for
+    non-Firebase principals (e.g. B2B API keys) or when Admin SDK is unavailable."""
+    try:
+        _ensure_firebase()
+        from firebase_admin import auth as fb_auth
+        fb_auth.delete_user(uid)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log.warning("firebase identity delete skipped uid=%s err=%s", uid, type(exc).__name__)
+        return False
+
+
 async def require_user(authorization: str | None = Header(default=None)) -> Principal:
     """Firebase-only dependency (used where an app login is mandatory)."""
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -63,14 +79,54 @@ async def require_user(authorization: str | None = Header(default=None)) -> Prin
     return _principal_from_uid(decoded["uid"], decoded.get("email"))
 
 
+def _client_ip(request: Request) -> str:
+    """Caller IP, first hop of X-Forwarded-For (set by Cloud Run), else peer."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
+def _enforce_and_track(p: Principal, request: Request) -> None:
+    """Block banned accounts (403) and record IP/activity for every auth'd request."""
+    store = get_store()
+    ban = store.is_banned(p.user_id)
+    if ban:
+        raise HTTPException(403, f"Account suspended: {ban.get('reason') or 'policy violation'}")
+    try:
+        store.record_activity(p.user_id, _client_ip(request))
+    except Exception:  # noqa: BLE001, never fail a request on activity logging
+        log.warning("activity logging failed uid=%s", p.user_id)
+
+
 async def require_principal(
+    request: Request,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
 ) -> Principal:
-    """Accept a Firebase bearer token (app users) or an X-API-Key (programmatic)."""
+    """Accept a Firebase bearer token (app users) or an X-API-Key (programmatic).
+    Then enforce bans and capture the caller IP."""
     if authorization and authorization.lower().startswith("bearer "):
         decoded = _verify_bearer(authorization.split(" ", 1)[1].strip())
-        return _principal_from_uid(decoded["uid"], decoded.get("email"))
-    if x_api_key:
-        return await require_key(x_api_key)
-    raise HTTPException(401, "Provide a Firebase bearer token (Authorization: Bearer ...) or X-API-Key")
+        p = _principal_from_uid(decoded["uid"], decoded.get("email"))
+    elif x_api_key:
+        p = await require_key(x_api_key)
+    else:
+        raise HTTPException(401, "Provide a Firebase bearer token (Authorization: Bearer ...) or X-API-Key")
+    _enforce_and_track(p, request)
+    return p
+
+
+async def require_admin(
+    authorization: str | None = Header(default=None),
+    x_admin_key: str | None = Header(default=None),
+) -> None:
+    """Admin access via EITHER a Firebase ID token with an `admin` custom claim
+    (so the web dashboard needs no server secret in the browser) OR an X-Admin-Key
+    (programmatic). The X-Admin-Key path is fail-closed on weak/unset secrets."""
+    if authorization and authorization.lower().startswith("bearer "):
+        decoded = _verify_bearer(authorization.split(" ", 1)[1].strip())
+        if decoded.get("admin") is True:
+            return
+        raise HTTPException(403, "Admin privilege required")
+    await _key_admin(x_admin_key)

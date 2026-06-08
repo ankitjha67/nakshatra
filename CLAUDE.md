@@ -1,4 +1,4 @@
-# CLAUDE.md — Nakshatra
+# CLAUDE.md, Nakshatra
 
 Master context for working in this repo with Claude Code. Read this first, then `docs/`.
 
@@ -23,9 +23,11 @@ Live today: API on Google Cloud Run, web on Firebase Hosting, Firebase Auth, Fir
 
 Two independent deploys:
 - **API** → `cd api && gcloud run deploy jyotish-api --source . --region asia-south1 --allow-unauthenticated`
-- **web** → `cd web && npm run build && firebase deploy --only hosting`
+- **web** → `cd web && npm run build && firebase deploy --only hosting,firestore:rules`
+  (the `firestore:rules` target is **required** - it ships `web/firestore.rules`, the deny-by-default
+  money/PII guard. Deploying `--only hosting` alone leaves the live DB on whatever ruleset it had.)
 
-## The anti-slop architecture (the core idea — do not break this)
+## The anti-slop architecture (the core idea, do not break this)
 
 Four stages. The LLM is a **writer, not an interpreter**:
 
@@ -44,7 +46,7 @@ Consequences that must be preserved when adding features:
   **fear/doom**, and absolute predictions. Keep it that way. Health stays *tendencies, not diagnosis*;
   numerology/remedies stay *traditional and optional*, never fatalistic or prescriptive.
 
-## The engine (proprietary — NOT in this repo)
+## The engine (proprietary, NOT in this repo)
 
 `maha_jyotish_cloud_engine.py` is the owner's proprietary engine. **It is gitignored and must never be
 committed** (this repo is public). It lives locally in `api/` and is uploaded to Cloud Build at deploy
@@ -70,7 +72,7 @@ planetary_ingress, birth_time_rectification`.
 Key sub-shapes (verified against real output):
 - `chart.asc` = `{deg, fmt, sign, nakshatra}`; `chart.mc`, `chart.asc_tropical`, `chart.mc_tropical`.
 - `chart.planets[NAME]` = `{deg, fmt, sign(str), nakshatra, pada, status:{dignity, retrograde,
-  combust, gandanta, mrityu_bhaga}}`. **No house field** — rules compute whole-sign:
+  combust, gandanta, mrityu_bhaga}}`. **No house field** - rules compute whole-sign:
   `house = ((planet_sign_idx - asc_sign_idx) % 12) + 1`.
 - `chart.moon_nakshatra`, `chart.moon_pada`, `chart.nakshatra_lord`.
 - `cusps.H1..H12` = `{deg, sign}` (KP/Placidus cusps; also numeric `"1".."12"`).
@@ -98,39 +100,39 @@ Key sub-shapes (verified against real output):
 - `arudha_padas` = `{AL:{sign}, A2..A12:{sign}, UL:{sign}}` (AL = public image, UL = marriage).
 - `danger_zones` = `{gandanta_planets:[{planet}], ...}`. `eclipse_proximity` = `{solar_eclipse_proximity,
   lunar_eclipse_proximity, ...}`.
-- `birth_time_rectification` (only if `rectify_birth_time(...)` is called) — used by the BTR mode.
+- `birth_time_rectification` (only if `rectify_birth_time(...)` is called), used by the BTR mode.
 
 Deliberately **not** surfaced as personal sections (by design): `financial_astrology`/Gann (market
-timing — belongs in a trading product), `sarvatobhadra_chakra`, `kurma_chakra`, `planetary_ingress`
+timing, belongs in a trading product), `sarvatobhadra_chakra`, `kurma_chakra`, `planetary_ingress`
 (mundane/transit). Don't add these to personal readings without a clear reason.
 
 ## Backend modules (`api/app/`)
 
-- `__init__.py` — **version stamps**: `ENGINE_VERSION_FALLBACK`, `RULES_VERSION`, `RENDERER_VERSION`.
+- `__init__.py` - **version stamps**: `ENGINE_VERSION_FALLBACK`, `RULES_VERSION`, `RENDERER_VERSION`.
   These are part of every Firestore reading **cache key**. **RULE: bump the relevant stamp whenever you
-  change rules, the renderer, `SECTION_SPEC`, or tier→section mapping — otherwise stale cached readings
+  change rules, the renderer, `SECTION_SPEC`, or tier→section mapping, otherwise stale cached readings
   are served.** (Currently `rules-0.5`, `render-0.3`.)
-- `config.py` — pydantic-settings; reads env (LLM provider, Vertex project/location/model, Firestore/
+- `config.py` - pydantic-settings; reads env (LLM provider, Vertex project/location/model, Firestore/
   Firebase project, default tier, CORS, admin key, cache flags).
-- `models.py` — `BirthDetails` (+`chart_hash()`), `Finding{code,category,polarity,weight,title,detail,
+- `models.py` - `BirthDetails` (+`chart_hash()`), `Finding{code,category,polarity,weight,title,detail,
   evidence}`, `ReadingSection{key,title,body,citations}`, `Meta`, `ReadingResponse`.
-- `knowledge.py` — `SIGNS, SIGN_LORD, EXALT_SIGN, OWN_SIGNS, NAKSHATRA_LORD, DASHA_YEARS, KARAKA,
+- `knowledge.py` - `SIGNS, SIGN_LORD, EXALT_SIGN, OWN_SIGNS, NAKSHATRA_LORD, DASHA_YEARS, KARAKA,
   HOUSE_MEANING, GRAHA_CATEGORY`, helpers.
-- `engine.py` — engine boundary (reads `ENGINE_MODULE`/`ENGINE_CALLABLE`/`ENGINE_VERSION`; mock fallback).
-- `rules.py` — **the anti-slop core**: defensive readers + finding generators + `derive_findings(chart)`.
+- `engine.py` - engine boundary (reads `ENGINE_MODULE`/`ENGINE_CALLABLE`/`ENGINE_VERSION`; mock fallback).
+- `rules.py` - **the anti-slop core**: defensive readers + finding generators + `derive_findings(chart)`.
   ~25 generators across categories: essence, mind, relationships, career, wealth, family, health,
   timing, fortune, spirit, strengths, kp, panchang, alerts, numbers, remedies.
-- `llm.py` — `SECTION_SPEC` (16 sections, ordered), `SYSTEM_PROMPT`, `_group`, providers
+- `llm.py` - `SECTION_SPEC` (16 sections, ordered), `SYSTEM_PROMPT`, `_group`, providers
   (`MockProvider` local, `VertexProvider`/`AnthropicProvider`/`OpenAIProvider`), `render_reading`
   (validates citations ⊆ finding codes, drops empties). `VertexProvider` sets `thinking_budget` and
   `max_output_tokens=max(.., 8192)` so the full report doesn't truncate.
-- `billing.py` — `Tier`, `TIERS` (free/basic/pro/enterprise), `ALL_SECTIONS`, `MemoryStore` +
+- `billing.py` - `Tier`, `TIERS` (free/basic/pro/enterprise), `ALL_SECTIONS`, `MemoryStore` +
   `FirestoreStore`, `require_key`/`require_admin`/`enforce_quota`, `get_user`/`upsert_user`.
-- `auth.py` — Firebase ID-token verification → `Principal`; `require_principal` accepts `Authorization:
+- `auth.py` - Firebase ID-token verification → `Principal`; `require_principal` accepts `Authorization:
   Bearer <idToken>` OR `X-API-Key`.
-- `pipeline.py` — `get_chart` / `get_reading(birth, tier)`; caches by `chart_hash` + version stamps +
+- `pipeline.py` - `get_chart` / `get_reading(birth, tier)`; caches by `chart_hash` + version stamps +
   unlocked sections.
-- `main.py` — `GET /health`, `GET /v1/tiers`; `POST /v1/chart`, `POST /v1/reading`,
+- `main.py` - `GET /health`, `GET /v1/tiers`; `POST /v1/chart`, `POST /v1/reading`,
   `POST /v1/reading/async` + `GET /v1/reading/{job_id}`; admin + `POST /webhooks/payments`.
 
 ## Tiers (current)
@@ -164,8 +166,7 @@ Flip + wire payments before launch.
 ## Secrets & the public-repo rule
 
 This repo is **public**. NEVER commit: `maha_jyotish_cloud_engine.py`, `.env`, service-account JSON,
-`ADMIN_API_KEY`, payment keys. The Firebase **web API key** is *not* a secret (it ships in client code)
-— it's fine in `web/`. Server secrets go in env / Secret Manager only.
+`ADMIN_API_KEY`, payment keys. The Firebase **web API key** is *not* a secret (it ships in client code), it's fine in `web/`. Server secrets go in env / Secret Manager only.
 
 ## Guardrails for Claude Code (important)
 

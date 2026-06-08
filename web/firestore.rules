@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// Nakshatra Firestore security rules.
+//
+// MONEY PATH — read carefully. Credit balances and the ledger are written ONLY
+// by the backend via the Firebase Admin SDK, which bypasses these rules. The
+// browser may READ its own balance/ledger/chats to render the UI, but may NEVER
+// write any of it. Everything not explicitly allowed below is denied by default.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow read:  if request.auth != null && request.auth.uid == uid;
+      allow write: if false;                       // balances/tier — backend only
+
+      match /ledger/{entry} {                       // append-only audit trail
+        allow read:  if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      match /chats/{chatId} {
+        allow read:  if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+
+        match /messages/{msgId} {
+          allow read:  if request.auth != null && request.auth.uid == uid;
+          allow write: if false;
+        }
+      }
+    }
+
+    // api_keys, usage, cache, jobs and anything else are backend-only: no client
+    // access whatsoever. (This catch-all only denies; it never grants.)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

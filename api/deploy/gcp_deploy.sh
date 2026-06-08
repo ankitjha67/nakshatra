@@ -58,7 +58,7 @@ echo "==> Deploy to Cloud Run"
 gcloud run deploy "$SERVICE" \
   --image "$IMAGE" --region "$REGION" --allow-unauthenticated \
   --concurrency 20 --cpu 1 --memory 512Mi --min-instances 0 --max-instances 10 \
-  --set-env-vars "APP_ENV=prod,LLM_PROVIDER=$LLM_PROVIDER,STORE_BACKEND=firestore,FIRESTORE_PROJECT=$PROJECT_ID,VERTEX_PROJECT=$PROJECT_ID,VERTEX_LOCATION=$REGION,CLOUD_TASKS_QUEUE=$QUEUE" \
+  --set-env-vars "APP_ENV=prod,LLM_PROVIDER=$LLM_PROVIDER,STORE_BACKEND=firestore,FIRESTORE_PROJECT=$PROJECT_ID,VERTEX_PROJECT=$PROJECT_ID,VERTEX_LOCATION=$REGION,CLOUD_TASKS_QUEUE=$QUEUE,CORS_ORIGINS=https://$PROJECT_ID.web.app,DEFAULT_USER_TIER=free,VERIFY_TOKEN_REVOCATION=true,REQUIRE_EMAIL_VERIFIED=true" \
   --update-secrets "$SECRET_ARGS"
 
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"

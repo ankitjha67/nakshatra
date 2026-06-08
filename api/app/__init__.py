@@ -1,4 +1,4 @@
-"""Jyotish Cloud — a tiered, cloud-hosted Vedic astrology API.
+"""Jyotish Cloud, a tiered, cloud-hosted Vedic astrology API.
 
 Pipeline: birth details -> calculation engine (your code) -> deterministic
 rules/findings -> constrained LLM renderer -> grounded reading.
@@ -11,5 +11,5 @@ __version__ = "0.1.0"
 
 # bump these when the corresponding stage's output changes
 ENGINE_VERSION_FALLBACK = "mock-0.1"   # used only when the mock engine runs
-RULES_VERSION = "rules-0.5"
-RENDERER_VERSION = "render-0.3"
+RULES_VERSION = "rules-0.6"       # rules-0.6: yearly (Varshphal) findings generator
+RENDERER_VERSION = "render-0.7"   # 0.4: report_type; 0.5: yearly; 0.6: prashna; 0.7: btr section

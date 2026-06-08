@@ -48,7 +48,7 @@ DASHA_YEARS = {
     "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17,
 }
 
-# short, plain-language significations (karakas) — the vocabulary the renderer may use
+# short, plain-language significations (karakas), the vocabulary the renderer may use
 KARAKA = {
     "Sun": "the self, vitality, confidence, father and authority",
     "Moon": "the mind, emotions, comfort, and the mother",

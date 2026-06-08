@@ -1,24 +1,47 @@
-import { auth } from "./firebase.js";
+import { auth, PREVIEW } from "./firebase.js";
 
-const BASE = import.meta.env.VITE_API_BASE;
+// In preview (no Firebase config), talk to the local API with the seeded dev key.
+const BASE = import.meta.env.VITE_API_BASE || (PREVIEW ? "http://127.0.0.1:8099" : "");
+const PREVIEW_KEY = "pro_dev_key";
+const PREVIEW_ADMIN_KEY = "test-admin-secret";   // dev-only; matches a locally-booted API
 
-// Authenticated POST to the cloud API using the Firebase ID token (never an API key in the browser).
-export async function apiPost(path, body) {
-  const user = auth.currentUser;
+// Real users send a Firebase ID token (never an API key in the browser); the dev
+// preview sends the seeded local dev key instead. In prod, admin endpoints are
+// authorized by an `admin` custom claim on the same Firebase token.
+async function authHeaders(path = "") {
+  if (PREVIEW) {
+    const h = { "X-API-Key": PREVIEW_KEY };
+    if (path.startsWith("/admin") || path.startsWith("/mock")) h["X-Admin-Key"] = PREVIEW_ADMIN_KEY;
+    return h;
+  }
+  const user = auth?.currentUser;
   if (!user) throw new Error("Not signed in.");
-  const token = await user.getIdToken(true);
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
+  return { Authorization: `Bearer ${await user.getIdToken(true)}` };
+}
+
+async function handle(res) {
   if (!res.ok) {
     let detail = "";
     try { detail = (await res.json()).detail || ""; } catch {}
-    const map = { 401: "Session expired — sign out and back in.", 402: detail || "Your plan doesn't include this yet.", 429: detail || "Limit reached — try again shortly." };
-    throw new Error(map[res.status] || detail || `Request failed (${res.status}).`);
+    const map = {
+      401: "Session expired, sign out and back in.",
+      402: detail || "Your plan doesn't include this yet.",
+      429: detail || "Limit reached, try again shortly.",
+    };
+    const err = new Error(map[res.status] || detail || `Request failed (${res.status}).`);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
+}
+
+export async function apiPost(path, body) {
+  const headers = { "Content-Type": "application/json", ...(await authHeaders(path)) };
+  return handle(await fetch(`${BASE}${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
+}
+
+export async function apiGet(path) {
+  return handle(await fetch(`${BASE}${path}`, { headers: await authHeaders(path) }));
 }
 
 export async function getTiers() {

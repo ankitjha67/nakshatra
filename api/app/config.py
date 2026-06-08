@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # the bundled mock engine runs so the service still boots.
     engine_module: str = ""          # e.g. "maha_jyotish.api"
     engine_callable: str = "compute_chart"
+    engine_rectify_callable: str = "rectify_birth_time"   # BTR mode; mock-fallback if absent
     engine_version: str = ""         # report your engine's version here
 
     # --- LLM ---
@@ -41,15 +42,31 @@ class Settings(BaseSettings):
     # --- auth (Firebase / Google sign-in) ---
     firebase_project: str = ""        # defaults to firestore/vertex project if blank
     default_user_tier: str = "free"   # tier assigned to a user on first sign-in
+    verify_token_revocation: bool = False   # check_revoked on ID tokens (recommend True in prod)
+    require_email_verified: bool = False    # require a verified email before metered LLM access
 
     # --- store ---
     store_backend: str = "memory"    # memory | firestore | postgres
     firestore_project: str = ""
     database_url: str = ""           # postgres dsn when store_backend=postgres
     cache_readings: bool = True
+    api_key_pepper: str = ""         # server pepper; B2B keys are stored hashed at rest
+    persist_chat: bool = True        # store chat transcripts (set False to keep none)
+    chat_retention_days: int = 0     # >0 stamps an expireAt for a Firestore TTL policy (0 = keep)
+
+    # --- credits / chat metering (see docs/CREDIT_LEDGER.md) ---
+    chat_max_output: int = 800             # hard per-turn output cap (bounded turn size)
+    daily_token_ceiling: int = 200_000     # per-user/day abuse ceiling (independent of balance)
+    daily_global_token_breaker: int = 0    # optional global daily Vertex spend breaker (0 = off)
+    # abuse / anomaly thresholds (admin flagging)
+    anomaly_token_day_flag: int = 1_000_000   # tokens/day above this flags a user
+    anomaly_refund_flag: int = 3              # >= this many refund requests flags a user
+    anomaly_ip_accounts_flag: int = 5         # >= this many accounts on one IP flags them
 
     # --- auth / billing ---
-    admin_api_key: str = "admin_dev_key"   # CHANGE in prod; provisions keys
+    # No usable default: admin/internal endpoints stay disabled until a real
+    # secret is configured (Secret Manager). Placeholders are rejected too.
+    admin_api_key: str = ""                 # must be set (Secret Manager) to enable admin endpoints
     payments_provider: str = "none"        # none | razorpay | stripe
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
@@ -62,7 +79,31 @@ class Settings(BaseSettings):
     # background thread. Leave blank for local/dev (runs in-process).
     cloud_tasks_queue: str = ""      # projects/.../locations/.../queues/...
     worker_base_url: str = ""        # public URL Cloud Tasks calls back to
-    internal_token: str = "internal_dev_token"  # guards the worker endpoint
+    internal_token: str = ""             # must be set to enable the internal worker endpoint
+
+
+    @property
+    def is_prod(self) -> bool:
+        return self.app_env.lower() == "prod"
+
+    def startup_warnings(self) -> list[str]:
+        """Prod-readiness checks (logged at startup). Empty in dev."""
+        if not self.is_prod:
+            return []
+        w: list[str] = []
+        if self.admin_api_key in ("", "admin_dev_key", "change-me"):
+            w.append("ADMIN_API_KEY is a default/placeholder, set a strong secret (Secret Manager).")
+        if self.internal_token in ("", "internal_dev_token"):
+            w.append("INTERNAL_TOKEN is the dev default, set a strong secret.")
+        if self.cors_origins.strip() in ("", "*"):
+            w.append("CORS_ORIGINS is '*' - lock it to the web origin in prod.")
+        if self.store_backend == "memory":
+            w.append("STORE_BACKEND=memory in prod, data is not persisted; use firestore.")
+        if self.payments_provider != "none" and not (self.razorpay_webhook_secret or self.stripe_webhook_secret):
+            w.append("payments enabled but no webhook secret set, signatures cannot be verified.")
+        if self.llm_provider == "mock":
+            w.append("LLM_PROVIDER=mock in prod, readings would be deterministic stubs, not real LLM output.")
+        return w
 
 
 @lru_cache
