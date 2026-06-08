@@ -26,10 +26,12 @@ export default function ChatTab({ lastBirth, onBalance }) {
     if (!text || busy) return;
     if (text.length > 6000) { setErr(`Message is too long (${text.length}/6000 characters). Please shorten it.`); return; }
     setErr(""); setInput(""); setBusy(true);
-    const history = msgs.filter((m) => !m.error).map((m) => ({ role: m.role, text: m.text }));
     setMsgs((m) => [...m, { role: "user", text }]);
     try {
-      const resp = await apiPost("/v1/chat", { birth: lastBirth, message: text, history, chat_id: chatId });
+      // Don't send client history: the server is authoritative (loads prior turns by
+      // chat_id) and ignores any client-sent history. Sending it only risked 422s when
+      // a past turn (e.g. a long pasted message) exceeded the per-turn length cap.
+      const resp = await apiPost("/v1/chat", { birth: lastBirth, message: text, chat_id: chatId });
       setChatId(resp.chat_id);
       setMsgs((m) => [...m, { role: "assistant", text: resp.answer, tokens: resp.tokens_used }]);
       onBalance && onBalance(resp.balance);

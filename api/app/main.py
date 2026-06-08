@@ -275,7 +275,9 @@ def reading(birth: BirthDetails, p: Principal = Depends(require_principal)):
 # --------------------------------------------------------------------------- #
 class ChatTurn(BaseModel):
     role: Literal["user", "assistant"]
-    text: str = Field(..., max_length=4000)
+    # match the message cap so a long prior turn can't 422 the request (history is
+    # server-authoritative and ignored for grounding anyway; this is just defensive)
+    text: str = Field(..., max_length=6000)
 
 
 class ChatRequest(BaseModel):
