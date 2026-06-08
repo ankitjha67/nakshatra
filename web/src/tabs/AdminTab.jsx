@@ -21,6 +21,10 @@ export default function AdminTab() {
   const [audit, setAudit] = useState([]);
   const [users, setUsers] = useState([]);
   const [detail, setDetail] = useState(null);
+  const [ov, setOv] = useState(null);          // /admin/overview analytics
+  const [q, setQ] = useState("");              // users search
+  const [tierFilter, setTierFilter] = useState("all");
+  const [sortKey, setSortKey] = useState("last_seen");
   const [generated, setGenerated] = useState([]);     // plaintext, shown once
   const [cKind, setCKind] = useState("beta");
   const [cCount, setCCount] = useState(20);
@@ -39,8 +43,18 @@ export default function AdminTab() {
     apiGet("/admin/refunds").then((d) => setRefunds(d.requests || [])).catch(() => {});
     apiGet("/admin/audit?limit=50").then((d) => setAudit(d.entries || [])).catch(() => {});
     apiGet("/admin/users").then((d) => setUsers(d.users || [])).catch(() => {});
+    apiGet("/admin/overview").then(setOv).catch(() => {});
   };
   useEffect(load, []);
+
+  const exportUsersCsv = () => {
+    const cols = ["uid", "email", "tier", "tier_source", "banned", "last_seen", "tokens_today", "has_subscription", "discount_pct", "birth_locked"];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [cols.join(","), ...users.map((u) => cols.map((c) => esc(u[c])).join(","))];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `nakshatra-users-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  };
 
   const openUser = (uid) => { setDetail(null); apiGet(`/admin/users/${uid}`).then(setDetail).catch((e) => setErr(e.message)); };
   const refreshDetail = (uid) => apiGet(`/admin/users/${uid}`).then(setDetail).catch(() => {});
@@ -93,18 +107,38 @@ export default function AdminTab() {
   }
   if (!stats) return <p className="loader" style={{ paddingTop: 20 }}>Loading admin…</p>;
 
-  const cost = stats.platform_cost || {};
   const inr = (n) => "₹" + Number(n || 0).toLocaleString();
+  const o = ov || {}; const ou = o.users || {}; const orev = o.revenue || {};
+  const ocd = o.codes || {}; const orq = o.requests || {};
+  const cost = o.platform_cost || stats.platform_cost || {};
   const cards = [
-    ["Users", (stats.users_total || 0).toLocaleString()],
-    ["Banned", stats.banned || 0],
-    ["Flagged", stats.flagged || 0],
-    ["Tokens today", (stats.tokens_today || 0).toLocaleString()],
-    ["Revenue", inr(stats.revenue_inr)],
-    ["Refunded", inr(stats.refunded_inr)],
-    ["Net", inr(stats.net_inr)],
+    ["Users", (ou.total ?? stats.users_total ?? 0).toLocaleString()],
+    ["Paid", `${ou.paid ?? 0}${ou.conversion_pct != null ? ` · ${ou.conversion_pct}%` : ""}`],
+    ["Active 7d", ou.active_7d ?? "—"],
+    ["Active 30d", ou.active_30d ?? "—"],
+    ["MRR", inr(orev.mrr_inr)],
+    ["Net revenue", inr(orev.net_inr ?? stats.net_inr)],
+    ["Tokens today", ((o.tokens || {}).today ?? stats.tokens_today ?? 0).toLocaleString()],
     ["Run cost / mo", inr(cost.total_inr)],
+    ["Codes redeemed", `${ocd.redemptions ?? 0} / ${ocd.total ?? 0}`],
+    ["Pending refunds", orq.refunds_pending ?? 0],
+    ["Pending changes", orq.birth_changes_pending ?? 0],
+    ["Banned", stats.banned ?? 0],
   ];
+  const byTier = ou.by_tier || {};
+  const series = (o.tokens || {}).series || [];
+  const maxTok = Math.max(1, ...series.map((s) => s.tokens));
+  const ql = q.trim().toLowerCase();
+  const shownUsers = users
+    .filter((u) => tierFilter === "all" || u.tier === tierFilter)
+    .filter((u) => !ql || (u.email || "").toLowerCase().includes(ql) || (u.uid || "").toLowerCase().includes(ql))
+    .slice()
+    .sort((a, b) => {
+      if (sortKey === "tokens_today") return (b.tokens_today || 0) - (a.tokens_today || 0);
+      if (sortKey === "tier") return (a.tier || "").localeCompare(b.tier || "");
+      if (sortKey === "email") return (a.email || a.uid || "").localeCompare(b.email || b.uid || "");
+      return String(b.last_seen || "").localeCompare(String(a.last_seen || ""));
+    });
 
   return (
     <div>
@@ -115,16 +149,58 @@ export default function AdminTab() {
         ))}
       </div>
 
+      {ov && (
+        <div className="admin-panels" style={{ marginTop: 16 }}>
+          <div className="admin-panel">
+            <p className="data-h">Tier distribution</p>
+            {["free", "basic", "pro", "enterprise"].map((t) => {
+              const n = byTier[t] || 0; const pct = Math.round(100 * n / Math.max(ou.total || 1, 1));
+              return (
+                <div key={t} className="bar-row">
+                  <span className="bar-label">{t}</span>
+                  <span className="bar-track"><span className="bar-fill" style={{ width: `${pct}%` }} /></span>
+                  <span className="bar-val">{n}</span>
+                </div>
+              );
+            })}
+            <p className="note">{ou.with_subscription || 0} active subscriptions · {ou.birth_locked || 0} charts locked</p>
+          </div>
+          <div className="admin-panel">
+            <p className="data-h">Tokens / day (14d)</p>
+            <div className="spark">
+              {series.map((s) => (
+                <span key={s.date} className="spark-bar" title={`${s.date}: ${s.tokens.toLocaleString()}`}
+                      style={{ height: `${Math.max(2, Math.round(100 * s.tokens / maxTok))}%` }} />
+              ))}
+            </div>
+            <p className="note">peak {maxTok.toLocaleString()} · today {((o.tokens || {}).today || 0).toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+
       {msg && <p className="note" style={{ color: "var(--brass)", marginTop: 18 }}>{msg}</p>}
 
       <p className="kicker" style={{ marginTop: 26 }}>Users ({users.length}) · click a row for details</p>
-      {users.length === 0 ? (
-        <p className="note">No users yet.</p>
+      <div className="admin-row" style={{ marginBottom: 10 }}>
+        <input placeholder="Search email or uid" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "1 1 200px" }} />
+        <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
+          <option value="all">all tiers</option>{TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+          <option value="last_seen">recent</option>
+          <option value="tokens_today">tokens today</option>
+          <option value="tier">tier</option>
+          <option value="email">email</option>
+        </select>
+        <button className="ghost sm" onClick={exportUsersCsv} disabled={!users.length}>Export CSV</button>
+      </div>
+      {shownUsers.length === 0 ? (
+        <p className="note">{users.length ? "No users match the filter." : "No users yet."}</p>
       ) : (
         <table className="admin-tbl">
           <thead><tr><th>User</th><th>Tier</th><th>Last seen</th><th>Tokens today</th><th>Status</th></tr></thead>
           <tbody>
-            {users.map((u) => (
+            {shownUsers.map((u) => (
               <tr key={u.uid} className="rowlink" onClick={() => openUser(u.uid)}>
                 <td>{u.email || <span className="mono">{u.uid}</span>}</td>
                 <td>{u.tier}{u.tier_source ? <span className="mono"> ({u.tier_source})</span> : ""}</td>

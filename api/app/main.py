@@ -994,6 +994,58 @@ def admin_anomalies(_: None = Depends(require_admin)):
     return {"flagged": _scan_anomalies()}
 
 
+@app.get("/admin/overview")
+def admin_overview(_: None = Depends(require_admin)):
+    """Rich platform analytics: tier mix, active users, revenue/MRR, codes, token
+    trend, pending queues. One payload that drives the analytics dashboard."""
+    store = get_store()
+    now = datetime.now(timezone.utc)
+    users = store.list_users()
+    by_tier = {"free": 0, "basic": 0, "pro": 0, "enterprise": 0}
+    locked = subs = active7 = active30 = 0
+    for u in users:
+        by_tier[u.get("tier", "free")] = by_tier.get(u.get("tier", "free"), 0) + 1
+        if u.get("birth_lock"):
+            locked += 1
+        if u.get("subscription_id"):
+            subs += 1
+        ls = (store.get_activity(u.get("uid")) or {}).get("last_seen")
+        if ls:
+            try:
+                dt = ls if isinstance(ls, datetime) else datetime.fromisoformat(str(ls).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                age = (now - dt).days
+                active7 += age <= 7
+                active30 += age <= 30
+            except Exception:  # noqa: BLE001
+                pass
+    pays = store.all_payments()
+    captured = sum(int(p.get("amount_inr", 0)) for p in pays if p.get("status") == "captured")
+    refunded = sum(int(p.get("amount_inr", 0)) for p in pays if p.get("status") == "refunded")
+    mrr = sum(TIERS.get(u.get("tier", "free"), TIERS["free"]).price_inr_month
+              for u in users if u.get("subscription_id"))
+    codes = store.list_codes()
+    by_kind: dict = {}
+    for c in codes:
+        by_kind[c.get("kind", "?")] = by_kind.get(c.get("kind", "?"), 0) + 1
+    paid = by_tier.get("basic", 0) + by_tier.get("pro", 0) + by_tier.get("enterprise", 0)
+    return {
+        "users": {"total": len(users), "by_tier": by_tier, "active_7d": active7,
+                  "active_30d": active30, "birth_locked": locked, "with_subscription": subs,
+                  "paid": paid, "conversion_pct": round(100 * paid / max(len(users), 1), 1)},
+        "revenue": {"captured_inr": captured, "refunded_inr": refunded,
+                    "net_inr": captured - refunded, "mrr_inr": mrr},
+        "codes": {"total": len(codes), "redemptions": sum(int(c.get("uses", 0)) for c in codes),
+                  "active": sum(1 for c in codes if c.get("active") and c.get("uses", 0) < c.get("max_uses", 1)),
+                  "by_kind": by_kind},
+        "requests": {"refunds_pending": len(store.list_refund_requests("pending")),
+                     "birth_changes_pending": len(store.list_change_requests("pending"))},
+        "tokens": {"today": store.global_tokens_today(), "series": store.global_tokens_recent(14)},
+        "platform_cost": pricing.monthly_platform_cost(max(len(users), 1)),
+    }
+
+
 @app.get("/admin/users")
 def admin_users(_: None = Depends(require_admin)):
     """All users with the key analytics fields, for the clickable users table."""
