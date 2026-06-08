@@ -182,6 +182,12 @@ button.sm{padding:5px 11px;font-size:12px}
   text-transform:uppercase;color:var(--muted);margin:0 0 8px}
 .redeem-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .redeem-row input{flex:1 1 220px;font-family:"IBM Plex Mono",monospace;letter-spacing:.04em}
+/* compact redeem bar on the main screen (above the tab content) */
+.redeem-bar{background:rgba(8,8,18,.40);border:1px solid var(--hair-dark);border-radius:12px;
+  padding:12px 16px;margin-bottom:18px;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+.redeem-bar .redeem{border-top:none;padding-top:0;margin-top:0}
+.redeem-bar .redeem-label{color:var(--cream-dim)}
+.redeem-bar .redeem-row input{background:rgba(10,10,22,.55);color:var(--cream);border-color:var(--hair-dark);color-scheme:dark}
 footer.site{padding:28px 0;border-top:1px solid var(--hair-dark);color:var(--cream-faint);font-size:12px;font-family:"IBM Plex Mono",monospace;margin-top:30px}
 
 /* ------------------------------------------------------------------ */

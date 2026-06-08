@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+    # per-tier recurring plan ids, "basic=plan_x,pro=plan_y,enterprise=plan_z"
+    razorpay_plans: str = ""
+    # optional per-tier discount offer ids (Razorpay Offers), "pro=offer_x,..."
+    razorpay_offers: str = ""
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
 
@@ -85,6 +89,22 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.app_env.lower() == "prod"
+
+    @staticmethod
+    def _parse_map(spec: str) -> dict:
+        out: dict[str, str] = {}
+        for part in (spec or "").split(","):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                if k.strip() and v.strip():
+                    out[k.strip()] = v.strip()
+        return out
+
+    def razorpay_plan_map(self) -> dict:
+        return self._parse_map(self.razorpay_plans)
+
+    def razorpay_offer_map(self) -> dict:
+        return self._parse_map(self.razorpay_offers)
 
     def startup_warnings(self) -> list[str]:
         """Prod-readiness checks (logged at startup). Empty in dev."""

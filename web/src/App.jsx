@@ -120,6 +120,9 @@ export default function App() {
             ))}
           </nav>
 
+          {userTier !== "enterprise" && (
+            <div className="redeem-bar"><RedeemCode onRedeemed={refreshMe} /></div>
+          )}
           {locked(active.min) ? <Paywall tab={active} tiers={tiers} onRedeemed={refreshMe} /> : active.render(ctx)}
         </>
       )}

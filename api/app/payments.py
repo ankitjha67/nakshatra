@@ -72,6 +72,40 @@ def create_razorpay_order(amount_inr: int, key_id: str, key_secret: str,
         raise PaymentError(502, "Could not reach the payment gateway.")
 
 
+def _razorpay_post(path: str, body: dict, key_id: str, key_secret: str) -> dict:
+    import base64
+    import urllib.error
+    import urllib.request
+    auth = base64.b64encode(f"{key_id}:{key_secret}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        "https://api.razorpay.com/v1" + path,
+        data=json.dumps(body).encode("utf-8"), method="POST",
+        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:                       # noqa: BLE001
+        raise PaymentError(502, f"Razorpay request failed ({e.code}).")
+    except Exception:                                          # noqa: BLE001
+        raise PaymentError(502, "Could not reach the payment gateway.")
+
+
+def create_razorpay_subscription(plan_id: str, key_id: str, key_secret: str, notes: dict,
+                                 total_count: int = 12, offer_id: str | None = None) -> dict:
+    """Create a recurring Razorpay subscription on a per-tier plan. Returns the
+    subscription JSON (its id drives the Checkout widget). A discount is applied
+    via a Razorpay Offer id when one is configured for the tier."""
+    body: dict = {
+        "plan_id": plan_id,
+        "total_count": int(total_count),       # number of billing cycles
+        "customer_notify": 1,
+        "notes": {k: str(v) for k, v in (notes or {}).items()},
+    }
+    if offer_id:
+        body["offer_id"] = offer_id
+    return _razorpay_post("/subscriptions", body, key_id, key_secret)
+
+
 def _entity(payload: dict, key: str) -> dict:
     ent = (((payload.get("payload") or {}).get(key) or {}).get("entity")) or {}
     return ent if isinstance(ent, dict) else {}
