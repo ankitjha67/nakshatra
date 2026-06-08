@@ -16,6 +16,8 @@ import AccountTab from "./tabs/AccountTab.jsx";
 const AdminTab = lazy(() => import("./tabs/AdminTab.jsx"));
 
 const RANK = { free: 0, basic: 1, pro: 2, enterprise: 3 };
+// Bump when the consent text materially changes (forces re-consent).
+const CONSENT_VERSION = "2026-06-08";
 
 // One metered AI allowance powers both readings and chat (cost-gated for >=50% margin).
 const ALLOWANCE_NOTE = "Readings draw on your monthly AI allowance (shared with chat); casting the same chart again is free.";
@@ -25,11 +27,11 @@ const ALLOWANCE_NOTE = "Readings draw on your monthly AI allowance (shared with 
 // and richer data unlock by tier, gated inside ReadingTab/Charts/ChartData).
 const TABS = [
   { key: "natal", label: "Natal", min: "free",
-    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} blurb={"Your birth chart + a focused natal reading. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} blurb={"Your birth chart + a focused natal reading. " + ALLOWANCE_NOTE} /> },
   { key: "maha", label: "Maha-Kundali", min: "pro",
-    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
   { key: "yearly", label: "Yearly", min: "pro",
-    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
   { key: "prashna", label: "Prashna", min: "pro",
     render: () => <PrashnaTab /> },
   { key: "chat", label: "Chat", min: "basic",
@@ -82,8 +84,10 @@ export default function App() {
   const features = me?.features || [];
   // After a cast the server may lock the birth details; refresh entitlements so
   // the form switches to locked mode and the Account view reflects it.
+  const recordConsent = () => apiPost("/v1/consent", { version: CONSENT_VERSION }).then(refreshMe).catch(() => {});
   const ctx = { onCast: (b) => { setLastBirth(b); refreshMe(); }, lastBirth, setBalance,
-                features, me, refresh: refreshMe, lockedBirth: me?.birth_lock };
+                features, me, refresh: refreshMe, lockedBirth: me?.birth_lock,
+                consented: !!me?.consent_version, onConsent: recordConsent };
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
 
   const locked = (min) => RANK[userTier] < RANK[min];

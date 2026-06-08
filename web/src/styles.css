@@ -211,6 +211,10 @@ button.sm{padding:5px 11px;font-size:12px}
 /* locked birth-details summary (one native per account) */
 .locked-birth{font-size:14px;color:var(--cream);line-height:1.7;margin:8px 0 6px}
 .locked-birth .lb-name{font-family:"Cormorant Garamond",serif;font-size:20px;font-weight:600;color:var(--cream)}
+/* consent checkbox (birth-data processing) */
+.consent{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:12.5px;color:var(--cream-dim);line-height:1.5}
+.consent input{width:auto;margin-top:3px;flex:0 0 auto}
+.consent a{color:var(--brass-lt)}
 /* resolution notice banner */
 .notice-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
   background:#faf5e8;border:1px solid var(--line);border-left:3px solid var(--brass);

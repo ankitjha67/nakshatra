@@ -15,7 +15,7 @@ const YEARS = Array.from({ length: 8 }, (_, i) => NOW_YEAR - 1 + i); // last yea
 // Yearly also sends a `year` (Varshphal) chosen from a small picker in the form.
 // Flow follows the Maha-Jyotish protocol: enter details -> ANCHOR verification
 // (Tropical vs Sidereal Asc/Moon + Nakshatra lock) -> confirm -> full report.
-export default function ReadingTab({ reportType, blurb, extra, onCast, features = [], locked }) {
+export default function ReadingTab({ reportType, blurb, extra, onCast, features = [], locked, consented, onConsent }) {
   const isYearly = reportType === "yearly";
   const has = (f) => features.includes(f);
   const [year, setYear] = useState(NOW_YEAR);
@@ -59,7 +59,7 @@ export default function ReadingTab({ reportType, blurb, extra, onCast, features 
   return (
     <div>
       {blurb && <p className="note lead" style={{ marginTop: 0, marginBottom: 16 }}>{blurb}</p>}
-      <BirthForm onSubmit={cast} busy={busy} extra={isYearly ? yearPicker : extra} locked={locked} />
+      <BirthForm onSubmit={cast} busy={busy} extra={isYearly ? yearPicker : extra} locked={locked} consented={consented} onConsent={onConsent} />
       <p className="err">{err}</p>
       {anchor && <AnchorBlock anchor={anchor} />}
       <Charts chart={chart} features={features} />
