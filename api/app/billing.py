@@ -327,6 +327,7 @@ class Store:
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
     def global_tokens_today(self) -> int: ...
+    def global_tokens_recent(self, days: int = 14) -> list: ...
     # GDPR data-subject rights
     def export_user(self, uid: str) -> dict: ...
     def delete_user(self, uid: str) -> dict: ...
@@ -409,6 +410,12 @@ class MemoryStore(Store):
 
     def global_tokens_today(self):
         return int(self.global_usage.get(date.today().isoformat(), 0))
+
+    def global_tokens_recent(self, days=14):
+        today = date.today()
+        return [{"date": (today - timedelta(d)).isoformat(),
+                 "tokens": int(self.global_usage.get((today - timedelta(d)).isoformat(), 0))}
+                for d in range(days - 1, -1, -1)]
 
     def cache_get(self, ck):
         return self.reading_cache.get(ck)
@@ -725,6 +732,16 @@ class FirestoreStore(Store):
     def global_tokens_today(self):
         snap = self._db.collection("global_usage").document(date.today().isoformat()).get()
         return int((snap.to_dict() or {}).get("tokens", 0)) if snap.exists else 0
+
+    def global_tokens_recent(self, days=14):
+        today = date.today()
+        col = self._db.collection("global_usage")
+        out = []
+        for d in range(days - 1, -1, -1):
+            ds = (today - timedelta(d)).isoformat()
+            snap = col.document(ds).get()
+            out.append({"date": ds, "tokens": int((snap.to_dict() or {}).get("tokens", 0)) if snap.exists else 0})
+        return out
 
     def export_user(self, uid):
         uref = self._db.collection("users").document(uid)
