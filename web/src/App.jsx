@@ -11,6 +11,7 @@ import ReadingTab from "./tabs/ReadingTab.jsx";
 import ChatTab from "./tabs/ChatTab.jsx";
 import PrashnaTab from "./tabs/PrashnaTab.jsx";
 import PanchangTab from "./tabs/PanchangTab.jsx";
+import MatchTab from "./tabs/MatchTab.jsx";
 import BtrTab from "./tabs/BtrTab.jsx";
 import AccountTab from "./tabs/AccountTab.jsx";
 // Admin is a SEPARATE lazy chunk: a non-admin's browser never downloads the admin
@@ -38,6 +39,8 @@ const TABS = [
     render: () => <PrashnaTab /> },
   { key: "panchang", label: "Panchang", min: "free",
     render: () => <PanchangTab /> },
+  { key: "match", label: "Matching", min: "pro",
+    render: () => <MatchTab /> },
   { key: "chat", label: "Chat", min: "basic",
     render: (ctx) => <ChatTab lastBirth={ctx.lastBirth} onBalance={ctx.setBalance} /> },
   { key: "btr", label: "Birth-Time Fix", min: "enterprise",
