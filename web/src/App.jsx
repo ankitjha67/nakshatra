@@ -40,7 +40,7 @@ const TABS = [
     render: () => <PrashnaTab /> },
   { key: "panchang", label: "Panchang", min: "free",
     render: () => <PanchangTab /> },
-  { key: "match", label: "Matching", min: "pro",
+  { key: "match", label: "Matching", min: "free",
     render: () => <MatchTab /> },
   { key: "transits", label: "Transits", min: "basic",
     render: () => <TransitsTab /> },

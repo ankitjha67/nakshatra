@@ -69,17 +69,23 @@ export default function MatchTab() {
             <span className="bar-track"><span className="bar-fill" style={{ width: `${pct}%` }} /></span>
           </div>
           <p className="note">{res.summary}</p>
-          <table className="data-tbl"><thead>
-            <tr><th style={{ textAlign: "left" }}>Koota</th><th>Score</th><th style={{ textAlign: "left" }}>Measures</th></tr>
-          </thead><tbody>
-            {a.kutas.map((k) => (
-              <tr key={k.name}>
-                <td>{k.name}</td>
-                <td style={{ whiteSpace: "nowrap", color: k.score === 0 ? "var(--danger,#c0392b)" : "inherit" }}>{k.score} / {k.max}</td>
-                <td style={{ color: "var(--muted)" }}>{k.of}</td>
-              </tr>
-            ))}
-          </tbody></table>
+          {a.kutas && a.kutas.length ? (
+            <table className="data-tbl"><thead>
+              <tr><th style={{ textAlign: "left" }}>Koota</th><th>Score</th><th style={{ textAlign: "left" }}>Measures</th></tr>
+            </thead><tbody>
+              {a.kutas.map((k) => (
+                <tr key={k.name}>
+                  <td>{k.name}</td>
+                  <td style={{ whiteSpace: "nowrap", color: k.score === 0 ? "var(--danger,#c0392b)" : "inherit" }}>{k.score} / {k.max}</td>
+                  <td style={{ color: "var(--muted)" }}>{k.of}</td>
+                </tr>
+              ))}
+            </tbody></table>
+          ) : (
+            <p className="note" style={{ color: "var(--brass)" }}>
+              The full 8-koota breakdown (Varna, Vashya, Tara, Yoni, Graha Maitri, Gana, Bhakoot, Nadi) unlocks on Pro.
+            </p>
+          )}
           <p className="data-h" style={{ marginTop: 14 }}>Manglik</p>
           <table className="data-tbl"><tbody>
             <tr><td>You</td><td>{res.self.manglik ? "Manglik" : "Not Manglik"} · {res.self.rashi} · {res.self.nakshatra}</td></tr>
