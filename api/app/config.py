@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     fraud_watch_score: int = 40               # >= this risk score -> "watch" band (warning banner)
     fraud_high_score: int = 75                # >= this -> "high" band (strong banner)
     fraud_autoban_score: int = 100            # >= this -> auto-suspend in the batch scan (0 = never)
+    fraud_decay_half_life_days: float = 30.0  # behavioural risk halves every N clean days (0 = no decay)
 
     # --- auth / billing ---
     # No usable default: admin/internal endpoints stay disabled until a real
