@@ -499,6 +499,46 @@ class PanchangRequest(BaseModel):
     tz: str = Field("+05:30", max_length=40)
 
 
+_GOCHAR_PLANETS = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"]
+
+
+@app.post("/v1/transits")
+def transits(p: Principal = Depends(require_principal)):
+    """Gochar (current transits) over the user's natal chart: where each planet is
+    moving now and which natal house it activates, plus Sade Sati and the Saturn-
+    Jupiter double transit. Deterministic (no LLM). Basic+ (uses your saved chart)."""
+    if p.tier.key == "free":
+        raise HTTPException(402, "Transits (Gochar) are available from the Basic plan.")
+    enforce_quota(p)
+    store = get_store()
+    lock = store.get_birth_lock(p.user_id)
+    if not (lock and lock.get("date")):
+        raise HTTPException(409, "Cast your own chart first (Natal tab) to read transits over it.")
+    natal = get_chart(BirthDetails(name=lock.get("name") or "You", date=lock["date"], time=lock["time"],
+                                   tz=lock["tz"], lat=lock["lat"], lon=lock["lon"])).chart
+    cb = natal.get("chart", natal)
+    asc_sign = (cb.get("asc") or {}).get("sign")
+    asc_idx = SIGNS.index(asc_sign) if asc_sign in SIGNS else None
+    d, t = _now_in_tz(lock["tz"])
+    now_chart = get_chart(BirthDetails(date=d, time=t, tz=lock["tz"], lat=lock["lat"], lon=lock["lon"])).chart
+    now_planets = (now_chart.get("chart", now_chart).get("planets")) or {}
+    rows = []
+    for name in _GOCHAR_PLANETS:
+        pl = now_planets.get(name) or {}
+        sign = pl.get("sign")
+        if not sign:
+            continue
+        house = (((SIGNS.index(sign) - asc_idx) % 12) + 1) if (sign in SIGNS and asc_idx is not None) else None
+        rows.append({"planet": name, "sign": sign, "house": house,
+                     "retrograde": bool((pl.get("status") or {}).get("retrograde", pl.get("retrograde", False)))})
+    cur = (((natal.get("dasha_systems") or {}).get("vimshottari") or {}).get("current")) or {}
+    return {
+        "date": d, "ascendant": asc_sign, "transits": rows,
+        "sade_sati": natal.get("sade_sati"), "double_transit": natal.get("double_transit"),
+        "current_dasha": {"mahadasha": cur.get("mahadasha"), "antardasha": cur.get("antardasha")},
+    }
+
+
 @app.post("/v1/panchang")
 def panchang(req: PanchangRequest, p: Principal = Depends(require_principal)):
     """Daily Vedic almanac for the user's place (tithi, nakshatra, yoga, karana,
