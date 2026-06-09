@@ -85,7 +85,7 @@ class Tier:
 
 ALL_SECTIONS = frozenset({
     "essence", "mind", "relationships", "career", "wealth", "family", "health",
-    "timing", "fortune", "spirit", "strengths", "kp", "panchang", "alerts",
+    "timing", "fortune", "spirit", "strengths", "kp", "doshas", "panchang", "alerts",
     "numbers", "remedies",
 })
 
@@ -109,7 +109,7 @@ TIERS: dict[str, Tier] = {
     # that at full utilization (readings + chat both metered against this allowance)
     # cost stays <= 50% of net revenue after GST + Razorpay. See docs/COST_MODEL.md.
     "free":  Tier("free",  "Free",        0,    frozenset(),                       False, 5,    3, monthly_tokens=0, features=_FREE_FEATURES),
-    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing"}), True, 50, 10, monthly_tokens=150_000, features=_BASIC_FEATURES),
+    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing", "doshas"}), True, 50, 10, monthly_tokens=150_000, features=_BASIC_FEATURES),
     "pro":   Tier("pro",   "Pro",         999,  _PRO_SECTIONS,                     True,  500,  30, allow_async=True, monthly_tokens=600_000, features=_PRO_FEATURES),
     "enterprise": Tier("enterprise", "API / Business", 4999, _PRO_SECTIONS,        True,  10000, 120, allow_async=True, api_access=True, monthly_tokens=3_000_000, features=_ENT_FEATURES),
 }

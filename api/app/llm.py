@@ -42,6 +42,7 @@ SECTION_SPEC: list[tuple[str, str, list[str]]] = [
     ("spirit",        "Inner Life",              ["spirit"]),
     ("strengths",     "Strengths & Stars",       ["strengths"]),
     ("kp",            "KP Insights",             ["kp"]),
+    ("doshas",        "Doshas, Manglik & Kaal Sarpa", ["dosha"]),
     ("panchang",      "Birth Energy",            ["panchang"]),
     ("alerts",        "Sensitive Points",        ["alerts"]),
     ("numbers",       "Name & Numbers",          ["numbers"]),

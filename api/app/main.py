@@ -399,6 +399,28 @@ def _now_in_tz(tz: str) -> tuple[str, str]:
     return local.strftime("%Y-%m-%d"), local.strftime("%H:%M")
 
 
+class PanchangRequest(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    tz: str = Field("+05:30", max_length=40)
+
+
+@app.post("/v1/panchang")
+def panchang(req: PanchangRequest, p: Principal = Depends(require_principal)):
+    """Daily Vedic almanac for the user's place (tithi, nakshatra, yoga, karana,
+    vara, moon phase, hora). Deterministic (no LLM, no credit); all signed-in users."""
+    enforce_quota(p)
+    d, t = _now_in_tz(req.tz)
+    chart = get_chart(BirthDetails(date=d, time=t, tz=req.tz, lat=req.lat, lon=req.lon)).chart
+    pan = chart.get("panchang") or {}
+    return {
+        "date": d, "time": t, "tz": req.tz,
+        "tithi": pan.get("tithi"), "nakshatra": pan.get("nakshatra"),
+        "yoga": pan.get("yoga"), "karana": pan.get("karana"), "vara": pan.get("vara"),
+        "moon_phase": chart.get("moon_phase"), "hora": chart.get("hora"),
+    }
+
+
 class PrashnaRequest(BaseModel):
     question: str = Field(..., min_length=3, max_length=500)
     lat: float = Field(..., ge=-90, le=90)
