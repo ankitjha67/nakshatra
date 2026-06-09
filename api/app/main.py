@@ -42,6 +42,8 @@ from .gating import filter_chart_for_features, filter_findings, locked_topic, _T
 from .codes import generate_plaintext, hash_code
 from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr, chart_facts
+from .match import ashtakoot, is_manglik, NAKSHATRAS as MATCH_NAKSHATRAS
+from .knowledge import SIGNS
 from .llm import chat_answer, render_reading, looks_like_injection, DISCLAIMERS
 from . import fraud
 from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
@@ -397,6 +399,98 @@ def _now_in_tz(tz: str) -> tuple[str, str]:
         off = sign * timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
     local = datetime.now(timezone.utc) + off
     return local.strftime("%Y-%m-%d"), local.strftime("%H:%M")
+
+
+class MatchRequest(BaseModel):
+    partner_name: Optional[str] = Field(None, max_length=80)
+    date: str = Field(..., description="Partner birth date, YYYY-MM-DD")
+    time: str = Field(..., description="Partner birth time, HH:MM")
+    tz: str = Field("+05:30", max_length=40)
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    self_gender: Literal["male", "female", "other"] = "male"
+
+    @field_validator("date")
+    @classmethod
+    def _d(cls, v):
+        if not re.fullmatch(_DATE_RE, v):
+            raise ValueError("date must be YYYY-MM-DD")
+        return v
+
+    @field_validator("time")
+    @classmethod
+    def _t(cls, v):
+        if not re.fullmatch(_TIME_RE, v):
+            raise ValueError("time must be HH:MM (24h)")
+        return v
+
+
+def _match_inputs(chart: dict) -> dict:
+    """Extract Moon nakshatra index, Moon rashi index, and Mars houses for matching."""
+    cb = chart.get("chart", chart)
+    planets = cb.get("planets") or {}
+    moon = planets.get("Moon") or {}
+    mars = planets.get("Mars") or {}
+    asc_sign = (cb.get("asc") or {}).get("sign")
+    moon_sign = moon.get("sign")
+    nak_name = cb.get("moon_nakshatra") or moon.get("nakshatra")
+
+    def sidx(s):
+        return SIGNS.index(s) if s in SIGNS else None
+
+    def nidx(n):
+        if not n:
+            return None
+        nl = str(n).strip().lower()
+        for i, name in enumerate(MATCH_NAKSHATRAS):
+            if name.lower() == nl or name.lower().startswith(nl[:5]) or nl.startswith(name.lower()[:5]):
+                return i
+        return None
+
+    def house(psign, ref):
+        a, b = sidx(psign), sidx(ref)
+        return ((a - b) % 12) + 1 if (a is not None and b is not None) else None
+
+    return {"nak": nidx(nak_name), "rashi": sidx(moon_sign), "nak_name": nak_name,
+            "moon_sign": moon_sign, "mars_lagna": house(mars.get("sign"), asc_sign),
+            "mars_moon": house(mars.get("sign"), moon_sign)}
+
+
+@app.post("/v1/match")
+def kundali_match(req: MatchRequest, p: Principal = Depends(require_principal)):
+    """Kundali Matching (Ashtakoot Guna Milan, 36 points) + Manglik compatibility:
+    your locked chart vs a partner's. Deterministic (no LLM). Pro+."""
+    if p.tier.key not in ("pro", "enterprise"):
+        raise HTTPException(402, "Kundali Matching is available on Pro and Enterprise.")
+    enforce_quota(p)
+    store = get_store()
+    lock = store.get_birth_lock(p.user_id)
+    if not (lock and lock.get("date")):
+        raise HTTPException(409, "Cast your own chart first (Natal tab), then match it against a partner.")
+    self_chart = get_chart(BirthDetails(name=lock.get("name") or "You", date=lock["date"], time=lock["time"],
+                                        tz=lock["tz"], lat=lock["lat"], lon=lock["lon"])).chart
+    partner_chart = get_chart(BirthDetails(name=req.partner_name or "Partner", date=req.date, time=req.time,
+                                           tz=req.tz, lat=req.lat, lon=req.lon)).chart
+    si, pi = _match_inputs(self_chart), _match_inputs(partner_chart)
+    if None in (si["nak"], si["rashi"], pi["nak"], pi["rashi"]):
+        raise HTTPException(422, "Couldn't read the Moon's nakshatra/sign for one of the charts.")
+    boy, girl = (pi, si) if req.self_gender == "female" else (si, pi)  # asymmetric kutas need groom/bride
+    a = ashtakoot(boy["nak"], boy["rashi"], girl["nak"], girl["rashi"])
+    sm, pm = is_manglik(si["mars_lagna"], si["mars_moon"]), is_manglik(pi["mars_lagna"], pi["mars_moon"])
+    mnote = ("Neither chart is Manglik." if not sm and not pm else
+             "Both charts are Manglik, traditionally considered to balance out." if sm and pm else
+             "One chart is Manglik and the other is not, traditionally a point to weigh and remedy.")
+    summary = (f"Guna Milan score {a['total']} of 36 ({a['verdict']}). "
+               + ("A Nadi dosha is present (same Nadi). " if a["nadi_dosha"] else "")
+               + ("A Bhakoot dosha is present. " if a["bhakoot_dosha"] else "") + mnote)
+    return {
+        "self": {"nakshatra": si["nak_name"], "rashi": si["moon_sign"], "manglik": sm},
+        "partner": {"nakshatra": pi["nak_name"], "rashi": pi["moon_sign"], "manglik": pm},
+        "ashtakoot": a,
+        "manglik_match": {"self": sm, "partner": pm, "compatible": sm == pm, "note": mnote},
+        "summary": summary,
+        "disclaimers": ["Guna Milan is one traditional compatibility lens, not a verdict on a relationship."],
+    }
 
 
 class PanchangRequest(BaseModel):
