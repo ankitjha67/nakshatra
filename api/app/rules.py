@@ -1382,6 +1382,62 @@ def _yearly(chart, year: int) -> list[Finding]:
 # --------------------------------------------------------------------------- #
 # public
 # --------------------------------------------------------------------------- #
+_MANGAL_HOUSES = {1, 2, 4, 7, 8, 12}   # classical Mangal Dosha houses
+
+
+def _kaal_sarpa(by: dict[str, dict]) -> bool:
+    """All seven classical grahas on one side of the Rahu-Ketu axis."""
+    rahu = by.get("Rahu")
+    if not (rahu and isinstance(rahu.get("deg"), (int, float))):
+        return False
+    r = float(rahu["deg"])
+    degs = [by[n]["deg"] for n in ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn")
+            if by.get(n) and isinstance(by[n].get("deg"), (int, float))]
+    if len(degs) < 7:
+        return False
+    def fwd(d):  # within the 180deg arc starting at Rahu (Rahu -> Ketu)?
+        return ((float(d) - r) % 360) < 180
+    return all(fwd(d) for d in degs) or all(not fwd(d) for d in degs)
+
+
+def _doshas(chart: dict, by: dict, asc_sign: str | None) -> list[Finding]:
+    """Manglik (Mangal Dosha) and Kaal Sarpa, the two most-asked dosha checks."""
+    out: list[Finding] = []
+    mars = by.get("Mars")
+    if mars and mars.get("sign") and asc_sign:
+        h = _house_ws(mars["sign"], asc_sign)
+        moon = by.get("Moon")
+        hm = _house_ws(mars["sign"], moon.get("sign")) if moon and moon.get("sign") else None
+        from_lagna, from_moon = h in _MANGAL_HOUSES, (hm in _MANGAL_HOUSES if hm else False)
+        dig = str(mars.get("dignity", "")).lower()
+        mitigated = dig in ("own sign", "exalted", "moolatrikona")
+        ev = f"Mars in {mars['sign']}{_at(mars)}, {_ord(h)} house from Lagna" + (f", {_ord(hm)} from Moon" if hm else "")
+        if from_lagna or from_moon:
+            where = ([f"{_ord(h)} from the Lagna"] if from_lagna else []) + ([f"{_ord(hm)} from the Moon"] if from_moon else [])
+            detail = (f"Mangal Dosha (Manglik) is present: Mars occupies the {' and the '.join(where)}. "
+                      f"Traditionally this asks for care in the timing of marriage and in matching with a compatible "
+                      f"partner. " + ("Mars is " + dig + " here, which classical texts hold to soften the dosha considerably."
+                      if mitigated else "Well-known cancellations (Mars in its own or exalted sign, certain Jupiter "
+                      "aspects, or a like-for-like match) can offset it, this is a tendency to manage, not a verdict."))
+            out.append(Finding(code="DOSHA.MANGLIK", category="dosha", polarity="challenging", weight=7,
+                               title="Mangal Dosha (Manglik)", detail=detail, evidence=[ev]))
+        else:
+            out.append(Finding(code="DOSHA.MANGLIK", category="dosha", polarity="supportive", weight=6,
+                               title="No Mangal Dosha (not Manglik)",
+                               detail=(f"Mars sits in the {_ord(h)} house from the Lagna, outside the Manglik houses "
+                                       f"(1, 2, 4, 7, 8, 12), so the chart is clear of Mangal Dosha, a commonly-checked "
+                                       f"marriage concern."), evidence=[ev]))
+    if _kaal_sarpa(by):
+        rs, ks = by.get("Rahu", {}).get("sign"), by.get("Ketu", {}).get("sign")
+        out.append(Finding(code="DOSHA.KAALSARPA", category="dosha", polarity="challenging", weight=6,
+                           title="Kaal Sarpa Yoga",
+                           detail=("All seven classical planets fall on one side of the Rahu-Ketu axis, forming Kaal "
+                                   "Sarpa Yoga. It reads as a karmic intensity that concentrates effort and can delay "
+                                   "some results until later, rewarding persistence, it is not a verdict of misfortune."),
+                           evidence=[f"All grahas hemmed between Rahu ({rs}) and Ketu ({ks})"]))
+    return out
+
+
 def chart_facts(chart: dict[str, Any], features=None) -> dict:
     """Compact, TIER-GATED literal chart facts for grounding LLM answers (positions
     the user is entitled to). D1 placements for all; D9/D10 only with 'divisional';
@@ -1433,6 +1489,7 @@ def derive_findings(chart: dict[str, Any], year: int | None = None) -> list[Find
     findings += _lagna(chart, by, asc_sign)
     findings += _dignities(by, asc_sign)
     findings += _moon_nakshatra(chart, by, asc_sign)
+    findings += _doshas(chart, by, asc_sign)
     findings += _dasha(chart, by)
     findings += _yogas(chart)
     findings += _retro(by)
