@@ -513,6 +513,30 @@ def _chat_payload(findings: list[Finding], history: list[dict], message: str,
     }, ensure_ascii=False)
 
 
+_MATCH_SYSTEM = (
+    "You are a careful Vedic astrology assistant. Write a SHORT compatibility note "
+    "(2-4 sentences) for a Kundali match, using ONLY the provided Guna Milan facts "
+    "(per-koota scores, total out of 36, the verdict, Nadi/Bhakoot dosha flags, and "
+    "each person's Manglik status). Give the headline (score and what it broadly "
+    "suggests), name the strongest and the weakest koota, and note the Manglik / Nadi "
+    "/ Bhakoot situation if relevant, framed constructively. Warm and balanced, no "
+    "fear or doom, no absolute claims about the relationship or its future, never "
+    "invent any placement, number or fact not given. No headings, no lists, no emojis."
+)
+
+
+def compatibility_summary(facts: dict, max_output: int = 400) -> tuple[str, int, int]:
+    """LLM-phrased Guna Milan summary grounded ONLY in the computed kuta facts."""
+    provider = get_provider()
+    user = json.dumps(facts, ensure_ascii=False)
+    try:
+        ans, ti, to = provider.chat(_MATCH_SYSTEM, user, max_output)
+    except Exception as exc:  # noqa: BLE001
+        log.error("match summary failed (%s); using mock.", exc)
+        ans, ti, to = MockProvider().chat(_MATCH_SYSTEM, user, max_output)
+    return sanitize_chat_output((ans or "").strip()), ti, to
+
+
 def chat_answer(findings: list[Finding], history: list[dict], message: str,
                 max_output: int, facts: dict | None = None) -> tuple[str, str, int, int]:
     """Return (answer, model_name, tokens_in, tokens_out). Grounded in findings +

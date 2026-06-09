@@ -68,6 +68,7 @@ export default function MatchTab() {
           <div className="bar-row">
             <span className="bar-track"><span className="bar-fill" style={{ width: `${pct}%` }} /></span>
           </div>
+          {res.ai_summary && <p className="role" style={{ fontStyle: "italic", margin: "4px 0 10px" }}>{res.ai_summary}</p>}
           <p className="note">{res.summary}</p>
           {a.kutas && a.kutas.length ? (
             <table className="data-tbl"><thead>
