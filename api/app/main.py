@@ -44,7 +44,7 @@ from .engine import rectify_birth_time, engine_version
 from .rules import derive_findings, derive_prashna, derive_btr, chart_facts
 from .match import ashtakoot, is_manglik, NAKSHATRAS as MATCH_NAKSHATRAS
 from .knowledge import SIGNS
-from .llm import chat_answer, render_reading, looks_like_injection, DISCLAIMERS
+from .llm import chat_answer, render_reading, looks_like_injection, compatibility_summary, DISCLAIMERS
 from . import fraud
 from .payments import (handle_razorpay_webhook, PaymentError, TOPUP_PACKS,
                        create_razorpay_order, create_razorpay_subscription,
@@ -463,6 +463,7 @@ def kundali_match(req: MatchRequest, p: Principal = Depends(require_principal)):
     headline (total score, verdict, dosha flags, Manglik); the full 8-koota
     breakdown unlocks on Pro."""
     enforce_quota(p)
+    s = get_settings()
     store = get_store()
     lock = store.get_birth_lock(p.user_id)
     if not (lock and lock.get("date")):
@@ -486,13 +487,27 @@ def kundali_match(req: MatchRequest, p: Principal = Depends(require_principal)):
     # Free/Basic get the headline; the per-koota breakdown is the Pro upsell.
     detail = p.tier.key in ("pro", "enterprise")
     ashtakoot_out = a if detail else {k: a[k] for k in ("total", "max", "verdict", "nadi_dosha", "bhakoot_dosha")}
+    # Pro+ also get an LLM-phrased summary grounded in the computed kutas (metered).
+    ai_summary = None
+    if detail:
+        bal = store.credit_balance(p.user_id, p.tier)
+        if bal["available"] > 0 and bal["daily_used"] < s.daily_token_ceiling:
+            try:
+                facts = {"total": a["total"], "max": 36, "verdict": a["verdict"], "kutas": a["kutas"],
+                         "nadi_dosha": a["nadi_dosha"], "bhakoot_dosha": a["bhakoot_dosha"],
+                         "manglik_self": sm, "manglik_partner": pm}
+                text, ti, to = compatibility_summary(facts)
+                _meter_debit(p, ti, to, "kundali-match")
+                ai_summary = text
+            except Exception:  # noqa: BLE001, never fail the match on the optional prose
+                pass
     return {
         "self": {"nakshatra": si["nak_name"], "rashi": si["moon_sign"], "manglik": sm},
         "partner": {"nakshatra": pi["nak_name"], "rashi": pi["moon_sign"], "manglik": pm},
         "ashtakoot": ashtakoot_out,
         "detail_unlocked": detail,
         "manglik_match": {"self": sm, "partner": pm, "compatible": sm == pm, "note": mnote},
-        "summary": summary,
+        "summary": summary, "ai_summary": ai_summary,
         "disclaimers": ["Guna Milan is one traditional compatibility lens, not a verdict on a relationship."],
     }
 
