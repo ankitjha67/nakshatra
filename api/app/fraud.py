@@ -13,6 +13,7 @@ Two surfaces use it:
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 # Destructive / hacking intent (DB wipes, shell rm, SQLi, DoS). These NEVER occur in
 # a genuine birth-chart question, so matching is high-precision -> block + escalate.
@@ -59,6 +60,24 @@ def risk_banner(band: str) -> str | None:
     return {"watch": WATCH_BANNER, "high": HIGH_BANNER}.get(band)
 
 
+def _recency_decay(last_iso: str | None, half_life_days: float) -> float:
+    """Behavioural signals fade with clean time: weight halves every `half_life_days`
+    since the LAST offense, so good behaviour lowers the score (and clears the banner)
+    while the admin still keeps the full attempt history for audit. 1.0 if just now."""
+    if not last_iso or half_life_days <= 0:
+        return 1.0
+    try:
+        dt = datetime.fromisoformat(str(last_iso).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        days = (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
+    except Exception:  # noqa: BLE001
+        return 1.0
+    if days <= 0:
+        return 1.0
+    return 0.5 ** (days / half_life_days)
+
+
 def compute_risk(user: dict, ctx: dict, settings) -> dict:
     """Score one user from their signals. `ctx` carries optionally-precomputed
     cross-user context (refunds, tokens_today, ip_accounts); missing keys = 0, so
@@ -76,12 +95,17 @@ def compute_risk(user: dict, ctx: dict, settings) -> dict:
 
     signals: list[dict] = []
 
-    def add(name: str, pts: int, detail: str) -> None:
-        if pts > 0:
-            signals.append({"signal": name, "points": int(pts), "detail": detail})
+    def add(name: str, pts: float, detail: str) -> None:
+        if pts >= 1:
+            signals.append({"signal": name, "points": int(round(pts)), "detail": detail})
 
-    add("malicious_intent", min(mal * 50, 100), f"{mal} destructive/hacking attempt(s)")
-    add("injection_attempts", min(inj * 15, 60), f"{inj} prompt-injection/jailbreak attempt(s)")
+    # Behavioural signals (past attempts) DECAY with clean time, good behaviour lowers
+    # the score and eventually clears the banner. The raw counts/samples are retained
+    # for the admin audit trail; only the live risk weighting fades.
+    decay = _recency_decay(user.get("jailbreak_last"), getattr(settings, "fraud_decay_half_life_days", 30))
+    aged = "" if decay > 0.95 else " (aging out with clean activity)"
+    add("malicious_intent", min(mal * 50, 100) * decay, f"{mal} destructive/hacking attempt(s){aged}")
+    add("injection_attempts", min(inj * 15, 60) * decay, f"{inj} prompt-injection/jailbreak attempt(s){aged}")
     add("refund_abuse", min(refunds * 20, 60), f"{refunds} refund request(s)")
     if tokens >= getattr(settings, "anomaly_token_day_flag", 1_000_000):
         add("token_velocity", 30, f"{tokens:,} tokens today")

@@ -188,3 +188,18 @@ def test_locked_evidence_stripped_for_lower_tier():
     pro = filter_findings([f], ["relationships"], frozenset({"charts", "divisional", "tables_full"}))
     pev = pro[0].evidence[0]
     assert "navamsa" in pev and "KP" in pev and "ashtakavarga" in pev
+
+
+def test_risk_decays_with_clean_behaviour():
+    # Good behaviour over time must lower the risk score and clear the banner.
+    from datetime import datetime, timezone, timedelta
+    from app.fraud import compute_risk, risk_banner
+    from app.config import get_settings
+    s = get_settings()
+    now = datetime.now(timezone.utc)
+    recent = {"malicious_count": 1, "jailbreak_count": 1, "jailbreak_last": now.isoformat()}
+    aged = {"malicious_count": 1, "jailbreak_count": 1,
+            "jailbreak_last": (now - timedelta(days=45)).isoformat()}
+    r_recent, r_aged = compute_risk(recent, {}, s), compute_risk(aged, {}, s)
+    assert r_recent["score"] > r_aged["score"]          # decays with clean time
+    assert risk_banner(r_recent["band"]) and not risk_banner(r_aged["band"])
