@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     log_level: str = "INFO"
     cors_origins: str = "*"          # comma-separated; tighten in prod
+    # Real client IP = the Nth X-Forwarded-For hop FROM THE END (the value the
+    # platform appends, spoof-resistant). 1 = Cloud Run direct; raise if you add a
+    # trusted load balancer / Cloud Armor that appends more hops.
+    trusted_proxy_depth: int = 1
 
     # --- engine plug-in ---
     # Point these at YOUR Maha Jyotish module. The callable must accept a dict
@@ -69,6 +73,7 @@ class Settings(BaseSettings):
     fraud_high_score: int = 75                # >= this -> "high" band (strong banner)
     fraud_autoban_score: int = 100            # >= this -> auto-suspend in the batch scan (0 = never)
     fraud_decay_half_life_days: float = 30.0  # behavioural risk halves every N clean days (0 = no decay)
+    fraud_autoban_days: int = 7               # auto-ban duration (temporary; lifts itself when it expires)
 
     # --- auth / billing ---
     # No usable default: admin/internal endpoints stay disabled until a real

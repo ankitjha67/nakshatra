@@ -80,10 +80,20 @@ async def require_user(authorization: str | None = Header(default=None)) -> Prin
 
 
 def _client_ip(request: Request) -> str:
-    """Caller IP, first hop of X-Forwarded-For (set by Cloud Run), else peer."""
+    """Real caller IP, SPOOF-RESISTANT.
+
+    A client can prepend a fake X-Forwarded-For; Cloud Run / the load balancer then
+    APPENDS the true source IP on the right. So the trustworthy client IP is the
+    `trusted_proxy_depth`-th hop from the END (default 1 = the value the platform
+    appended), not the left-most (which the client controls). Falls back to the
+    socket peer when no XFF is present."""
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            depth = max(1, get_settings().trusted_proxy_depth)
+            idx = len(parts) - depth
+            return parts[idx] if idx >= 0 else parts[0]
     return request.client.host if request.client else "?"
 
 

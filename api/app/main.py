@@ -1204,9 +1204,12 @@ def _fraud_scan(persist: bool, autoban: bool) -> dict:
                 pass
         if autoban and s.fraud_autoban_score and risk["score"] >= s.fraud_autoban_score and not store.get_ban(uid):
             try:
-                store.set_ban(uid, "temporary", "auto: fraud risk score "
-                              f"{risk['score']}", until=None, by="fraud-monitor")
-                _audit("fraud-monitor", "auto_ban", uid, score=risk["score"])
+                # a TEMPORARY ban with a real expiry so it lifts itself (is_banned
+                # auto-clears once `until` passes); the risk score decays in parallel.
+                until = datetime.now(timezone.utc) + timedelta(days=s.fraud_autoban_days)
+                store.set_ban(uid, "temporary", f"auto: fraud risk score {risk['score']}",
+                              until=until, by="fraud-monitor")
+                _audit("fraud-monitor", "auto_ban", uid, score=risk["score"], days=s.fraud_autoban_days)
                 banned += 1
             except Exception:  # noqa: BLE001
                 pass

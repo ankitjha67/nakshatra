@@ -112,7 +112,7 @@ Nakshatra's anti-slop core (deterministic rules â†’ constrained LLM) and it
 | 7 | /v1/chart over-exposes interpretive engine blocks to all tiers | LOW | **Fixed** — chart gating switched to an allow-list (only tier-unlocked blocks returned) |
 | 8 | Subscription renewals skipped when payment.id absent | LOW | **Fixed** — idempotency key prefers invoice_id (unique per renewal) |
 | 9 | Email-verification / token-revocation default off, no warning | LOW | **Fixed** — startup warning for VERIFY_TOKEN_REVOCATION |
-| 10 | X-Forwarded-For trusted for IP correlation | LOW | **Accepted** — correlation-only (not auth); robust fix needs Cloud Armor / trusted-proxy config |
+| 10 | X-Forwarded-For trusted for IP correlation | LOW | **Fixed** — `_client_ip` now uses the platform-appended hop (Nth from the end, `TRUSTED_PROXY_DEPTH=1`), spoof-resistant; verified a forged XFF is ignored and the real client IP is recorded |
 | 11 | Client IP retained indefinitely on profile | LOW | **Accepted/noted** — abuse-prevention legitimate interest; add rotation/retention at scale |
 | 12 | No web consent capture for sensitive birth data | LOW | **Follow-up** — add an explicit consent checkbox at sign-up/first cast (tracked) |
 | 13 | Per-minute rate limit is per-instance (multiplies under autoscale) | LOW | **Accepted/noted** — needs a shared limiter (Redis/Firestore) for strict global limits |
