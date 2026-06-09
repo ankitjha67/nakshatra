@@ -42,6 +42,9 @@
   .vignette{
     background:radial-gradient(120% 120% at 50% 42%,transparent 52%,rgba(0,0,0,.55) 100%);
   }
+  /* required CC BY 4.0 attribution for the planet texture maps (always visible) */
+  .credit{position:fixed;right:8px;bottom:6px;z-index:45;font-family:var(--mono);font-size:8.5px;
+    letter-spacing:.04em;color:rgba(244,236,219,.42);pointer-events:none}
 
   /* ---- the 3D stage ---- */
   #scene{position:fixed;inset:0;z-index:1;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
@@ -212,6 +215,7 @@
   </div>
 
   <div class="fb-note">Your browser couldn’t start the 3D sky, the rest of Nakshatra reads without it.</div>
+  <div class="credit">Planet textures: Solar System Scope · CC BY 4.0</div>
 
   <div class="grain"></div>
   <div class="vignette"></div>
@@ -451,6 +455,15 @@
   renderer.toneMapping=THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure=1.08;
   var srgb=function(t){ if(t) t.encoding=THREE.sRGBEncoding; return t; };
+  // Photoreal surfaces: real equirectangular maps (Solar System Scope, CC BY 4.0),
+  // served same-origin from /textures. Loaded async over the procedural fallback,
+  // so the scene is never blank and degrades gracefully if a map fails.
+  var MAX_ANISO=renderer.capabilities.getMaxAnisotropy();
+  var texLoader=new THREE.TextureLoader();
+  function loadMap(url,cb){ texLoader.load(url,function(t){ t.encoding=THREE.sRGBEncoding; t.anisotropy=MAX_ANISO; cb(t); },undefined,function(){}); }
+  var PLANET_TEX={mercury:"textures/mercury.jpg",venus:"textures/venus.jpg",earth:"textures/earth.jpg",
+    mars:"textures/mars.jpg",jupiter:"textures/jupiter.jpg",saturn:"textures/saturn.jpg",
+    uranus:"textures/uranus.jpg",neptune:"textures/neptune.jpg"};
 
   var scene=new THREE.Scene();
   scene.fog=new THREE.FogExp2(0x05050b,0.0065);
@@ -464,6 +477,7 @@
   var sunMesh=new THREE.Mesh(new THREE.SphereGeometry(3.2,48,48),
     new THREE.MeshBasicMaterial({map:srgb(texSun())}));
   sunMesh.material.toneMapped=false;   // the star itself stays bright, not tone-mapped down
+  loadMap("textures/sun.jpg",function(t){ sunMesh.material.map=t; sunMesh.material.needsUpdate=true; });
   sunMesh.userData=SUN; sunGroup.add(sunMesh);
 
   function glowSprite(size,opacity){
@@ -496,9 +510,18 @@
     var tilt=new THREE.Group(); tilt.rotation.z=b.tilt; group.add(tilt);
     var tx=srgb(textureFor(b));
     var mat=new THREE.MeshStandardMaterial({map:tx,roughness:0.92,metalness:0});
-    mat.bumpMap=tx; mat.bumpScale=0.035;        // surface relief under the sun light -> craters/bands read 3D
+    mat.bumpMap=tx; mat.bumpScale=0.035;        // procedural relief (fallback until the real map loads)
     var mesh=new THREE.Mesh(new THREE.SphereGeometry(b.size,64,64),mat);
     mesh.userData=b; tilt.add(mesh); pickables.push(mesh);
+    // swap in the real NASA/SSS equirectangular albedo when it arrives
+    if(PLANET_TEX[b.id]) loadMap(PLANET_TEX[b.id],function(t){ mat.map=t; mat.bumpMap=null; mat.needsUpdate=true; });
+    // Earth: a drifting cloud shell (clouds map used as alpha) for a live, real look
+    if(b.id==="earth"){
+      var cloudMat=new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.85,depthWrite:false,roughness:1,metalness:0});
+      var cloud=new THREE.Mesh(new THREE.SphereGeometry(b.size*1.02,48,48),cloudMat);
+      loadMap("textures/earth_clouds.jpg",function(t){ cloudMat.alphaMap=t; cloudMat.needsUpdate=true; });
+      mesh.add(cloud);
+    }
 
     // atmospheric limb glow (back-side additive shell) for the bodies that have one
     if(b.id==="earth"||b.id==="venus"||b.id==="uranus"||b.id==="neptune"){
@@ -513,6 +536,7 @@
       var inner=b.size*1.35,outer=b.size*2.3;
       var rg=new THREE.RingGeometry(inner,outer,80); fixRingUV(rg,inner,outer);
       var ring=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({map:srgb(texRing()),side:THREE.DoubleSide,transparent:true,opacity:0.92,depthWrite:false}));
+      loadMap("textures/saturn_ring.png",function(t){ ring.material.map=t; ring.material.opacity=1; ring.material.needsUpdate=true; });
       ring.rotation.x=Math.PI/2.05; tilt.add(ring);
     }
     if(b.faintRing){
@@ -528,6 +552,7 @@
       var mtx=srgb(texRocky(0x9a948b,{craters:60,csz:8,amp:26,dark:true}));
       moonMesh=new THREE.Mesh(new THREE.SphereGeometry(0.16,40,40),
         new THREE.MeshStandardMaterial({map:mtx,bumpMap:mtx,bumpScale:0.02,roughness:0.95,metalness:0}));
+      loadMap("textures/moon.jpg",function(t){ moonMesh.material.map=t; moonMesh.material.bumpMap=t; moonMesh.material.bumpScale=0.006; moonMesh.material.needsUpdate=true; });
       moonMesh.userData=MOON; moonMesh.position.set(b.size+0.9,0,0);
       moonPivot.add(moonMesh); pickables.push(moonMesh);
     }
