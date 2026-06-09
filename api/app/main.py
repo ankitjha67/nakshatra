@@ -459,9 +459,9 @@ def _match_inputs(chart: dict) -> dict:
 @app.post("/v1/match")
 def kundali_match(req: MatchRequest, p: Principal = Depends(require_principal)):
     """Kundali Matching (Ashtakoot Guna Milan, 36 points) + Manglik compatibility:
-    your locked chart vs a partner's. Deterministic (no LLM). Pro+."""
-    if p.tier.key not in ("pro", "enterprise"):
-        raise HTTPException(402, "Kundali Matching is available on Pro and Enterprise.")
+    your locked chart vs a partner's. Deterministic (no LLM). FREE/BASIC get the
+    headline (total score, verdict, dosha flags, Manglik); the full 8-koota
+    breakdown unlocks on Pro."""
     enforce_quota(p)
     store = get_store()
     lock = store.get_birth_lock(p.user_id)
@@ -483,10 +483,14 @@ def kundali_match(req: MatchRequest, p: Principal = Depends(require_principal)):
     summary = (f"Guna Milan score {a['total']} of 36 ({a['verdict']}). "
                + ("A Nadi dosha is present (same Nadi). " if a["nadi_dosha"] else "")
                + ("A Bhakoot dosha is present. " if a["bhakoot_dosha"] else "") + mnote)
+    # Free/Basic get the headline; the per-koota breakdown is the Pro upsell.
+    detail = p.tier.key in ("pro", "enterprise")
+    ashtakoot_out = a if detail else {k: a[k] for k in ("total", "max", "verdict", "nadi_dosha", "bhakoot_dosha")}
     return {
         "self": {"nakshatra": si["nak_name"], "rashi": si["moon_sign"], "manglik": sm},
         "partner": {"nakshatra": pi["nak_name"], "rashi": pi["moon_sign"], "manglik": pm},
-        "ashtakoot": a,
+        "ashtakoot": ashtakoot_out,
+        "detail_unlocked": detail,
         "manglik_match": {"self": sm, "partner": pm, "compatible": sm == pm, "note": mnote},
         "summary": summary,
         "disclaimers": ["Guna Milan is one traditional compatibility lens, not a verdict on a relationship."],
