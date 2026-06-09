@@ -1,25 +1,38 @@
 import React, { useState } from "react";
-import { apiPost, CITIES } from "../lib/api.js";
+import { apiPost } from "../lib/api.js";
+import CityPicker from "../components/CityPicker.jsx";
+import { tzOffsetForDate } from "../lib/geo.js";
 
 // Kundali Matching (Ashtakoot Guna Milan, 36 points) + Manglik. Your locked chart
-// vs a partner's. Deterministic scores from the server; this just collects partner
-// details and renders the breakdown.
+// vs a partner's. Partner place uses the same worldwide city search + manual
+// coordinates fallback as the Natal / Maha-Kundali forms.
 export default function MatchTab() {
   const [name, setName] = useState("");
   const [date, setDate] = useState("1992-03-21");
   const [time, setTime] = useState("09:15");
-  const [cityIdx, setCityIdx] = useState(0);
+  const [city, setCity] = useState(null);
+  const [manual, setManual] = useState(false);
+  const [lat, setLat] = useState(""); const [lon, setLon] = useState(""); const [tz, setTz] = useState("+05:30");
   const [gender, setGender] = useState("male");
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   const run = async () => {
-    const c = CITIES[cityIdx];
+    let p;
+    if (manual) {
+      if (Number.isNaN(parseFloat(lat)) || Number.isNaN(parseFloat(lon)) || !tz) {
+        setErr("Enter the partner's latitude, longitude and UTC offset."); return;
+      }
+      p = { lat: parseFloat(lat), lon: parseFloat(lon), tz };
+    } else {
+      if (!city) { setErr("Search and select the partner's place of birth."); return; }
+      p = { lat: city.lat, lon: city.lon, tz: tzOffsetForDate(city.tz, date, time) };
+    }
     setBusy(true); setErr(""); setRes(null);
     try {
       const r = await apiPost("/v1/match", {
-        partner_name: name.trim() || "Partner", date, time, lat: c[1], lon: c[2], tz: c[3],
+        partner_name: name.trim() || "Partner", date, time, lat: p.lat, lon: p.lon, tz: p.tz,
         self_gender: gender,
       });
       setRes(r);
@@ -42,10 +55,19 @@ export default function MatchTab() {
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div><label className="fld">Partner's time of birth</label>
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div>
-        <div className="full"><label className="fld">Partner's place of birth</label>
-          <select value={cityIdx} onChange={(e) => setCityIdx(+e.target.value)}>
-            {CITIES.map((c, i) => <option key={i} value={i}>{c[0]}</option>)}
-          </select></div>
+        {!manual ? (
+          <div className="full"><label className="fld">Partner's place of birth</label>
+            <CityPicker value={city?.label} onSelect={setCity} placeholder="Search the partner's city worldwide…" /></div>
+        ) : (
+          <>
+            <div><label className="fld">Latitude</label>
+              <input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="e.g. 19.0760" /></div>
+            <div><label className="fld">Longitude</label>
+              <input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="e.g. 72.8777" /></div>
+            <div><label className="fld">UTC offset</label>
+              <input value={tz} onChange={(e) => setTz(e.target.value)} placeholder="+05:30" /></div>
+          </>
+        )}
         <div><label className="fld">You are</label>
           <select value={gender} onChange={(e) => setGender(e.target.value)}>
             <option value="male">male (groom)</option>
@@ -55,6 +77,9 @@ export default function MatchTab() {
       </div>
       <div className="actions">
         <button onClick={run} disabled={busy}>{busy ? "Matching…" : "Match kundalis"}</button>
+        <button className="ghost" type="button" onClick={() => { setManual(!manual); setErr(""); }}>
+          {manual ? "Search a city instead" : "Enter coordinates"}
+        </button>
         {busy && <span className="loader">Computing Guna Milan…</span>}
       </div>
       {err && <p className="err">{err}</p>}
