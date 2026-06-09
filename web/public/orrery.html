@@ -445,6 +445,12 @@
   var renderer=new THREE.WebGLRenderer({canvas:sceneCanvas,antialias:true,alpha:false});
   renderer.setClearColor(0x05050b,1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  // physically-nicer colour: sRGB output + filmic tone mapping -> realistic contrast
+  // and graceful highlights instead of flat, blown-out procedural colours.
+  renderer.outputEncoding=THREE.sRGBEncoding;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=1.08;
+  var srgb=function(t){ if(t) t.encoding=THREE.sRGBEncoding; return t; };
 
   var scene=new THREE.Scene();
   scene.fog=new THREE.FogExp2(0x05050b,0.0065);
@@ -456,7 +462,8 @@
   // sun
   var sunGroup=new THREE.Group(); scene.add(sunGroup);
   var sunMesh=new THREE.Mesh(new THREE.SphereGeometry(3.2,48,48),
-    new THREE.MeshBasicMaterial({map:texSun()}));
+    new THREE.MeshBasicMaterial({map:srgb(texSun())}));
+  sunMesh.material.toneMapped=false;   // the star itself stays bright, not tone-mapped down
   sunMesh.userData=SUN; sunGroup.add(sunMesh);
 
   function glowSprite(size,opacity){
@@ -464,7 +471,7 @@
     var g=ctx.createRadialGradient(64,64,0,64,64,64);
     g.addColorStop(0,"rgba(255,224,150,"+opacity+")"); g.addColorStop(0.4,"rgba(255,170,70,"+(opacity*0.5)+")"); g.addColorStop(1,"rgba(255,150,60,0)");
     ctx.fillStyle=g; ctx.fillRect(0,0,128,128);
-    var s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true}));
+    var s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,toneMapped:false}));
     s.scale.set(size,size,1); return s;
   }
   sunGroup.add(glowSprite(11,0.9));
@@ -487,14 +494,25 @@
   BODIES.forEach(function(b){
     var group=new THREE.Group(); scene.add(group);
     var tilt=new THREE.Group(); tilt.rotation.z=b.tilt; group.add(tilt);
-    var mat=new THREE.MeshStandardMaterial({map:textureFor(b),roughness:1,metalness:0});
-    var mesh=new THREE.Mesh(new THREE.SphereGeometry(b.size,40,40),mat);
+    var tx=srgb(textureFor(b));
+    var mat=new THREE.MeshStandardMaterial({map:tx,roughness:0.92,metalness:0});
+    mat.bumpMap=tx; mat.bumpScale=0.035;        // surface relief under the sun light -> craters/bands read 3D
+    var mesh=new THREE.Mesh(new THREE.SphereGeometry(b.size,64,64),mat);
     mesh.userData=b; tilt.add(mesh); pickables.push(mesh);
+
+    // atmospheric limb glow (back-side additive shell) for the bodies that have one
+    if(b.id==="earth"||b.id==="venus"||b.id==="uranus"||b.id==="neptune"){
+      var atmoC={earth:0x6ab0ff,venus:0xf0d9a0,uranus:0x9fe6e8,neptune:0x6f8cff}[b.id];
+      var atmo=new THREE.Mesh(new THREE.SphereGeometry(b.size*1.07,48,48),
+        new THREE.MeshBasicMaterial({color:atmoC,transparent:true,opacity:0.16,side:THREE.BackSide,
+          blending:THREE.AdditiveBlending,depthWrite:false}));
+      atmo.material.toneMapped=false; tilt.add(atmo);
+    }
 
     if(b.ring){
       var inner=b.size*1.35,outer=b.size*2.3;
       var rg=new THREE.RingGeometry(inner,outer,80); fixRingUV(rg,inner,outer);
-      var ring=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({map:texRing(),side:THREE.DoubleSide,transparent:true,opacity:0.92,depthWrite:false}));
+      var ring=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({map:srgb(texRing()),side:THREE.DoubleSide,transparent:true,opacity:0.92,depthWrite:false}));
       ring.rotation.x=Math.PI/2.05; tilt.add(ring);
     }
     if(b.faintRing){
@@ -507,8 +525,9 @@
     var moonPivot=null,moonMesh=null;
     if(b.hasMoon){
       moonPivot=new THREE.Group(); group.add(moonPivot);
-      moonMesh=new THREE.Mesh(new THREE.SphereGeometry(0.16,28,28),
-        new THREE.MeshStandardMaterial({map:texRocky(0x9a948b,{craters:60,csz:8,amp:26,dark:true}),roughness:1,metalness:0}));
+      var mtx=srgb(texRocky(0x9a948b,{craters:60,csz:8,amp:26,dark:true}));
+      moonMesh=new THREE.Mesh(new THREE.SphereGeometry(0.16,40,40),
+        new THREE.MeshStandardMaterial({map:mtx,bumpMap:mtx,bumpScale:0.02,roughness:0.95,metalness:0}));
       moonMesh.userData=MOON; moonMesh.position.set(b.size+0.9,0,0);
       moonPivot.add(moonMesh); pickables.push(moonMesh);
     }
