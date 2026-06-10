@@ -223,3 +223,22 @@ def test_partial_refund_is_proportional_and_keeps_subscription():
     assert r["full"] is False and r["tokens"] == 150_000     # 25% of 600k
     assert s.get_user("u2")["tier"] == "pro"                 # partial refund does NOT downgrade
     assert s.get_payment("pay_y")["status"] != "refunded"    # payment stays open for further partials
+
+
+# --------------------------- code one-time redemption ---------------------- #
+def test_code_one_time_per_user_even_after_expiry():
+    from app.billing import MemoryStore, _code_redeem_check
+    from datetime import datetime, timezone, timedelta
+    s = MemoryStore()
+    s.codes["h1"] = {"active": True, "kind": "beta", "tier": "enterprise",
+                     "uses": 0, "max_uses": 5, "redeemed_by": []}
+    assert s.code_redeem("h1", "uA")["ok"]
+    r2 = s.code_redeem("h1", "uA")                    # same user, second time
+    assert not r2["ok"] and "already" in r2["reason"].lower()
+    # already-redeemed takes precedence over expiry
+    s.codes["h1"]["expires_at"] = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    chk = _code_redeem_check(s.codes["h1"], "uA", datetime.now(timezone.utc))
+    assert chk and "already" in chk.lower()
+    # permanent per-user record
+    s.add_redeemed_code("uA", "h1")
+    assert "h1" in (s.get_user("uA") or {}).get("redeemed_codes", [])
