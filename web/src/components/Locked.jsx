@@ -3,7 +3,7 @@ import React from "react";
 // Inline lock/upgrade prompt shown where a feature isn't in the user's tier.
 // Keeps the feature visible (so the user knows it exists) behind a clear upgrade
 // nudge, instead of silently hiding it.
-export default function Locked({ title, tier = "Pro", note }) {
+export default function Locked({ title, tier = "Pro", note, cta }) {
   return (
     <div className="locked">
       <span className="locked-badge" aria-hidden="true">
@@ -15,6 +15,7 @@ export default function Locked({ title, tier = "Pro", note }) {
       <div>
         <b>{title}</b>
         <p className="note" style={{ margin: "3px 0 0" }}>{note || `Upgrade to ${tier} to unlock.`}</p>
+        {cta && <div style={{ marginTop: 10 }}>{cta}</div>}
       </div>
     </div>
   );

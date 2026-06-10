@@ -257,6 +257,10 @@ button.sm{padding:5px 11px;font-size:12px}
 .consent{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:12.5px;color:var(--cream-dim);line-height:1.5}
 .consent input{width:auto;margin-top:3px;flex:0 0 auto}
 .consent a{color:var(--brass-lt)}
+/* text link inside a form (e.g. "Enter coordinates manually") — not a button */
+.linklike{display:inline-block;background:none;border:0;padding:2px 0;margin-top:4px;color:var(--brass);
+  font-family:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.linklike:hover{color:var(--marigold)}
 /* resolution notice banner */
 .notice-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
   background:#faf5e8;border:1px solid var(--line);border-left:3px solid var(--brass);

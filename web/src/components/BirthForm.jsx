@@ -96,11 +96,11 @@ export default function BirthForm({ onSubmit, busy, extra, locked, consented, on
       {consentRow}
       <div className="actions">
         <button onClick={guard(submit)} disabled={busy || (needConsent && !agreed)}>{busy ? "Casting…" : "Cast reading"}</button>
-        <button className="ghost" type="button" onClick={() => { setManual(!manual); setErr(""); }}>
-          {manual ? "Search a city instead" : "Enter coordinates"}
-        </button>
         {busy && <span className="loader">Casting the chart…</span>}
       </div>
+      <button className="linklike" type="button" onClick={() => { setManual(!manual); setErr(""); }}>
+        {manual ? "Search a city instead" : "Enter coordinates manually"}
+      </button>
       {err && <p className="err">{err}</p>}
     </div>
   );

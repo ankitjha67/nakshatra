@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiPost } from "../lib/api.js";
+import RedeemCode from "../components/RedeemCode.jsx";
 
 const TIER_LABEL = { free: "Free", basic: "Basic", pro: "Pro", enterprise: "Enterprise" };
 
@@ -86,6 +87,13 @@ export default function AccountTab({ me, refresh }) {
           <p className="note">No birth details saved yet. They lock to your account on your first reading.</p>
         )}
       </div>
+
+      {me.tier !== "enterprise" && (
+        <div className="data-block">
+          <p className="data-h">Have an access code?</p>
+          <RedeemCode onRedeemed={refresh} />
+        </div>
+      )}
     </div>
   );
 }

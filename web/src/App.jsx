@@ -31,11 +31,11 @@ const ALLOWANCE_NOTE = "Readings draw on your monthly AI allowance (shared with 
 // and richer data unlock by tier, gated inside ReadingTab/Charts/ChartData).
 const TABS = [
   { key: "natal", label: "Natal", min: "free",
-    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} blurb={"Your birth chart + a focused natal reading. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="natal" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} refresh={ctx.refresh} result={ctx.casts.natal} onResult={(r) => ctx.setCast("natal", r)} blurb={"Your birth chart + a focused natal reading. " + ALLOWANCE_NOTE} /> },
   { key: "maha", label: "Maha-Kundali", min: "pro",
-    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="maha_kundali" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} refresh={ctx.refresh} result={ctx.casts.maha} onResult={(r) => ctx.setCast("maha", r)} blurb={"The complete report, all sections, grounded and cited. " + ALLOWANCE_NOTE} /> },
   { key: "yearly", label: "Yearly", min: "pro",
-    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
+    render: (ctx) => <ReadingTab reportType="yearly" onCast={ctx.onCast} features={ctx.features} locked={ctx.lockedBirth} consented={ctx.consented} onConsent={ctx.onConsent} refresh={ctx.refresh} result={ctx.casts.yearly} onResult={(r) => ctx.setCast("yearly", r)} blurb={"A year-scoped forecast (Varshphal), your dashas across the chosen year. " + ALLOWANCE_NOTE} /> },
   { key: "prashna", label: "Prashna", min: "pro",
     render: () => <PrashnaTab /> },
   { key: "panchang", label: "Panchang", min: "free",
@@ -65,6 +65,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);      // shows the Admin tab when true
   const [me, setMe] = useState(null);                 // real tier + feature entitlements (/v1/me)
   const [graha, setGraha] = useState(null);           // planet info card (from the interactive orrery)
+  const [casts, setCasts] = useState({});             // cached cast results per reportType (persist across tab switches)
 
   useEffect(() => {
     if (PREVIEW) { setUser({ email: "preview@local" }); return; }
@@ -104,7 +105,8 @@ export default function App() {
   const recordConsent = () => apiPost("/v1/consent", { version: CONSENT_VERSION }).then(refreshMe).catch(() => {});
   const ctx = { onCast: (b) => { setLastBirth(b); refreshMe(); }, lastBirth, setBalance,
                 features, me, refresh: refreshMe, lockedBirth: me?.birth_lock,
-                consented: !!me?.consent_version, onConsent: recordConsent };
+                consented: !!me?.consent_version, onConsent: recordConsent,
+                casts, setCast: (k, v) => setCasts((c) => ({ ...c, [k]: v })) };
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
 
   const locked = (min) => RANK[userTier] < RANK[min];
@@ -165,9 +167,6 @@ export default function App() {
             ))}
           </nav>
 
-          {userTier !== "enterprise" && (
-            <div className="redeem-bar"><RedeemCode onRedeemed={refreshMe} /></div>
-          )}
           {locked(active.min) ? <Paywall tab={active} tiers={tiers} onRedeemed={refreshMe} /> : active.render(ctx)}
         </>
       )}

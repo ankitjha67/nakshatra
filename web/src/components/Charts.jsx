@@ -131,11 +131,15 @@ function Western({ ascIdx, bySign, S, glyphs }) {
     cells.push(<Stack key={"c" + h} cx={mx} cy={my} house={h} signIdx={signIdx}
                       planets={bySign[signIdx]} asc={asc} glyphs={glyphs} />);
   }
+  // Ascendant (Rising) marker at 9 o'clock — the 1st-house cusp, highlighted
+  const [aix, aiy] = pt(180, ri), [aox, aoy] = pt(180, R);
   return (
     <svg viewBox={`0 0 ${S} ${S}`} className="chart-svg" role="img" aria-label="Western chart">
       <circle cx={cx} cy={cy} r={R} className="cl" fill="none" />
       <circle cx={cx} cy={cy} r={ri} className="cl" fill="none" />
       {spokes}{cells}
+      <line x1={aix} y1={aiy} x2={aox - 6} y2={aoy} className="ascd" />
+      <text x={aox - 4} y={aoy - 5} className="ascl" style={{ textAnchor: "start" }}>ASC ▸</text>
     </svg>
   );
 }
@@ -177,12 +181,23 @@ export default function Charts({ chart, features = [] }) {
       <div className="chart-single">
         <View ascIdx={ascIdx} bySign={bySign} S={360} glyphs={glyphs} />
       </div>
-      <p className="note">
-        {VARGA_LABEL[active] || active} · whole-sign houses from a {SIGNS[ascIdx]} {active === "D1" ? "ascendant" : "varga lagna"}.
-        In each house: the <b style={{ color: "var(--brass)" }}>brass number is the house</b> (1 = Ascendant, in orange),
-        then the sign{glyphs ? " glyph" : " number (1 = Aries … 12 = Pisces)"}, then the grahas
-        ({glyphs ? "☉☾♂☿♃♀♄☊☋" : "Su Mo Ma Me Ju Ve Sa Ra Ke"}).
-      </p>
+      {style === "western" ? (
+        <p className="note">
+          Whole-sign houses with a {SIGNS[ascIdx]} Rising (Ascendant). The Ascendant is at the left
+          (marked <b style={{ color: "var(--marigold)" }}>ASC</b>); houses run counter-clockwise. In each
+          house: the <b style={{ color: "var(--brass)" }}>brass number is the house</b> (1 = Rising),
+          then the sign{glyphs ? " glyph" : " number (1 = Aries … 12 = Pisces)"}, then the planets
+          ({glyphs ? "☉☾♂☿♃♀♄☊☋" : "Su Mo Ma Me Ju Ve Sa Ra Ke"}). Note: this uses the sidereal
+          (Vedic) zodiac, so signs differ from Western tropical software.
+        </p>
+      ) : (
+        <p className="note">
+          {VARGA_LABEL[active] || active} · whole-sign houses from a {SIGNS[ascIdx]} {active === "D1" ? "ascendant" : "varga lagna"}.
+          In each house: the <b style={{ color: "var(--brass)" }}>brass number is the house</b> (1 = Ascendant, in orange),
+          then the sign{glyphs ? " glyph" : " number (1 = Aries … 12 = Pisces)"} (rashi), then the grahas
+          ({glyphs ? "☉☾♂☿♃♀♄☊☋" : "Su Mo Ma Me Ju Ve Sa Ra Ke"}).
+        </p>
+      )}
       {!canDivisional && features.length > 0 && (
         <p className="note">Divisional charts (D9 Navamsa / D10 Dasamsa / D24) unlock on Pro.</p>
       )}
