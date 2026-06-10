@@ -946,7 +946,11 @@ def codes_generate(req: CodeGenRequest, admin: str = Depends(require_admin)):
     plaintext = []
     for _i in range(req.count):
         code = generate_plaintext()
-        meta = {"kind": req.kind, "max_uses": req.max_uses, "uses": 0, "redeemed_by": [],
+        # Codes are strictly SINGLE-USE: one redemption total, by one user, before
+        # expiry. Once redeemed it is spent for everyone (the user-side guard also
+        # keeps it spent for that user permanently). Generate `count` codes for
+        # `count` people rather than one shared multi-use code.
+        meta = {"kind": req.kind, "max_uses": 1, "uses": 0, "redeemed_by": [],
                 "active": True, "expires_at": exp, "created_at": now.isoformat()}
         if req.kind == "beta":
             meta["tier"] = req.tier
@@ -1610,14 +1614,49 @@ def admin_user_detail(uid: str, _: None = Depends(require_admin)):
     }
 
 
+TEST_USER_PREFIX = "qa_"   # convention: every QA/smoke account uid starts with this
+
+
+class DeleteUserReq(BaseModel):
+    confirm: bool = False   # real accounts (with an email) require an explicit confirm
+
+
+def _is_real_account(uid: str, user: dict | None) -> bool:
+    """A real signup = has an email AND the uid is not a qa_/test account."""
+    email = (user or {}).get("email") or ""
+    return ("@" in email) and not uid.startswith(TEST_USER_PREFIX)
+
+
 @app.post("/admin/users/{uid}/delete")
-def admin_delete_user(uid: str, admin: str = Depends(require_admin)):
-    """Delete a user (profile, keys, chats) and clear any ban. Ops + test cleanup."""
+def admin_delete_user(uid: str, req: Optional[DeleteUserReq] = None, admin: str = Depends(require_admin)):
+    """Delete a user (profile, keys, chats) and clear any ban. SAFEGUARD: a real
+    account (has an email, uid not prefixed qa_) can't be deleted unless confirm=true,
+    so bulk/accidental cleanup can never wipe a real signup (e.g. a beta tester)."""
     store = get_store()
+    user = store.get_user(uid)
+    if _is_real_account(uid, user) and not (req and req.confirm):
+        raise HTTPException(409, "This looks like a real account (has an email). "
+                                 "Pass confirm=true to delete it.")
     store.clear_ban(uid)
     res = store.delete_user(uid)
     _audit(admin, "delete_user", uid)
     return {"uid": uid, "deleted": True, **(res or {})}
+
+
+@app.post("/admin/test-users/purge")
+def purge_test_users(admin: str = Depends(require_admin)):
+    """Safely delete ONLY QA/test accounts (uid prefixed `qa_`). Never touches real
+    signups, so cleanup can't hit a beta tester."""
+    store = get_store()
+    deleted = []
+    for u in store.list_users():
+        uid = u.get("uid") or ""
+        if uid.startswith(TEST_USER_PREFIX):
+            store.clear_ban(uid)
+            store.delete_user(uid)
+            deleted.append(uid)
+    _audit(admin, "purge_test_users", count=len(deleted))
+    return {"deleted": deleted, "count": len(deleted)}
 
 
 @app.get("/admin/stats")

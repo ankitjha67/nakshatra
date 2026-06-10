@@ -48,7 +48,6 @@ export default function AdminTab() {
   const [cCount, setCCount] = useState(20);
   const [cTier, setCTier] = useState("enterprise");
   const [cDiscount, setCDiscount] = useState(20);
-  const [cUses, setCUses] = useState(1);
   const [cExpiry, setCExpiry] = useState(30);
   const [feedback, setFeedback] = useState([]);
   const [fraudData, setFraudData] = useState(null);
@@ -111,7 +110,7 @@ export default function AdminTab() {
   const deactivateCode = (id) => act(() => apiPost(`/admin/codes/${id}/deactivate`, {}), () => "Code deactivated.");
   const reactivateCode = (id) => act(() => apiPost(`/admin/codes/${id}/reactivate`, {}), () => "Code reactivated.");
   const genCodes = () => act(async () => {
-    const body = { kind: cKind, count: Number(cCount), max_uses: Number(cUses) };
+    const body = { kind: cKind, count: Number(cCount) };   // codes are single-use
     if (cExpiry) body.expires_days = Number(cExpiry);
     if (cKind === "beta") body.tier = cTier; else body.discount_pct = Number(cDiscount);
     const r = await apiPost("/admin/codes/generate", body);
@@ -265,6 +264,8 @@ export default function AdminTab() {
           <option value="email">email</option>
         </select>
         <button className="ghost sm" onClick={exportUsersCsv} disabled={!users.length}>Export CSV</button>
+        <button className="ghost sm" disabled={busy} title="Deletes only qa_ test accounts; never real signups"
+          onClick={() => { if (window.confirm("Delete all QA/test accounts (uid prefixed qa_)? Real signups are never touched.")) userAction(null, "/admin/test-users/purge", {}, "Test users purged.", load); }}>Purge test users</button>
       </div>
       {shownUsers.length === 0 ? (
         <p className="note">{users.length ? "No users match the filter." : "No users yet."}</p>
@@ -315,7 +316,7 @@ export default function AdminTab() {
               ? <button className="ghost sm" disabled={busy} onClick={() => userAction(detail.uid, `/admin/users/${detail.uid}/unban`, {}, "Unbanned.")}>Unban</button>
               : <button className="ghost sm" disabled={busy} onClick={() => userAction(detail.uid, `/admin/users/${detail.uid}/ban`, { kind: "temporary", reason: "admin", days: 7 }, "Banned 7d.")}>Ban 7d</button>}
             {detail.birth_lock && <button className="ghost sm" disabled={busy} onClick={() => userAction(detail.uid, `/admin/users/${detail.uid}/reset-birth`, {}, "Birth lock cleared.")}>Reset birth lock</button>}
-            <button className="ghost sm" disabled={busy} onClick={() => { if (window.confirm(`Delete user ${detail.email || detail.uid}? This removes their profile, keys and chats.`)) userAction(detail.uid, `/admin/users/${detail.uid}/delete`, {}, "User deleted.", () => { setDetail(null); load(); }); }}>Delete user</button>
+            <button className="ghost sm" disabled={busy} onClick={() => { if (window.confirm(`Delete user ${detail.email || detail.uid}? This removes their profile, keys and chats.`)) userAction(detail.uid, `/admin/users/${detail.uid}/delete`, { confirm: true }, "User deleted.", () => { setDetail(null); load(); }); }}>Delete user</button>
           </div>
           {(detail.jailbreaks || []).length > 0 && (
             <>
@@ -435,12 +436,11 @@ export default function AdminTab() {
           ) : (
             <input type="number" min="1" max="100" value={cDiscount} onChange={(e) => setCDiscount(e.target.value)} title="discount %" style={{ maxWidth: 90 }} />
           )}
-          <input type="number" min="1" max="200" value={cCount} onChange={(e) => setCCount(e.target.value)} title="how many" style={{ maxWidth: 90 }} />
-          <input type="number" min="1" max="100000" value={cUses} onChange={(e) => setCUses(e.target.value)} title="uses per code" style={{ maxWidth: 90 }} />
+          <input type="number" min="1" max="200" value={cCount} onChange={(e) => setCCount(e.target.value)} title="how many codes" style={{ maxWidth: 90 }} />
           <input type="number" min="1" max="3650" value={cExpiry} onChange={(e) => setCExpiry(e.target.value)} title="expires in days" style={{ maxWidth: 110 }} />
           <button className="sm" disabled={busy} onClick={genCodes}>Generate</button>
         </div>
-        <p className="note">count · uses/code · expiry(days). Codes are shown once below; only salted hashes are stored.</p>
+        <p className="note">count · expiry(days). Each code is <b>single-use</b> (one redemption, by one person, before expiry) — generate one per recipient. Shown once below; only salted hashes are stored.</p>
         {generated.length > 0 && (
           <>
             <p className="note" style={{ color: "var(--brass)" }}>Copy & share now — these won't be shown again:</p>
