@@ -977,9 +977,15 @@ def redeem(req: RedeemRequest, p: Principal = Depends(require_principal)):
     errors so it can't be used to enumerate codes."""
     enforce_quota(p)
     store = get_store()
-    res = store.code_redeem(hash_code(req.code), p.user_id)
+    ch = hash_code(req.code)
+    # Permanent per-user guard: a code is spent for a user forever once redeemed,
+    # independent of the code's own expiry/uses (survives a code regen/reset too).
+    if ch in ((store.get_user(p.user_id) or {}).get("redeemed_codes") or []):
+        raise HTTPException(400, "You have already redeemed this code.")
+    res = store.code_redeem(ch, p.user_id)
     if not res.get("ok"):
         raise HTTPException(400, res.get("reason") or "Invalid code.")
+    store.add_redeemed_code(p.user_id, ch)
     meta = res["meta"]
     if meta.get("kind") == "discount":
         pct = int(meta.get("discount_pct", 0))

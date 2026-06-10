@@ -37,6 +37,10 @@ def _code_redeem_check(meta: Optional[dict], uid: str, now: datetime) -> Optiona
     Errors are deliberately generic so the endpoint can't be used to enumerate codes."""
     if not meta or not meta.get("active", True):
         return "Invalid or inactive code."
+    # already-redeemed takes precedence over expiry: once a user has used a code it
+    # is permanently spent for them, even if the code's time window later lapses.
+    if uid in (meta.get("redeemed_by") or []):
+        return "You have already redeemed this code."
     exp = meta.get("expires_at")
     if exp:
         try:
@@ -44,8 +48,6 @@ def _code_redeem_check(meta: Optional[dict], uid: str, now: datetime) -> Optiona
                 return "This code has expired."
         except Exception:  # noqa: BLE001, bad/legacy stamp -> treat as non-expiring
             pass
-    if uid in (meta.get("redeemed_by") or []):
-        return "You have already redeemed this code."
     if int(meta.get("uses", 0)) >= int(meta.get("max_uses", 1)):
         return "This code has been fully redeemed."
     return None
@@ -108,8 +110,8 @@ TIERS: dict[str, Tier] = {
     # monthly_tokens are PROFIT-GATED: each is <= pricing.gated_grant_tokens(price) so
     # that at full utilization (readings + chat both metered against this allowance)
     # cost stays <= 50% of net revenue after GST + Razorpay. See docs/COST_MODEL.md.
-    "free":  Tier("free",  "Free",        0,    frozenset(),                       False, 5,    3, monthly_tokens=0, features=_FREE_FEATURES),
-    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing", "doshas"}), True, 50, 10, monthly_tokens=150_000, features=_BASIC_FEATURES),
+    "free":  Tier("free",  "Free",        0,    frozenset(),                       False, 5,    15, monthly_tokens=0, features=_FREE_FEATURES),
+    "basic": Tier("basic", "Basic",       299,  frozenset({"essence", "mind", "relationships", "career", "timing", "doshas"}), True, 50, 20, monthly_tokens=150_000, features=_BASIC_FEATURES),
     "pro":   Tier("pro",   "Pro",         999,  _PRO_SECTIONS,                     True,  500,  30, allow_async=True, monthly_tokens=600_000, features=_PRO_FEATURES),
     "enterprise": Tier("enterprise", "API / Business", 4999, _PRO_SECTIONS,        True,  10000, 120, allow_async=True, api_access=True, monthly_tokens=3_000_000, features=_ENT_FEATURES),
 }
@@ -330,6 +332,7 @@ class Store:
     def record_jailbreak(self, uid: str, snippet: str, kind: str = "chat") -> int: ...
     def list_jailbreaks(self, uid: str, limit: int = 20) -> list: ...
     def set_risk(self, uid: str, risk: dict) -> None: ...
+    def add_redeemed_code(self, uid: str, code_hash: str) -> None: ...
     # payment idempotency, True if this id is newly recorded, False if already seen
     def mark_payment_processed(self, payment_id: str) -> bool: ...
     # platform-wide token spend today (for the global cost breaker)
@@ -653,6 +656,12 @@ class MemoryStore(Store):
     def set_risk(self, uid, risk):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
         u["risk"] = dict(risk)
+
+    def add_redeemed_code(self, uid, code_hash):
+        u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
+        rc = u.setdefault("redeemed_codes", [])
+        if code_hash not in rc:
+            rc.append(code_hash)
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
@@ -1113,6 +1122,10 @@ class FirestoreStore(Store):
 
     def set_risk(self, uid, risk):
         self._db.collection("users").document(uid).set({"risk": dict(risk)}, merge=True)
+
+    def add_redeemed_code(self, uid, code_hash):
+        self._db.collection("users").document(uid).set(
+            {"redeemed_codes": self._fs.ArrayUnion([code_hash])}, merge=True)
 
     def list_jailbreaks(self, uid, limit=20):
         try:
