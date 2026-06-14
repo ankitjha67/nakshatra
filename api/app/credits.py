@@ -82,6 +82,11 @@ def apply_resets(bal: Balance, tier_key: str, monthly_tokens: int,
     ledger entries to append (one `reset` entry if the cycle rolled over)."""
     monthly_tokens = max(0, int(monthly_tokens))
     entries: list[dict] = []
+    # `bal.monthly_tokens` is the allowance cached at the LAST grant; set_tier never
+    # touches it (the stored `tier` field is shared with the user doc and is already
+    # overwritten by the time we read here, so it can't tell us an upgrade happened —
+    # the cached allowance can).
+    prev_allowance = bal.monthly_tokens
     bal = replace(bal, tier=tier_key)
 
     # --- cycle reset: refresh grant to the (current) tier's monthly allowance ---
@@ -94,6 +99,20 @@ def apply_resets(bal: Balance, tier_key: str, monthly_tokens: int,
                       grant_balance=monthly_tokens, monthly_tokens=monthly_tokens,
                       cycle_start=cstart, cycle_end=cstart + relativedelta(months=1))
         entries.append(_entry("reset", monthly_tokens, bal.available, "monthly grant reset", None, now))
+
+    # --- mid-cycle tier upgrade: a higher tier grants its allowance immediately, so a
+    # user who upgrades (via payment, admin, beta or a redeemed code) gets their credits
+    # now instead of waiting for the next cycle. We detect it by the allowance RISING
+    # above what was last granted (a downgrade lowers it and is left alone, so the user
+    # keeps the cycle they already paid for). Setting grant_balance absolutely makes this
+    # idempotent with the payment webhook's explicit credit_grant and with repeated reads
+    # at the same tier (the cached allowance then equals `monthly_tokens`, so it won't
+    # fire again). topup is untouched.
+    elif monthly_tokens > prev_allowance:
+        bal = replace(bal,
+                      grant_balance=monthly_tokens, monthly_tokens=monthly_tokens,
+                      cycle_start=now, cycle_end=now + relativedelta(months=1))
+        entries.append(_entry("grant", monthly_tokens, bal.available, "tier upgrade grant", None, now))
 
     # --- daily reset: abuse counter rolls at the date boundary ---
     today = now.date().isoformat()

@@ -89,6 +89,58 @@ def test_no_reset_within_cycle():
     assert bal2.grant_balance == 5 and entries == []
 
 
+def test_tier_upgrade_grants_new_allowance_mid_cycle():
+    # free user (no grant) upgrades to enterprise three days into the cycle: they must
+    # get the enterprise allowance NOW, not wait for the next monthly reset.
+    free = credits.Balance(
+        tier="free", grant_balance=0, topup_balance=0, monthly_tokens=0,
+        cycle_start=T0, cycle_end=T0 + relativedelta(months=1),
+        daily_tokens_used=0, daily_date=T0.date().isoformat())
+    ent = TIERS["enterprise"]
+    bal2, entries = credits.apply_resets(free, ent.key, ent.monthly_tokens, T0 + relativedelta(days=3))
+    assert bal2.tier == "enterprise"
+    assert bal2.grant_balance == ent.monthly_tokens          # granted immediately
+    assert any(e["type"] == "grant" for e in entries)
+
+
+def test_tier_upgrade_preserves_topup_and_resets_window():
+    bal = _bal(50_000, 12_345, monthly=TIERS["basic"].monthly_tokens)
+    bal = credits.Balance(**{**bal.__dict__, "tier": "basic"})
+    pro = TIERS["pro"]
+    later = T0 + relativedelta(days=10)
+    bal2, _ = credits.apply_resets(bal, pro.key, pro.monthly_tokens, later)
+    assert bal2.grant_balance == pro.monthly_tokens          # upgraded allowance
+    assert bal2.topup_balance == 12_345                      # purchased tokens survive
+    assert bal2.cycle_start == later                         # fresh month from the upgrade
+
+
+def test_downgrade_keeps_paid_cycle_balance():
+    # downgrade must NOT wipe the allowance the user already paid for this cycle.
+    bal = _bal(400_000, 0, monthly=TIERS["pro"].monthly_tokens)
+    bal = credits.Balance(**{**bal.__dict__, "tier": "pro"})
+    basic = TIERS["basic"]
+    bal2, entries = credits.apply_resets(bal, basic.key, basic.monthly_tokens, T0 + relativedelta(days=2))
+    assert bal2.tier == "basic"
+    assert bal2.grant_balance == 400_000                     # untouched (no upgrade grant)
+    assert not any(e["type"] == "grant" for e in entries)
+
+
+def test_same_tier_read_does_not_regrant():
+    bal = _bal(123, 0, monthly=TIERS["pro"].monthly_tokens)  # mid-cycle, partially spent
+    bal2, entries = credits.apply_resets(bal, "pro", TIERS["pro"].monthly_tokens, T0 + relativedelta(days=2))
+    assert bal2.grant_balance == 123 and entries == []       # no phantom top-up on a plain read
+
+
+def test_store_upgrade_then_read_shows_new_credits():
+    # end-to-end through MemoryStore: a free user with a balance doc upgrades; the next
+    # /v1/me-style read (credit_balance with the new tier) reflects the enterprise grant.
+    s = MemoryStore()
+    assert s.credit_balance("u1", TIERS["free"], now=T0)["available"] == 0
+    s.set_tier("u1", "enterprise", source="beta")
+    b = s.credit_balance("u1", TIERS["enterprise"], now=T0 + relativedelta(days=1))
+    assert b["available"] == TIERS["enterprise"].monthly_tokens
+
+
 def test_daily_reset_zeroes_counter_on_new_day():
     bal = _bal(100, 0)
     bal = credits.Balance(**{**bal.__dict__, "daily_tokens_used": 7777})
