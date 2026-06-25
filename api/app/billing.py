@@ -705,7 +705,7 @@ class MemoryStore(Store):
 
     def export_user(self, uid):
         return {"user": self.users.get(uid), "ledger": list(self.ledger_entries.get(uid, [])),
-                "chats": self.chats.get(uid, {})}
+                "chats": self.chats.get(uid, {}), "payments": self.list_payments(uid)}
 
     def delete_user(self, uid):
         api_keys = [k for k, r in self.keys.items() if r.user_id == uid]
@@ -850,7 +850,8 @@ class FirestoreStore(Store):
         for c in uref.collection("chats").stream():
             msgs = [m.to_dict() for m in c.reference.collection("messages").stream()]
             chats.append({"id": c.id, **(c.to_dict() or {}), "messages": msgs})
-        return {"user": self.get_user(uid), "ledger": self.credit_ledger(uid, limit=10000), "chats": chats}
+        return {"user": self.get_user(uid), "ledger": self.credit_ledger(uid, limit=10000),
+                "chats": chats, "payments": self.list_payments(uid)}
 
     def delete_user(self, uid):
         uref = self._db.collection("users").document(uid)

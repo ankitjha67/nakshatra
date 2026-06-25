@@ -3,7 +3,10 @@ import { auth, PREVIEW } from "./firebase.js";
 // In preview (no Firebase config), talk to the local API with the seeded dev key.
 const BASE = import.meta.env.VITE_API_BASE || (PREVIEW ? "http://127.0.0.1:8099" : "");
 const PREVIEW_KEY = "pro_dev_key";
-const PREVIEW_ADMIN_KEY = "test-admin-secret";   // dev-only; matches a locally-booted API
+// Dev-only, and only used when PREVIEW (DEV && no Firebase). Read from env so no admin
+// secret is committed to this public repo; set VITE_PREVIEW_ADMIN_KEY locally to match
+// a locally-booted API's ADMIN_API_KEY.
+const PREVIEW_ADMIN_KEY = import.meta.env.VITE_PREVIEW_ADMIN_KEY || "";
 
 // Real users send a Firebase ID token (never an API key in the browser); the dev
 // preview sends the seeded local dev key instead. In prod, admin endpoints are

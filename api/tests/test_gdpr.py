@@ -21,7 +21,7 @@ def test_delete_purges_everything():
     assert res["deleted"] and res["api_keys"] == 1 and res["chats"] == 1
     # nothing left
     assert s.get_user("u1") is None
-    assert s.export_user("u1") == {"user": None, "ledger": [], "chats": {}}
+    assert s.export_user("u1") == {"user": None, "ledger": [], "chats": {}, "payments": []}
     assert s.get_key("k_u1") is None
 
 

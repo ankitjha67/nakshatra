@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     log_level: str = "INFO"
     cors_origins: str = "*"          # comma-separated; tighten in prod
+    max_request_bytes: int = 1_000_000   # reject oversized request bodies (anti-DoS); chat is ~6KB
     # Real client IP = the Nth X-Forwarded-For hop FROM THE END (the value the
     # platform appends, spoof-resistant). 1 = Cloud Run direct; raise if you add a
     # trusted load balancer / Cloud Armor that appends more hops.

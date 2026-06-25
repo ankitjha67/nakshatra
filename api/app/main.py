@@ -22,6 +22,7 @@ from typing import Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
@@ -72,6 +73,21 @@ app = FastAPI(title="Jyotish Cloud", version=__version__,
 _origins = [o.strip() for o in get_settings().cors_origins.split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=_origins or ["*"],
                    allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def _limit_body_size(request: Request, call_next):
+    """Reject oversized request bodies early (anti-DoS / memory-amplification). The
+    payments webhook reads the raw body BEFORE auth, so this guards it pre-auth too.
+    Bodies without a Content-Length (chunked) are bounded by the Cloud Run platform cap."""
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > get_settings().max_request_bytes:
+                return JSONResponse({"detail": "Request body too large."}, status_code=413)
+        except ValueError:
+            return JSONResponse({"detail": "Invalid Content-Length."}, status_code=400)
+    return await call_next(request)
 
 
 @app.on_event("startup")
@@ -239,10 +255,25 @@ def clear_nominee(p: Principal = Depends(require_principal)):
     return {"ok": True}
 
 
+# Sub-processors / recipients of personal data — disclosed in the data export so the
+# user sees who their data is shared with (DPDP s11 / GDPR Art 15(1)(c), Art 20).
+SUBPROCESSORS = [
+    {"name": "Google Cloud / Firebase", "purpose": "hosting, authentication, Firestore database",
+     "region": "asia-south1 (India)"},
+    {"name": "Google Vertex AI / Gemini", "purpose": "LLM phrasing of readings/chat from computed findings",
+     "region": "global"},
+    {"name": "Razorpay", "purpose": "payment processing", "region": "India"},
+]
+
+
 @app.get("/v1/me/export")
 def me_export(p: Principal = Depends(require_principal)):
-    """GDPR data portability, the user's own stored data (profile, ledger, chats)."""
-    return get_store().export_user(p.user_id)
+    """Data portability (DPDP s11 / GDPR Art 20): the user's own stored data — profile,
+    ledger, chats, payment history — plus the list of recipients (sub-processors)."""
+    data = get_store().export_user(p.user_id)
+    data["recipients"] = SUBPROCESSORS
+    data["exported_at"] = datetime.now(timezone.utc).isoformat()
+    return data
 
 
 @app.delete("/v1/me")
