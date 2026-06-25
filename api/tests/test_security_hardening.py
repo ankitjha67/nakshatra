@@ -39,6 +39,25 @@ def test_normal_body_passes_size_check():
     assert r.status_code == 200                        # well under the 1MB default
 
 
+def test_nominee_rejects_invalid_email():
+    client, _ = _client()
+    bad = client.post("/v1/nominee", json={"name": "X", "email": "not-an-email"})
+    assert bad.status_code == 422
+    ok = client.post("/v1/nominee", json={"name": "X", "email": "a@b.com"})
+    assert ok.status_code == 200
+
+
+def test_prashna_input_bounds():
+    from pydantic import ValidationError
+    import pytest
+    from app.main import PrashnaRequest
+    PrashnaRequest(question="hi?", lat=0, lon=0)                       # ok
+    with pytest.raises(ValidationError):
+        PrashnaRequest(question="hi?", lat=0, lon=0, tz="+" * 100)     # tz bounded
+    with pytest.raises(ValidationError):
+        PrashnaRequest(question="hi?", lat=0, lon=0, category="x" * 100)
+
+
 def test_rate_limiter_denies_at_limit():
     # Contract honoured by both the in-process (dev) and the shared Firestore (prod)
     # limiter: allow up to per_minute, then deny within the same window.

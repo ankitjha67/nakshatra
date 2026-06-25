@@ -1278,14 +1278,12 @@ def get_store() -> Store:
         return _STORE
     s = get_settings()
     if s.store_backend == "firestore":
+        # NEVER seed dev keys into a PERSISTENT store. The dev-key strings live in this
+        # public repo, so seeding them into Firestore would persist a trivial auth bypass
+        # that survives restarts and is only fenced off by APP_ENV — a single missing
+        # env var once exposed enterprise access. Dev keys belong only in the ephemeral
+        # MemoryStore (below), where they vanish on restart and never reach prod data.
         store = FirestoreStore(s.firestore_project or s.firebase_project or s.vertex_project)
-        if s.app_env != "prod":   # dev convenience: seed dev keys (never in prod)
-            for k, uid, t in (("free_dev_key", "u_free", "free"),
-                              ("basic_dev_key", "u_basic", "basic"),
-                              ("pro_dev_key", "u_pro", "pro"),
-                              ("ent_dev_key", "u_ent", "enterprise")):
-                if not store.get_key(k):
-                    store.create_key(k, uid, t)
         _STORE = store
         return _STORE
     if s.store_backend == "postgres":

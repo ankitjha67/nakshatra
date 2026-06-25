@@ -234,6 +234,13 @@ class NomineeIn(BaseModel):
     email: Optional[str] = Field(None, max_length=200)
     relationship: Optional[str] = Field(None, max_length=80)
 
+    @field_validator("email")
+    @classmethod
+    def _email_ok(cls, v):
+        if v and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v.strip()):
+            raise ValueError("invalid email")
+        return v.strip() if v else v
+
 
 @app.get("/v1/nominee")
 def get_nominee(p: Principal = Depends(require_principal)):
@@ -681,8 +688,8 @@ class PrashnaRequest(BaseModel):
     question: str = Field(..., min_length=3, max_length=500)
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
-    tz: str = "+05:30"
-    category: Optional[str] = None
+    tz: str = Field("+05:30", max_length=40)        # bounded: flows into the engine
+    category: Optional[str] = Field(None, max_length=40)
 
 
 @app.post("/v1/prashna", response_model=ReadingResponse)
@@ -804,9 +811,12 @@ def _run_job(job_id: str, birth: BirthDetails, tier_key: str, key: str, uid: str
         store.record(key, resp.meta.tokens_in, resp.meta.tokens_out, reading=True)
         store.add_user_tokens(uid, cost)
         store.job_put(job_id, {"job_id": job_id, "status": "done", "owner": key, "result": resp.model_dump()})
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
+        # Keep the real exception in server logs only; never surface str(exc) to the
+        # client (it can carry Firestore paths / project ids / engine internals).
         log.exception("job failed")
-        store.job_put(job_id, {"job_id": job_id, "status": "error", "owner": key, "error": str(exc)})
+        store.job_put(job_id, {"job_id": job_id, "status": "error", "owner": key,
+                               "error": "Reading failed. Please try again."})
 
 
 @app.post("/v1/reading/async", response_model=JobResponse)
