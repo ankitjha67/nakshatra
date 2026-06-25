@@ -39,11 +39,33 @@ def _ensure_firebase() -> None:
 def _verify_bearer(token: str) -> dict:
     _ensure_firebase()
     from firebase_admin import auth as fb_auth
+    check = get_settings().verify_token_revocation
     try:
-        decoded = fb_auth.verify_id_token(token, check_revoked=get_settings().verify_token_revocation)
-    except Exception as exc:  # noqa: BLE001, surface as 401, not 500
-        log.warning("Firebase token verification failed: %s", exc)
+        decoded = fb_auth.verify_id_token(token, check_revoked=check)
+    except (fb_auth.RevokedIdTokenError, fb_auth.UserDisabledError) as exc:
+        log.info("session revoked/disabled: %s", exc)
+        raise HTTPException(401, "Your session was revoked. Please sign in again.")
+    except fb_auth.InvalidIdTokenError as exc:          # bad signature / expired / malformed
+        log.info("invalid sign-in token: %s", exc)
         raise HTTPException(401, "Invalid or expired sign-in token")
+    except Exception as exc:  # noqa: BLE001
+        # The revocation check makes an Admin-API call (get_user) that needs Firebase
+        # Auth permission on the runtime SA. If THAT call fails (missing IAM role,
+        # transient outage) we must NOT lock every signed-in user out — the JWT
+        # signature/expiry was already validated. Fall back to a non-revoked verify
+        # and loudly log the misconfiguration so it gets fixed.
+        if check:
+            log.error("revocation check failed (server-side, not the user's token): %s "
+                      "- falling back to signature/expiry verify. Grant the runtime SA "
+                      "roles/firebaseauth.viewer to restore revocation checking.", exc)
+            try:
+                decoded = fb_auth.verify_id_token(token, check_revoked=False)
+            except Exception as exc2:  # noqa: BLE001
+                log.info("token verification failed: %s", exc2)
+                raise HTTPException(401, "Invalid or expired sign-in token")
+        else:
+            log.info("token verification failed: %s", exc)
+            raise HTTPException(401, "Invalid or expired sign-in token")
     if get_settings().require_email_verified and not decoded.get("email_verified", False):
         raise HTTPException(403, "Please verify your email address to continue.")
     return decoded

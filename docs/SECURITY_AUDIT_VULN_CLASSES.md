@@ -20,8 +20,15 @@ lower-severity findings were remediated or documented below.
 2. **Dev admin string in committed client source (LOW, no prod impact).** `web/src/lib/api.js` hardcoded `PREVIEW_ADMIN_KEY = "test-admin-secret"` (only used in DEV-without-Firebase). **Fixed:** now read from `import.meta.env.VITE_PREVIEW_ADMIN_KEY` (nothing committed).
 3. **Global token breaker OFF (LOW-MED, config).** `DAILY_GLOBAL_TOKEN_BREAKER=0`. **Fixed (ops):** set to a platform-wide daily backstop on the live service (tune via `docs/COST_MODEL.md`).
 
+## Findings fixed in a follow-up
+- **Per-minute rate limit was per-instance** (`billing.hit_rate`) — multi-instance autoscaling
+  multiplied the burst. **Fixed:** `FirestoreStore.hit_rate` is now a **shared atomic fixed-window
+  counter** in Firestore (one doc per key+minute, transactional increment, TTL-cleaned, fail-open on
+  error). The per-minute ceiling is now enforced across all Cloud Run instances; the durable daily cap
+  remains. Edge rate limiting (Cloud Armor) is still worthwhile as a pre-app layer but no longer
+  required for correctness.
+
 ## Findings accepted / documented (not code-fixable here)
-- **Per-minute rate limit is per-instance** (`billing.hit_rate`). Multi-instance autoscaling multiplies the burst. The **daily** call cap is durable (Firestore). *Recommendation:* put **edge rate limiting** (Cloud Armor / API Gateway) in front for a shared per-minute ceiling. (DoS, MEDIUM.)
 - **Chunked requests without Content-Length** bypass the body-size header check; bounded by the Cloud Run platform cap (≈32 MiB). Acceptable.
 - **Admin fraud scan is O(users)** unpaginated — admin-gated, internal concern only.
 - **Free `/v1/chart` etc. run the CPU-heavy engine uncredited** — bounded by the daily quota (free = 5/day).

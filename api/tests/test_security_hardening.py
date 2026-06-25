@@ -39,6 +39,15 @@ def test_normal_body_passes_size_check():
     assert r.status_code == 200                        # well under the 1MB default
 
 
+def test_rate_limiter_denies_at_limit():
+    # Contract honoured by both the in-process (dev) and the shared Firestore (prod)
+    # limiter: allow up to per_minute, then deny within the same window.
+    s = MemoryStore()
+    allowed = sum(1 for _ in range(5) if s.hit_rate("k", 3))
+    assert allowed == 3                                # 4th and 5th denied
+    assert s.hit_rate("k", 0) is True                  # 0 = unlimited / disabled
+
+
 def test_export_includes_payments_and_recipients():
     client, store = _client()
     store.credit_balance("u1", TIERS["pro"])           # creates user + opening grant

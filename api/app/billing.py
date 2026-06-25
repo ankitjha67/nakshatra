@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -18,6 +19,8 @@ from typing import Optional
 from fastapi import Header, HTTPException
 
 from . import credits
+
+log = logging.getLogger("billing")
 from .config import get_settings
 
 
@@ -417,6 +420,8 @@ class MemoryStore(Store):
             u["adult_confirmed_at"] = _now().isoformat()
 
     def hit_rate(self, key, per_minute):
+        if per_minute <= 0:                 # 0 = unlimited (consistent with FirestoreStore)
+            return True
         now = time.time()
         bucket = [t for t in self.rate.get(key, []) if now - t < 60]
         if len(bucket) >= per_minute:
@@ -796,16 +801,34 @@ class FirestoreStore(Store):
             doc["adult_confirmed_at"] = _now().isoformat()
         self._db.collection("users").document(uid).set(doc, merge=True)
 
-    # --- rate (per-instance) ---
+    # --- rate (shared across instances; fixed-window counter in Firestore) ---
     def hit_rate(self, key, per_minute):
-        now = time.time()
-        bucket = [t for t in self._rate.get(key, []) if now - t < 60]
-        if len(bucket) >= per_minute:
-            self._rate[key] = bucket
-            return False
-        bucket.append(now)
-        self._rate[key] = bucket
-        return True
+        """Atomic per-minute fixed-window counter, shared across all Cloud Run
+        instances (the old in-process limiter let the burst multiply by instance
+        count). One doc per (key, minute) bucket, incremented in a transaction;
+        deny once the count reaches per_minute. expireAt drives a Firestore TTL to
+        clean up old buckets. Fail-OPEN on any Firestore error so a limiter outage
+        can never block legitimate traffic (the durable daily cap still applies)."""
+        if per_minute <= 0:
+            return True
+        fs = self._fs
+        bucket = int(time.time() // 60)
+        ref = self._db.collection("rate").document(f"{key}__{bucket}")
+
+        @fs.transactional
+        def _run(transaction):
+            snap = ref.get(transaction=transaction)
+            n = int((snap.to_dict() or {}).get("n", 0)) if snap.exists else 0
+            if n >= per_minute:
+                return False
+            transaction.set(ref, {"n": n + 1, "expireAt": _now() + timedelta(seconds=120)}, merge=True)
+            return True
+
+        try:
+            return _run(self._db.transaction())
+        except Exception as exc:  # noqa: BLE001
+            log.warning("shared rate-limit check failed, allowing request: %s", exc)
+            return True
 
     # --- usage (durable, atomic) ---
     def _usage_ref(self, key):
