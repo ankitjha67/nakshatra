@@ -14,5 +14,5 @@ pysweph>=2.10.3.6
 google-genai>=2.8.0
 
 # --- auth + store (Firebase / Firestore) ---
-firebase-admin>=6.5
+firebase-admin>=7.4.0
 google-cloud-firestore>=2.27.0
