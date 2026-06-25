@@ -124,6 +124,7 @@ def me(p: Principal = Depends(require_principal)):
             "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
             "discount_pct": int(user.get("discount_pct") or 0),
             "consent_version": user.get("consent_version"),
+            "adult_confirmed": bool(user.get("adult_confirmed")),
             "birth_lock": user.get("birth_lock"),
             "birth_change_pending": bool(store.user_open_change_request(p.user_id)),
             "birth_change_notice": notice,
@@ -155,15 +156,22 @@ def submit_feedback(req: FeedbackIn, p: Principal = Depends(require_principal)):
 
 class ConsentIn(BaseModel):
     version: str = Field(..., max_length=32)
+    is_adult: bool = False        # the user attests they meet the minimum age (DPDP s9 / GDPR Art 8)
 
 
 @app.post("/v1/consent")
 def record_consent(req: ConsentIn, p: Principal = Depends(require_principal)):
     """Record the user's consent to process their (sensitive) birth data. Auditable
-    record for DPDP/GDPR; the web captures it before the first cast."""
+    record for DPDP/GDPR; the web captures it before the first cast. We require an
+    age attestation here: DPDP s9 forbids onboarding/behaviourally-monitoring a child
+    (under 18) without verifiable parental consent, which we do not yet support, so we
+    do not knowingly onboard minors at all."""
+    if not req.is_adult:
+        raise HTTPException(403, f"You must be at least {get_settings().min_user_age} "
+                                 "years old to use Nakshatra.")
     store = get_store()
     store.upsert_user(p.user_id, None)
-    store.set_consent(p.user_id, req.version)
+    store.set_consent(p.user_id, req.version, is_adult=True)
     return {"ok": True, "version": req.version}
 
 

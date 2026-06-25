@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     default_user_tier: str = "free"   # tier assigned to a user on first sign-in
     verify_token_revocation: bool = False   # check_revoked on ID tokens (recommend True in prod)
     require_email_verified: bool = False    # require a verified email before metered LLM access
+    min_user_age: int = 18                  # DPDP s9 / GDPR Art 8: minimum age to onboard (no
+                                            # behavioural monitoring of children); attested at consent
 
     # --- store ---
     store_backend: str = "memory"    # memory | firestore | postgres

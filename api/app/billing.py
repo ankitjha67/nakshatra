@@ -257,7 +257,7 @@ class Store:
     def get_user(self, uid: str) -> Optional[dict]: ...
     def upsert_user(self, uid: str, email: Optional[str], tier: Optional[str] = None) -> dict: ...
     def add_user_tokens(self, uid: str, n: int) -> None: ...
-    def set_consent(self, uid: str, version: str) -> None: ...
+    def set_consent(self, uid: str, version: str, is_adult: bool = False) -> None: ...
     # usage + rate
     def hit_rate(self, key: str, per_minute: int) -> bool: ...      # True if allowed
     def usage_today(self, key: str) -> dict: ...
@@ -398,10 +398,13 @@ class MemoryStore(Store):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
         u["tokens_total"] = int(u.get("tokens_total", 0)) + int(n)
 
-    def set_consent(self, uid, version):
+    def set_consent(self, uid, version, is_adult=False):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
         u["consent_version"] = version
         u["consent_at"] = _now().isoformat()
+        if is_adult:
+            u["adult_confirmed"] = True
+            u["adult_confirmed_at"] = _now().isoformat()
 
     def hit_rate(self, key, per_minute):
         now = time.time()
@@ -749,9 +752,12 @@ class FirestoreStore(Store):
         self._db.collection("users").document(uid).set(
             {"tokens_total": self._fs.Increment(int(n))}, merge=True)
 
-    def set_consent(self, uid, version):
-        self._db.collection("users").document(uid).set(
-            {"consent_version": version, "consent_at": _now().isoformat()}, merge=True)
+    def set_consent(self, uid, version, is_adult=False):
+        doc = {"consent_version": version, "consent_at": _now().isoformat()}
+        if is_adult:
+            doc["adult_confirmed"] = True
+            doc["adult_confirmed_at"] = _now().isoformat()
+        self._db.collection("users").document(uid).set(doc, merge=True)
 
     # --- rate (per-instance) ---
     def hit_rate(self, key, per_minute):
