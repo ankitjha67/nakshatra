@@ -66,6 +66,21 @@ def test_subscription_missing_notes_ignored():
     assert handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)["status"] == "ignored"
 
 
+def test_subscription_ended_revokes_access():
+    # A cancelled/completed/halted (failed-renewal) subscription must downgrade to free,
+    # else the user keeps premium + the free monthly credit refresh.
+    for ev in ("subscription.cancelled", "subscription.completed", "subscription.halted"):
+        s = MemoryStore()
+        raw, sig = _signed(_sub("subscription.charged", "u1", "pro"))
+        handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
+        assert s.get_user("u1")["tier"] == "pro"
+        raw, sig = _signed(_sub(ev, "u1", "pro"))
+        res = handle_razorpay_webhook(raw, sig, SECRET, s, TIERS)
+        assert res["status"] == "subscription_ended"
+        assert s.get_user("u1")["tier"] == "free"
+        assert not s.get_user("u1").get("subscription_id")
+
+
 # --------------------------- top-up ---------------------------------------- #
 def test_topup_pack_adds_topup_balance():
     s = MemoryStore()

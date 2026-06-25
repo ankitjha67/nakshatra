@@ -167,6 +167,20 @@ def handle_razorpay_webhook(raw: bytes, signature: str | None, secret: str,
             store.set_payment_status(pay_id, "refunded")     # only a full refund closes the payment
         return {"status": "refund", "uid": uid, "tokens": tokens, "payment_id": pay_id, "full": full}
 
+    # --- subscription ENDED: cancelled, completed (ran its course), or halted
+    #     (renewal payments failed repeatedly) -> revoke premium. Without this, a user
+    #     whose card later fails keeps their paid tier AND keeps getting the monthly
+    #     credit refresh for free (apply_resets refreshes the grant by tier each cycle
+    #     regardless of payment). Downgrading to free is what stops both. Idempotent.
+    if event in ("subscription.cancelled", "subscription.completed", "subscription.halted"):
+        notes = sub.get("notes") or {}
+        uid = notes.get("user_id") or notes.get("uid")
+        if not uid:
+            return {"status": "ignored", "reason": "no uid in subscription notes"}
+        store.set_tier(uid, "free", source=f"sub-{event.split('.')[-1]}")
+        store.set_subscription(uid, None)        # clears has_subscription / self-serve cancel
+        return {"status": "subscription_ended", "event": event, "uid": uid}
+
     # --- subscription: grant exactly once per CHARGE (not per lifecycle event) ---
     # Razorpay emits many subscription.* events (authenticated/activated/updated/...)
     # with the same subscription id; only `subscription.charged` is a real paid period.

@@ -55,17 +55,29 @@ async function handle(res) {
   return res.json();
 }
 
+// Wrap fetch so a network failure (offline / weak signal / DNS) surfaces a clear,
+// recoverable message instead of the browser's raw "Failed to fetch" / "Load failed".
+async function netFetch(url, opts) {
+  try {
+    return await fetch(url, opts);
+  } catch {
+    const e = new Error("You appear to be offline. Check your connection and try again.");
+    e.status = 0; e.offline = true;
+    throw e;
+  }
+}
+
 export async function apiPost(path, body) {
   const headers = { "Content-Type": "application/json", ...(await authHeaders(path)) };
-  return handle(await fetch(`${BASE}${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
+  return handle(await netFetch(`${BASE}${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
 }
 
 export async function apiGet(path) {
-  return handle(await fetch(`${BASE}${path}`, { headers: await authHeaders(path) }));
+  return handle(await netFetch(`${BASE}${path}`, { headers: await authHeaders(path) }));
 }
 
 export async function apiDelete(path) {
-  return handle(await fetch(`${BASE}${path}`, { method: "DELETE", headers: await authHeaders(path) }));
+  return handle(await netFetch(`${BASE}${path}`, { method: "DELETE", headers: await authHeaders(path) }));
 }
 
 export async function getTiers() {
