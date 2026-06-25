@@ -16,6 +16,7 @@ DPA — **execute/accept these and record the date**.
 | Google Cloud / Firebase | Hosting, Auth, Firestore | account, birth, chat, billing, logs | asia-south1 (India) | Google Cloud Data Processing Addendum (+ SCCs module) | `[ ] executed [date]` |
 | Google Vertex AI / Gemini | LLM phrasing of findings | computed findings (no name/email/UID) | **global** | Google Cloud DPA / Vertex terms; **confirm no-training + retention** | `[ ] confirmed [date]` |
 | Razorpay | Payment processing | payment ids/status, amount, contact | India | Razorpay DPA / merchant terms | `[ ] executed [date]` |
+| Umami (cloud or self-hosted) | Cookieless product analytics | aggregate usage/page/event counts (no PII, no cookies) | `[EU / self-hosted region]` | Umami Cloud DPA (or N/A if self-hosted) | `[ ] confirmed [date]` |
 
 **Actions:** (1) accept each DPA; (2) for GDPR, ensure **SCCs** cover the Vertex `global` transfer +
 a transfer-impact assessment; (3) confirm Vertex/Gemini **does not train** on our prompts and its

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 
 // Lazy-load Razorpay's widget only when checkout is actually started.
 function loadRazorpay() {
@@ -23,6 +24,7 @@ export default function CheckoutButton({ tier, label, onPaid }) {
 
   const start = async () => {
     setBusy(true); setErr("");
+    track("checkout_start", { tier });   // conversion-funnel event
     try {
       const r = await apiPost("/v1/checkout", { tier });
       setInfo(r);

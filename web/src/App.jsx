@@ -2,6 +2,7 @@ import React, { useEffect, useState, lazy, Suspense } from "react";
 import { auth, firebaseReady, PREVIEW } from "./lib/firebase.js";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getTiers, apiGet, apiPost } from "./lib/api.js";
+import { trackPage } from "./lib/analytics.js";
 import SignIn from "./components/SignIn.jsx";
 import CreditsWidget from "./components/CreditsWidget.jsx";
 import RedeemCode from "./components/RedeemCode.jsx";
@@ -83,6 +84,8 @@ export default function App() {
   };
   // Load the credit balance once signed in (chat turns then keep it live).
   useEffect(() => { if (user) apiGet("/v1/credits").then(setBalance).catch(() => {}); }, [user]);
+  // Record each tab view as an Umami SPA pageview (feature-usage analytics; no-op if unconfigured).
+  useEffect(() => { trackPage(tab); }, [tab]);
   // The user's real tier + feature entitlements drive paywalls and feature gating.
   useEffect(() => { if (user) apiGet("/v1/me").then(setMe).catch(() => setMe(null)); }, [user]);
   // Reveal the Admin tab only if this account is authorized.

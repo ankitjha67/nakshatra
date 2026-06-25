@@ -60,7 +60,15 @@ knowingly onboarded (18+ attestation gate).
 - **Retention:** security logs/processing data ≥1 year (DPDP Rule 8(3)/6(1)(e)); erased with account
   thereafter where not legally required.
 
-### F. Data-subject rights handling
+### F. Product analytics
+- **Purpose:** understand feature usage / funnels to improve the product.
+- **Data:** aggregate page/event counts via **Umami** — **cookieless, no personal data, no
+  cross-site tracking**; honors Do-Not-Track.
+- **Legal basis:** DPDP — not personal data (aggregate/anonymous); GDPR — Art 6(1)(f) legitimate
+  interests (no cookie-consent required as it sets no cookies).
+- **Recipients:** Umami (cloud or self-hosted). **Retention:** per Umami config.
+
+### G. Data-subject rights handling
 - **Purpose:** service access/export/correction/erasure/withdrawal/grievance/nomination.
 - **Data:** request metadata, grievance text, nominee details.
 - **Legal basis:** legal obligation (DPDP Ch.III / GDPR Ch.III).

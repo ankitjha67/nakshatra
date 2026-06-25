@@ -8,6 +8,7 @@ import AnchorBlock from "../components/AnchorBlock.jsx";
 import Locked from "../components/Locked.jsx";
 import CheckoutButton from "../components/CheckoutButton.jsx";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 
 const NOW_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 8 }, (_, i) => NOW_YEAR - 1 + i); // last year .. +6
@@ -47,6 +48,7 @@ export default function ReadingTab({ reportType, blurb, extra, onCast, features 
       if (ancResp) out.anchor = ancResp.anchor;
       onResult && onResult(out);
       onCast && onCast(b);
+      track("reading", { type: reportType, locked: !!out.readingLocked });   // activation event
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 

@@ -42,6 +42,8 @@ We share data only with service providers that process it on our behalf under co
 - **Google Vertex AI / Gemini** (the language model that phrases readings/chat from your
   computed findings).
 - **Razorpay** (payment processing).
+- **Umami** (privacy-first, **cookieless** product analytics — aggregate usage/page/event counts;
+  no cookies and no personal data; honors Do-Not-Track).
 We do not sell your personal data. We may disclose data if required by law or to protect
 rights, safety, and the integrity of the Service. International transfers are protected by
 appropriate safeguards.
@@ -70,7 +72,9 @@ Or contact our Grievance Officer below. We respond within the timeframe the law 
 
 ## 7. Cookies & local storage
 We use storage strictly necessary for authentication/session. We do not use third-party
-advertising trackers. `[Update if analytics/marketing cookies are added, add a consent banner.]`
+advertising trackers. Our product analytics (**Umami**) is **cookieless** and collects no personal
+data, so no analytics consent banner is required; we will add one if cookie-based or marketing
+trackers are ever introduced.
 
 ## 8. Children
 The Service is for adults only. At sign-up we require you to confirm you are **at least 18 years
