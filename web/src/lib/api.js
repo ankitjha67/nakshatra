@@ -61,6 +61,10 @@ export async function apiGet(path) {
   return handle(await fetch(`${BASE}${path}`, { headers: await authHeaders(path) }));
 }
 
+export async function apiDelete(path) {
+  return handle(await fetch(`${BASE}${path}`, { method: "DELETE", headers: await authHeaders(path) }));
+}
+
 export async function getTiers() {
   const res = await fetch(`${BASE}/v1/tiers`);
   return res.ok ? res.json() : [];

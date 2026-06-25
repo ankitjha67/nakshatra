@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     default_user_tier: str = "free"   # tier assigned to a user on first sign-in
     verify_token_revocation: bool = False   # check_revoked on ID tokens (recommend True in prod)
     require_email_verified: bool = False    # require a verified email before metered LLM access
+    min_user_age: int = 18                  # DPDP s9 / GDPR Art 8: minimum age to onboard (no
+                                            # behavioural monitoring of children); attested at consent
 
     # --- store ---
     store_backend: str = "memory"    # memory | firestore | postgres
@@ -74,6 +76,10 @@ class Settings(BaseSettings):
     fraud_autoban_score: int = 100            # >= this -> auto-suspend in the batch scan (0 = never)
     fraud_decay_half_life_days: float = 30.0  # behavioural risk halves every N clean days (0 = no decay)
     fraud_autoban_days: int = 7               # auto-ban duration (temporary; lifts itself when it expires)
+
+    # --- privacy / grievance (DPDP s8(9)/s13) ---
+    grievance_officer_name: str = ""        # published Grievance Officer (DPDP requires a contact)
+    grievance_officer_email: str = ""       # where data grievances are directed
 
     # --- auth / billing ---
     # No usable default: admin/internal endpoints stay disabled until a real
@@ -147,6 +153,8 @@ class Settings(BaseSettings):
             w.append("DAILY_GLOBAL_TOKEN_BREAKER is off (0), set a cap as a platform-wide spend backstop.")
         if not self.verify_token_revocation:
             w.append("VERIFY_TOKEN_REVOCATION is off, revoked/disabled sessions may still pass; enable in prod.")
+        if not (self.grievance_officer_email.strip()):
+            w.append("GRIEVANCE_OFFICER_EMAIL is unset, DPDP requires a published Grievance Officer contact.")
         return w
 
 

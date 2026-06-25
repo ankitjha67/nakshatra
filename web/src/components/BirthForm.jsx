@@ -20,8 +20,8 @@ export default function BirthForm({ onSubmit, busy, extra, locked, consented, on
   const consentRow = needConsent ? (
     <label className="consent">
       <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
-      <span>I consent to Nakshatra processing my birth details (date, time, place) to generate my
-        reading, per the <a href="https://github.com/ankitjha67/nakshatra/blob/main/docs/legal/PRIVACY_POLICY.md" target="_blank" rel="noreferrer">Privacy Policy</a> and{" "}
+      <span><b>I am at least 18 years old</b> and I consent to Nakshatra processing my birth details
+        (date, time, place) to generate my reading, per the <a href="https://github.com/ankitjha67/nakshatra/blob/main/docs/legal/PRIVACY_POLICY.md" target="_blank" rel="noreferrer">Privacy Policy</a> and{" "}
         <a href="https://github.com/ankitjha67/nakshatra/blob/main/docs/legal/TERMS_OF_SERVICE.md" target="_blank" rel="noreferrer">Terms</a>.</span>
     </label>
   ) : null;

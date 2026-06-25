@@ -257,7 +257,7 @@ class Store:
     def get_user(self, uid: str) -> Optional[dict]: ...
     def upsert_user(self, uid: str, email: Optional[str], tier: Optional[str] = None) -> dict: ...
     def add_user_tokens(self, uid: str, n: int) -> None: ...
-    def set_consent(self, uid: str, version: str) -> None: ...
+    def set_consent(self, uid: str, version: str, is_adult: bool = False) -> None: ...
     # usage + rate
     def hit_rate(self, key: str, per_minute: int) -> bool: ...      # True if allowed
     def usage_today(self, key: str) -> dict: ...
@@ -329,6 +329,14 @@ class Store:
     def list_audit(self, limit: int = 100) -> list: ...
     def add_feedback(self, entry: dict) -> None: ...
     def list_feedback(self, limit: int = 300) -> list: ...
+    # privacy: consent withdrawal (s6), grievances (s13), nomination (s14)
+    def withdraw_consent(self, uid: str) -> None: ...
+    def add_grievance(self, entry: dict) -> None: ...
+    def list_grievances(self, limit: int = 300) -> list: ...
+    def set_nominee(self, uid: str, nominee: Optional[dict]) -> None: ...
+    # breach register (s8(6) / GDPR Art 33-34): an auditable record of incidents
+    def add_breach(self, entry: dict) -> None: ...
+    def list_breaches(self, limit: int = 300) -> list: ...
     def record_jailbreak(self, uid: str, snippet: str, kind: str = "chat") -> int: ...
     def list_jailbreaks(self, uid: str, limit: int = 20) -> list: ...
     def set_risk(self, uid: str, risk: dict) -> None: ...
@@ -363,6 +371,8 @@ class MemoryStore(Store):
     activity: dict = field(default_factory=dict)         # uid -> {last_ip, ips, last_seen, requests}
     bans: dict = field(default_factory=dict)             # uid -> ban record
     feedback: list = field(default_factory=list)         # user feedback entries (newest first)
+    grievances: list = field(default_factory=list)        # DPDP s13 grievance intake (newest first)
+    breaches: list = field(default_factory=list)           # s8(6) breach register (newest first)
 
     def get_key(self, key):
         return self.keys.get(key)
@@ -398,10 +408,13 @@ class MemoryStore(Store):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
         u["tokens_total"] = int(u.get("tokens_total", 0)) + int(n)
 
-    def set_consent(self, uid, version):
+    def set_consent(self, uid, version, is_adult=False):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
         u["consent_version"] = version
         u["consent_at"] = _now().isoformat()
+        if is_adult:
+            u["adult_confirmed"] = True
+            u["adult_confirmed_at"] = _now().isoformat()
 
     def hit_rate(self, key, per_minute):
         now = time.time()
@@ -639,6 +652,33 @@ class MemoryStore(Store):
     def list_feedback(self, limit=300):
         return list(self.feedback[:limit])
 
+    def withdraw_consent(self, uid):
+        u = self.users.get(uid)
+        if not u:
+            return
+        u["consent_withdrawn_at"] = _now().isoformat()
+        u.pop("consent_version", None)        # forces re-consent before any further processing
+        u.pop("adult_confirmed", None)
+
+    def add_grievance(self, entry):
+        self.grievances.insert(0, dict(entry))
+
+    def list_grievances(self, limit=300):
+        return list(self.grievances[:limit])
+
+    def set_nominee(self, uid, nominee):
+        u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
+        if nominee is None:
+            u.pop("nominee", None)
+        else:
+            u["nominee"] = dict(nominee)
+
+    def add_breach(self, entry):
+        self.breaches.insert(0, dict(entry))
+
+    def list_breaches(self, limit=300):
+        return list(self.breaches[:limit])
+
     def record_jailbreak(self, uid, snippet, kind="chat"):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
         u["jailbreak_count"] = int(u.get("jailbreak_count", 0)) + 1
@@ -749,9 +789,12 @@ class FirestoreStore(Store):
         self._db.collection("users").document(uid).set(
             {"tokens_total": self._fs.Increment(int(n))}, merge=True)
 
-    def set_consent(self, uid, version):
-        self._db.collection("users").document(uid).set(
-            {"consent_version": version, "consent_at": _now().isoformat()}, merge=True)
+    def set_consent(self, uid, version, is_adult=False):
+        doc = {"consent_version": version, "consent_at": _now().isoformat()}
+        if is_adult:
+            doc["adult_confirmed"] = True
+            doc["adult_confirmed_at"] = _now().isoformat()
+        self._db.collection("users").document(uid).set(doc, merge=True)
 
     # --- rate (per-instance) ---
     def hit_rate(self, key, per_minute):
@@ -1148,6 +1191,42 @@ class FirestoreStore(Store):
                     .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
         except Exception:  # noqa: BLE001
             rows = [d.to_dict() for d in self._db.collection("feedback").limit(limit).stream()]
+            rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
+        return rows
+
+    def withdraw_consent(self, uid):
+        self._db.collection("users").document(uid).set(
+            {"consent_withdrawn_at": _now().isoformat(),
+             "consent_version": self._fs.DELETE_FIELD,      # re-consent required to process again
+             "adult_confirmed": self._fs.DELETE_FIELD}, merge=True)
+
+    def add_grievance(self, entry):
+        self._db.collection("grievances").document().set(dict(entry))
+
+    def list_grievances(self, limit=300):
+        try:
+            from google.cloud.firestore import Query
+            rows = [d.to_dict() for d in self._db.collection("grievances")
+                    .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
+        except Exception:  # noqa: BLE001
+            rows = [d.to_dict() for d in self._db.collection("grievances").limit(limit).stream()]
+            rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
+        return rows
+
+    def set_nominee(self, uid, nominee):
+        val = self._fs.DELETE_FIELD if nominee is None else dict(nominee)
+        self._db.collection("users").document(uid).set({"nominee": val}, merge=True)
+
+    def add_breach(self, entry):
+        self._db.collection("breaches").document().set(dict(entry))
+
+    def list_breaches(self, limit=300):
+        try:
+            from google.cloud.firestore import Query
+            rows = [d.to_dict() for d in self._db.collection("breaches")
+                    .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
+        except Exception:  # noqa: BLE001
+            rows = [d.to_dict() for d in self._db.collection("breaches").limit(limit).stream()]
             rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
         return rows
 

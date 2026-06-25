@@ -21,7 +21,7 @@ const AdminTab = lazy(() => import("./tabs/AdminTab.jsx"));
 
 const RANK = { free: 0, basic: 1, pro: 2, enterprise: 3 };
 // Bump when the consent text materially changes (forces re-consent).
-const CONSENT_VERSION = "2026-06-08";
+const CONSENT_VERSION = "2026-06-25";   // bumped: now includes the 18+ age attestation (DPDP s9)
 
 // One metered AI allowance powers both readings and chat (cost-gated for >=50% margin).
 const ALLOWANCE_NOTE = "Readings draw on your monthly AI allowance (shared with chat); casting the same chart again is free.";
@@ -102,10 +102,10 @@ export default function App() {
   const features = me?.features || [];
   // After a cast the server may lock the birth details; refresh entitlements so
   // the form switches to locked mode and the Account view reflects it.
-  const recordConsent = () => apiPost("/v1/consent", { version: CONSENT_VERSION }).then(refreshMe).catch(() => {});
+  const recordConsent = () => apiPost("/v1/consent", { version: CONSENT_VERSION, is_adult: true }).then(refreshMe).catch(() => {});
   const ctx = { onCast: (b) => { setLastBirth(b); refreshMe(); }, lastBirth, setBalance,
                 features, me, refresh: refreshMe, lockedBirth: me?.birth_lock,
-                consented: !!me?.consent_version, onConsent: recordConsent,
+                consented: !!me?.adult_confirmed, onConsent: recordConsent,
                 casts, setCast: (k, v) => setCasts((c) => ({ ...c, [k]: v })) };
   const tabs = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
 

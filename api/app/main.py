@@ -124,6 +124,10 @@ def me(p: Principal = Depends(require_principal)):
             "sections": sorted(p.tier.sections), "features": sorted(p.tier.features),
             "discount_pct": int(user.get("discount_pct") or 0),
             "consent_version": user.get("consent_version"),
+            "adult_confirmed": bool(user.get("adult_confirmed")),
+            "nominee": user.get("nominee"),
+            "grievance_officer": {"name": get_settings().grievance_officer_name or None,
+                                  "email": get_settings().grievance_officer_email or None},
             "birth_lock": user.get("birth_lock"),
             "birth_change_pending": bool(store.user_open_change_request(p.user_id)),
             "birth_change_notice": notice,
@@ -155,16 +159,84 @@ def submit_feedback(req: FeedbackIn, p: Principal = Depends(require_principal)):
 
 class ConsentIn(BaseModel):
     version: str = Field(..., max_length=32)
+    is_adult: bool = False        # the user attests they meet the minimum age (DPDP s9 / GDPR Art 8)
 
 
 @app.post("/v1/consent")
 def record_consent(req: ConsentIn, p: Principal = Depends(require_principal)):
     """Record the user's consent to process their (sensitive) birth data. Auditable
-    record for DPDP/GDPR; the web captures it before the first cast."""
+    record for DPDP/GDPR; the web captures it before the first cast. We require an
+    age attestation here: DPDP s9 forbids onboarding/behaviourally-monitoring a child
+    (under 18) without verifiable parental consent, which we do not yet support, so we
+    do not knowingly onboard minors at all."""
+    if not req.is_adult:
+        raise HTTPException(403, f"You must be at least {get_settings().min_user_age} "
+                                 "years old to use Nakshatra.")
     store = get_store()
     store.upsert_user(p.user_id, None)
-    store.set_consent(p.user_id, req.version)
+    store.set_consent(p.user_id, req.version, is_adult=True)
     return {"ok": True, "version": req.version}
+
+
+@app.post("/v1/consent/withdraw")
+def withdraw_consent(p: Principal = Depends(require_principal)):
+    """Withdraw consent (DPDP s6 / GDPR Art 7) — must be as easy as giving it. We stop
+    processing birth data (the user must consent again to use the service); this does not
+    by itself erase data — DELETE /v1/me does that."""
+    get_store().withdraw_consent(p.user_id)
+    return {"ok": True,
+            "message": "Consent withdrawn. We will not process your birth data until you "
+                       "consent again. To also erase your stored data, delete your account.",
+            "erase_endpoint": "DELETE /v1/me"}
+
+
+class GrievanceIn(BaseModel):
+    message: str = Field(..., min_length=5, max_length=4000)
+    category: str = Field("privacy", max_length=24)
+
+
+@app.post("/v1/grievance")
+def file_grievance(req: GrievanceIn, p: Principal = Depends(require_principal)):
+    """File a data-privacy grievance (DPDP s13). Recorded for the Grievance Officer."""
+    s = get_settings()
+    store = get_store()
+    u = store.get_user(p.user_id) or {}
+    store.add_grievance({
+        "uid": p.user_id, "email": u.get("email"), "tier": p.tier.key,
+        "message": req.message.strip(), "category": req.category, "status": "open",
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True,
+            "officer": {"name": s.grievance_officer_name or None,
+                        "email": s.grievance_officer_email or None},
+            "message": "Your grievance has been recorded. We will respond within the "
+                       "timeframe required by law."}
+
+
+class NomineeIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    email: Optional[str] = Field(None, max_length=200)
+    relationship: Optional[str] = Field(None, max_length=80)
+
+
+@app.get("/v1/nominee")
+def get_nominee(p: Principal = Depends(require_principal)):
+    """The Data Principal's nominee (DPDP s14) — who may exercise their rights on death/incapacity."""
+    return {"nominee": (get_store().get_user(p.user_id) or {}).get("nominee")}
+
+
+@app.post("/v1/nominee")
+def set_nominee(req: NomineeIn, p: Principal = Depends(require_principal)):
+    store = get_store()
+    store.upsert_user(p.user_id, None)
+    store.set_nominee(p.user_id, req.model_dump())
+    return {"ok": True, "nominee": req.model_dump()}
+
+
+@app.delete("/v1/nominee")
+def clear_nominee(p: Principal = Depends(require_principal)):
+    get_store().set_nominee(p.user_id, None)
+    return {"ok": True}
 
 
 @app.get("/v1/me/export")
@@ -1445,6 +1517,40 @@ def admin_feedback(_: None = Depends(require_admin)):
     """User feedback collected via the in-app feedback button (newest first)."""
     rows = get_store().list_feedback(300)
     return {"count": len(rows), "feedback": rows}
+
+
+@app.get("/admin/grievances")
+def admin_grievances(_: None = Depends(require_admin)):
+    """Data-privacy grievances filed by users (DPDP s13), newest first."""
+    rows = get_store().list_grievances(300)
+    return {"count": len(rows), "grievances": rows}
+
+
+class BreachIn(BaseModel):
+    description: str = Field(..., min_length=5, max_length=8000)
+    severity: Literal["low", "medium", "high", "critical"] = "high"
+    affected_count: Optional[int] = Field(None, ge=0)
+    discovered_at: Optional[str] = Field(None, max_length=40)
+    notified_board: bool = False
+    notified_principals: bool = False
+
+
+@app.post("/admin/breach")
+def admin_record_breach(req: BreachIn, admin: str = Depends(require_admin)):
+    """Record a personal-data-breach incident (DPDP s8(6) / GDPR Art 33-34). This is the
+    auditable register; see docs/INCIDENT_RESPONSE.md for the notification runbook (Board +
+    affected Data Principals, GDPR 72-hour clock)."""
+    entry = {**req.model_dump(), "ts": datetime.now(timezone.utc).isoformat(), "by": admin}
+    get_store().add_breach(entry)
+    _audit(admin, "record_breach", "", severity=req.severity, affected=req.affected_count)
+    return {"ok": True, "breach": entry}
+
+
+@app.get("/admin/breaches")
+def admin_breaches(_: None = Depends(require_admin)):
+    """The breach register (newest first)."""
+    rows = get_store().list_breaches(300)
+    return {"count": len(rows), "breaches": rows}
 
 
 @app.get("/admin/overview")
