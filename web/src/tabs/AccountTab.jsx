@@ -156,7 +156,8 @@ function PrivacyBlock({ me, refresh }) {
                 placeholder="e.g. please correct/erase X" style={{ width: "100%" }} />
       <div className="actions"><button className="sm" disabled={busy} onClick={fileGrievance}>Submit grievance</button></div>
       {(officer.name || officer.email) && (
-        <p className="note">Grievance Officer: {officer.name || ""} {officer.email ? `· ${officer.email}` : ""}</p>
+        <p className="note">Grievance Officer: {officer.name || ""} {officer.email ? `· ${officer.email}` : ""}
+          {" "}· we respond within 90 days. If unsatisfied, you may complain to the Data Protection Board of India.</p>
       )}
 
       <label className="fld" style={{ marginTop: 14 }}>Nominee (who may act for you on death/incapacity)</label>

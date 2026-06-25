@@ -17,6 +17,19 @@
 | Audit log (`audit/**`) | Firestore | Retain for compliance (e.g. 3 years) | *TODO: scheduled purge* |
 | Grievances / breaches register | `grievances/**`, `breaches/**` | Retain for compliance | Manual |
 
+## DPDP Rules 2025 specifics (Rule 8)
+- **Rule 8(3) — 1-year minimum:** personal data, associated traffic data and processing **logs**
+  must be retained for **at least one year** for breach detection/investigation (Rule 6(1)(e) says
+  the same for security logs), then erased unless another law requires longer. Practical effect:
+  even after a user deletes their account, transaction/payment records and security logs are kept
+  ~1 year (see the Rules' own illustration: an e-book order's logs survive account deletion for a
+  year). Our `DELETE /v1/me` erases the user's profile/chats/ledger immediately; **payment records
+  and security logs are intentionally retained** for this window + tax/audit law.
+- **Rule 8(1)/(2) + Third Schedule — does NOT apply to us:** the 3-years-of-inactivity auto-erase
+  (with a 48-hour pre-erasure notice) binds only e-commerce (≥2 cr users), online-gaming (≥50 lakh)
+  and social-media (≥2 cr) intermediaries. Nakshatra is none of these, so we are not in a listed
+  class. We still apply voluntary chat/cache TTLs below as data-minimisation good practice.
+
 ## Apply the TTL policies (one-time ops, per docs/GO_LIVE.md)
 ```bash
 # chat transcripts

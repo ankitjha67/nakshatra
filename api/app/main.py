@@ -1527,10 +1527,20 @@ def admin_grievances(_: None = Depends(require_admin)):
 
 
 class BreachIn(BaseModel):
-    description: str = Field(..., min_length=5, max_length=8000)
+    # Fields mirror DPDP Rules 2025, Rule 7 (intimation of personal data breach):
+    # nature/extent/timing/location, likely impact, consequences to principals, the
+    # mitigation in place, the safety steps a user can take, and a responder contact.
+    description: str = Field(..., min_length=5, max_length=8000)   # nature & extent
     severity: Literal["low", "medium", "high", "critical"] = "high"
     affected_count: Optional[int] = Field(None, ge=0)
-    discovered_at: Optional[str] = Field(None, max_length=40)
+    occurred_at: Optional[str] = Field(None, max_length=40)        # timing of occurrence
+    location: Optional[str] = Field(None, max_length=200)          # where it occurred
+    discovered_at: Optional[str] = Field(None, max_length=40)      # when we became aware
+    likely_impact: Optional[str] = Field(None, max_length=4000)
+    consequences: Optional[str] = Field(None, max_length=4000)     # consequences to principals
+    mitigation: Optional[str] = Field(None, max_length=4000)       # measures implemented
+    safety_measures: Optional[str] = Field(None, max_length=4000)  # what the user can do
+    responder_contact: Optional[str] = Field(None, max_length=200)
     notified_board: bool = False
     notified_principals: bool = False
 

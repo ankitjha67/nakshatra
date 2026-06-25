@@ -52,6 +52,24 @@ Legend: ✅ compliant · 🟡 partial · ❌ absent/non-compliant.
 | §14 | Nomination | ❌ | Absent entirely. |
 | §16 | Cross-border transfer (blacklist model) | 🟡 | Firestore in `asia-south1` ✅ but prod `VERTEX_LOCATION=global` → chart-derived data leaves India/EU. DPDP tolerant today; **GDPR Ch.V gap now.** |
 
+## DPDP Rules 2025 (G.S.R. 846(E), 13 Nov 2025) — mapping
+**Commencement (Rule 1):** Rules 1–2 & 17–21 in force on publication; **Rule 4** (Consent Managers)
++1 year (~Nov 2026); **Rules 3, 5–16, 22–23** in force **18 months after publication ≈ 13 May 2027**.
+So the detailed Rule obligations become enforceable ~May 2027 — but the Act and GDPR bind us now, so
+we build to comply early.
+
+| Rule | Requirement | Our status |
+|---|---|---|
+| r3 | Notice: standalone, itemised data + purposes, links to withdraw / exercise rights / complain to Board | 🟡 policy + rights notice updated; in-app notice still a short checkbox (improve copy) |
+| r6 | Security minimums: encryption, access control, **logs+monitoring+review**, backups, **1-yr log retention**, processor contracts, tech/org measures | 🟡 Firestore encryption-at-rest + Cloud Logging ✓; need 1-yr log retention config + DPAs |
+| r7 | Breach: to each principal "without delay" (nature/extent/timing, consequences, mitigation, safety steps, responder); to Board immediately + **detailed within 72h** | ✅ register fields match r7; runbook in `INCIDENT_RESPONSE.md` |
+| r8 | Retention: Third-Schedule classes erase after 3y inactivity (+48h notice); **all** keep logs ≥1y | ✅ not in a Third-Schedule class; 1-yr log rule documented in `RETENTION_SCHEDULE.md` |
+| r9 | Publish DPO/contact on site + in every rights response | ✅ Grievance Officer set (Ankit Kumar), surfaced in `/v1/me` + Account UI |
+| r10/r11 | Verifiable parental/guardian consent for children/PwD | ✅ avoided — adults-only 18+ gate (Fourth Schedule Pt B item 6 blesses age-confirmation) |
+| r13 | SDF: yearly DPIA+audit, algorithmic due-diligence, **data localisation** for notified data | 🟢 only if notified as SDF (not yet) |
+| r14 | Publish means to exercise rights + identifier; **90-day** grievance response; nomination | ✅ endpoints + `DATA_PRINCIPAL_RIGHTS.md` (90-day stated); email = identifier |
+| r15 | Cross-border transfer allowed unless Central Govt restricts by order | 🟡 permissive under DPDP; Vertex `global` still a GDPR Ch.V gap (SCCs) |
+
 ## Other laws (worldwide beta)
 - **EU/UK GDPR**: birth+astrology can infer **health/religion → Art 9 special category** (explicit
   consent + DPIA); Art 6 basis, Art 13/14 notice, Art 15–22 rights, **Art 22 automated decisions**
@@ -97,5 +115,12 @@ Legend: ✅ compliant · 🟡 partial · ❌ absent/non-compliant.
       **apply the two Firestore TTL policies** (see RETENTION_SCHEDULE.md); add edge rate limiting.
 
 **Phase 4 — Governance (ongoing).**
-- [ ] DPIA, RoPA, retention schedule, DPAs (Google/Razorpay), SCCs/transfer assessment for Vertex,
-      EU representative; complete `/v1/me/export` (payments + sub-processors); human review for auto-bans.
+- [x] Retention schedule (`RETENTION_SCHEDULE.md`); Rules-2025 mapping (above).
+- [x] **Live ops applied** (rev jyotish-api-00049-n8z): `GRIEVANCE_OFFICER_NAME/_EMAIL` set
+      (Ankit Kumar / ankitjha67@gmail.com), `VERIFY_TOKEN_REVOCATION=true`, `CHAT_RETENTION_DAYS=90`,
+      `CORS_ORIGINS` locked to the two Firebase hosting origins (verified: web origin allowed, others
+      rejected). **Firestore TTL policies enabled** on `messages.expireAt` and `cache.expireAt`.
+- [ ] DPAs (Google/Razorpay), SCCs/transfer assessment for Vertex `global`, EU representative (Art 27).
+- [ ] 1-year security-log retention config (Cloud Logging bucket); RoPA; DPIA (special-category).
+- [ ] Complete `/v1/me/export` (payments + sub-processor list); human-review path for auto-bans.
+- [ ] Lawyer review + host policy/terms/rights notice on the product domain (still GitHub-markdown).

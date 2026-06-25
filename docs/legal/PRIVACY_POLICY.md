@@ -82,5 +82,8 @@ without verifiable parental consent, we will delete it.
 We will post updates here and, for material changes, notify you as required by law.
 
 ## 10. Contact / Grievance Officer
-Data questions or requests: `[PRIVACY EMAIL]`. Grievance Officer (India DPDP): `[NAME,
-EMAIL, ADDRESS]`. EU representative (if applicable): `[NAME, CONTACT]`.
+**Grievance Officer (India DPDP Act 2023, s8(9)/s13 + Rules 2025 r9/r14):** Ankit Kumar —
+`ankitjha67@gmail.com`. You may file a grievance in-app (Account → Privacy & your data) or by
+email; we aim to respond within **90 days** (the period prescribed by Rule 14(3)), and usually much
+sooner. If unsatisfied, you may complain to the **Data Protection Board of India**. EU
+representative (if applicable): `[NAME, CONTACT]`.
