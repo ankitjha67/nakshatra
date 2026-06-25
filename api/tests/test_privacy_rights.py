@@ -3,7 +3,7 @@ and nomination (s14)."""
 from fastapi.testclient import TestClient
 
 from app import billing
-from app.auth import require_principal
+from app.auth import require_principal, require_admin
 from app.billing import MemoryStore, Principal, TIERS
 from app.main import app
 
@@ -54,3 +54,13 @@ def test_me_exposes_nominee_and_officer():
     client, store = _client()
     body = client.get("/v1/me").json()
     assert "nominee" in body and "grievance_officer" in body
+
+
+def test_admin_breach_register_records_and_lists():
+    client, store = _client()
+    app.dependency_overrides[require_admin] = lambda: "test-admin"
+    r = client.post("/admin/breach", json={"description": "Test exposure of N user docs",
+                                           "severity": "high", "affected_count": 3})
+    assert r.status_code == 200 and r.json()["breach"]["by"] == "test-admin"
+    rows = client.get("/admin/breaches").json()
+    assert rows["count"] == 1 and rows["breaches"][0]["severity"] == "high"

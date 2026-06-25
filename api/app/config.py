@@ -153,6 +153,8 @@ class Settings(BaseSettings):
             w.append("DAILY_GLOBAL_TOKEN_BREAKER is off (0), set a cap as a platform-wide spend backstop.")
         if not self.verify_token_revocation:
             w.append("VERIFY_TOKEN_REVOCATION is off, revoked/disabled sessions may still pass; enable in prod.")
+        if not (self.grievance_officer_email.strip()):
+            w.append("GRIEVANCE_OFFICER_EMAIL is unset, DPDP requires a published Grievance Officer contact.")
         return w
 
 

@@ -85,9 +85,16 @@ Legend: ✅ compliant · 🟡 partial · ❌ absent/non-compliant.
 - [x] Self-service Export/Withdraw/Delete/Grievance/Nominee UI in `AccountTab`. Tests: 92 passing.
 - [ ] *Deferred:* fully granular per-purpose consent toggles (chat vs profiling vs marketing).
 
-**Phase 3 — Breach notification + §8(5) hardening.**
-- [ ] Breach runbook + Board/Principal notification template + 72-hour process.
-- [ ] `CORS_ORIGINS` to domain, `VERIFY_TOKEN_REVOCATION=True`, apply Firestore TTL policies, edge rate limiting.
+**Phase 3 — Breach notification + §8(5) hardening. ☑ shipped (code/docs); ops pending**
+- [x] `docs/INCIDENT_RESPONSE.md` — breach runbook (DPDP §8(6) Board + Principal, GDPR Art33/34
+      72-hour) + notification template.
+- [x] Breach register: `POST /admin/breach` + `GET /admin/breaches` (audited) + store methods.
+- [x] `docs/RETENTION_SCHEDULE.md` — per-class retention (DPDP §8(7)/(8)) + TTL apply commands.
+- [x] Prod startup check added for unset Grievance Officer (existing checks already flag `CORS="*"`,
+      `VERIFY_TOKEN_REVOCATION=False`, weak admin/internal secrets, missing global breaker).
+- [ ] **Ops (must be done on the live service):** set `CORS_ORIGINS` to the web origin,
+      `VERIFY_TOKEN_REVOCATION=True`, `GRIEVANCE_OFFICER_NAME/_EMAIL`, `CHAT_RETENTION_DAYS=90`;
+      **apply the two Firestore TTL policies** (see RETENTION_SCHEDULE.md); add edge rate limiting.
 
 **Phase 4 — Governance (ongoing).**
 - [ ] DPIA, RoPA, retention schedule, DPAs (Google/Razorpay), SCCs/transfer assessment for Vertex,

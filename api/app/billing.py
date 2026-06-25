@@ -334,6 +334,9 @@ class Store:
     def add_grievance(self, entry: dict) -> None: ...
     def list_grievances(self, limit: int = 300) -> list: ...
     def set_nominee(self, uid: str, nominee: Optional[dict]) -> None: ...
+    # breach register (s8(6) / GDPR Art 33-34): an auditable record of incidents
+    def add_breach(self, entry: dict) -> None: ...
+    def list_breaches(self, limit: int = 300) -> list: ...
     def record_jailbreak(self, uid: str, snippet: str, kind: str = "chat") -> int: ...
     def list_jailbreaks(self, uid: str, limit: int = 20) -> list: ...
     def set_risk(self, uid: str, risk: dict) -> None: ...
@@ -369,6 +372,7 @@ class MemoryStore(Store):
     bans: dict = field(default_factory=dict)             # uid -> ban record
     feedback: list = field(default_factory=list)         # user feedback entries (newest first)
     grievances: list = field(default_factory=list)        # DPDP s13 grievance intake (newest first)
+    breaches: list = field(default_factory=list)           # s8(6) breach register (newest first)
 
     def get_key(self, key):
         return self.keys.get(key)
@@ -668,6 +672,12 @@ class MemoryStore(Store):
             u.pop("nominee", None)
         else:
             u["nominee"] = dict(nominee)
+
+    def add_breach(self, entry):
+        self.breaches.insert(0, dict(entry))
+
+    def list_breaches(self, limit=300):
+        return list(self.breaches[:limit])
 
     def record_jailbreak(self, uid, snippet, kind="chat"):
         u = self.users.setdefault(uid, {"email": "", "tier": "free", "created_at": _now().isoformat()})
@@ -1206,6 +1216,19 @@ class FirestoreStore(Store):
     def set_nominee(self, uid, nominee):
         val = self._fs.DELETE_FIELD if nominee is None else dict(nominee)
         self._db.collection("users").document(uid).set({"nominee": val}, merge=True)
+
+    def add_breach(self, entry):
+        self._db.collection("breaches").document().set(dict(entry))
+
+    def list_breaches(self, limit=300):
+        try:
+            from google.cloud.firestore import Query
+            rows = [d.to_dict() for d in self._db.collection("breaches")
+                    .order_by("ts", direction=Query.DESCENDING).limit(limit).stream()]
+        except Exception:  # noqa: BLE001
+            rows = [d.to_dict() for d in self._db.collection("breaches").limit(limit).stream()]
+            rows.sort(key=lambda r: r.get("ts") or "", reverse=True)
+        return rows
 
     def mark_payment_processed(self, payment_id):
         # Atomic check-and-set so concurrent webhook retries can't double-credit.

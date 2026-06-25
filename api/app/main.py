@@ -1526,6 +1526,33 @@ def admin_grievances(_: None = Depends(require_admin)):
     return {"count": len(rows), "grievances": rows}
 
 
+class BreachIn(BaseModel):
+    description: str = Field(..., min_length=5, max_length=8000)
+    severity: Literal["low", "medium", "high", "critical"] = "high"
+    affected_count: Optional[int] = Field(None, ge=0)
+    discovered_at: Optional[str] = Field(None, max_length=40)
+    notified_board: bool = False
+    notified_principals: bool = False
+
+
+@app.post("/admin/breach")
+def admin_record_breach(req: BreachIn, admin: str = Depends(require_admin)):
+    """Record a personal-data-breach incident (DPDP s8(6) / GDPR Art 33-34). This is the
+    auditable register; see docs/INCIDENT_RESPONSE.md for the notification runbook (Board +
+    affected Data Principals, GDPR 72-hour clock)."""
+    entry = {**req.model_dump(), "ts": datetime.now(timezone.utc).isoformat(), "by": admin}
+    get_store().add_breach(entry)
+    _audit(admin, "record_breach", "", severity=req.severity, affected=req.affected_count)
+    return {"ok": True, "breach": entry}
+
+
+@app.get("/admin/breaches")
+def admin_breaches(_: None = Depends(require_admin)):
+    """The breach register (newest first)."""
+    rows = get_store().list_breaches(300)
+    return {"count": len(rows), "breaches": rows}
+
+
 @app.get("/admin/overview")
 def admin_overview(_: None = Depends(require_admin)):
     """Rich platform analytics: tier mix, active users, revenue/MRR, codes, token
