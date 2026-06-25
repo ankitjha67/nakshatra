@@ -120,7 +120,12 @@ we build to comply early.
       (Ankit Kumar / ankitjha67@gmail.com), `VERIFY_TOKEN_REVOCATION=true`, `CHAT_RETENTION_DAYS=90`,
       `CORS_ORIGINS` locked to the two Firebase hosting origins (verified: web origin allowed, others
       rejected). **Firestore TTL policies enabled** on `messages.expireAt` and `cache.expireAt`.
-- [ ] DPAs (Google/Razorpay), SCCs/transfer assessment for Vertex `global`, EU representative (Art 27).
-- [ ] 1-year security-log retention config (Cloud Logging bucket); RoPA; DPIA (special-category).
-- [ ] Complete `/v1/me/export` (payments + sub-processor list); human-review path for auto-bans.
-- [ ] Lawyer review + host policy/terms/rights notice on the product domain (still GitHub-markdown).
+- [x] **RoPA** (`docs/legal/ROPA.md`), **DPIA** (`docs/legal/DPIA.md`), **DPA** (`docs/legal/DPA.md`
+      — Part A sub-processor register + Part B processor template) drafted (pre-filled templates).
+- [x] Complete `/v1/me/export` (payments + sub-processor/recipient list) — shipped v0.40.0.
+- [ ] **Execute** the sub-processor DPAs (Google Cloud DPA + SCCs, Razorpay DPA), confirm Vertex
+      no-training/retention, complete the SCCs/transfer-impact assessment for Vertex `global`.
+- [ ] EU representative (Art 27) if EEA users retained; appoint/confirm DPO status.
+- [ ] 1-year security-log retention config (Cloud Logging bucket); user-facing **auto-ban appeal**.
+- [ ] Lawyer review + fill `[BRACKETS]` (legal name/address) + host policy/terms/rights/RoPA notice
+      on the product domain (still GitHub-markdown links).
