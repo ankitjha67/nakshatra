@@ -89,7 +89,10 @@ export default function App() {
   useEffect(() => { if (user) apiGet("/admin/ping").then(() => setIsAdmin(true)).catch(() => setIsAdmin(false)); }, [user]);
   // The background orrery posts the picked graha; render its info card over the app.
   useEffect(() => {
-    const onMsg = (e) => { if (e.data && e.data.source === "orrery-graha") setGraha(e.data.graha); };
+    const onMsg = (e) => {
+      if (e.origin !== window.location.origin) return;   // only our own same-origin orrery iframe
+      if (e.data && e.data.source === "orrery-graha") setGraha(e.data.graha);
+    };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, []);
@@ -178,6 +181,13 @@ export default function App() {
   );
 }
 
+// `role` is app-authored and only ever contains <b> emphasis. Strip every other tag
+// so a spoofed/postMessage'd value can't inject script/img/onerror (defense-in-depth
+// behind the origin check on the message handler). Keeps only bare <b>/</b>.
+function safeRole(html) {
+  return String(html || "").replace(/<(?!\/?b>)[^>]*>/gi, "");
+}
+
 // Info card for a planet picked in the interactive background orrery. Mirrors the
 // orrery's own panel: kind · name · english · astronomy fact · jyotish karaka role.
 function GrahaCard({ graha, onClose }) {
@@ -191,7 +201,7 @@ function GrahaCard({ graha, onClose }) {
       <h2 className="graha-name">{graha.name}</h2>
       <div className="graha-eng">{graha.eng}</div>
       <p className="graha-fact">{graha.fact}</p>
-      <p className="graha-role" dangerouslySetInnerHTML={{ __html: graha.role }} />
+      <p className="graha-role" dangerouslySetInnerHTML={{ __html: safeRole(graha.role) }} />
     </aside>
   );
 }

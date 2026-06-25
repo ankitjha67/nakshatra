@@ -503,7 +503,7 @@ def chat(req: ChatRequest, p: Principal = Depends(require_principal)):
 def _now_in_tz(tz: str) -> tuple[str, str]:
     """(YYYY-MM-DD, HH:MM) right now at a UTC offset like "+05:30" (UTC on parse fail)."""
     off = timedelta(0)
-    m = re.fullmatch(r"\s*([+-])(\d{1,2}):?(\d{2})\s*", tz or "")
+    m = re.fullmatch(r"([+-])(\d{1,2}):?(\d{2})", (tz or "").strip())   # strip first; no \s* backtracking
     if m:
         sign = 1 if m.group(1) == "+" else -1
         off = sign * timedelta(hours=int(m.group(2)), minutes=int(m.group(3)))
