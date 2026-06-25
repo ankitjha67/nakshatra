@@ -15,4 +15,4 @@ google-genai>=0.3
 
 # --- auth + store (Firebase / Firestore) ---
 firebase-admin>=6.5
-google-cloud-firestore>=2.16
+google-cloud-firestore>=2.27.0
