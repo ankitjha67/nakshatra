@@ -20,11 +20,21 @@ we collect, why, how we share and protect it, and your rights.
   and logs, used for security, abuse prevention, and debugging.
 
 ## 2. Why we use it (purposes & legal bases)
-To provide readings and chat (performance of contract); to meter and bill (contract / legal
-obligation); to secure the Service and prevent fraud/abuse including anomaly detection and
-banning (legitimate interests / legal obligation); to comply with law; and, only with your
-consent where required, for optional communications. Where we rely on consent you may
-withdraw it at any time.
+We process your data for these purposes: to generate your readings and chat; to meter and bill;
+to secure the Service and prevent fraud/abuse (including anomaly detection and banning); and to
+comply with law.
+
+**Legal basis — India (DPDP Act 2023):** we rely on your **consent** for processing your birth
+details and chat, and on the certain-legitimate-uses / contractual-necessity grounds the Act
+permits for service delivery, billing, and security. (DPDP does not recognise an open-ended
+"legitimate interest" basis.) **Legal basis — GDPR (if you are in the EEA/UK):** performance of a
+contract (Art 6(1)(b)), legitimate interests for security/fraud (Art 6(1)(f)), legal obligation
+(Art 6(1)(c)), and — because birth/astrology data can reveal special-category information —
+**explicit consent (Art 9(2)(a))** for that data.
+
+**Withdrawing consent.** You may withdraw consent at any time (as easily as you gave it) via the
+app or `POST /v1/consent/withdraw`; we then stop processing your birth data. To also erase it,
+delete your account (Section 6).
 
 ## 3. Sharing and sub-processors
 We share data only with service providers that process it on our behalf under contract:
@@ -53,6 +63,9 @@ restrict certain processing. We provide self-service:
 - **Export** your data: `GET /v1/me/export`.
 - **Delete** your account and data (right to erasure): `DELETE /v1/me` (removes your
   profile, ledger, chats, API keys, and Firebase identity).
+- **Withdraw consent**: `POST /v1/consent/withdraw` (DPDP s6 / GDPR Art 7).
+- **Nominate** someone to exercise your rights on your death/incapacity (DPDP s14): `POST /v1/nominee`.
+- **File a grievance** (DPDP s13): `POST /v1/grievance`, or email the Grievance Officer below.
 Or contact our Grievance Officer below. We respond within the timeframe the law requires.
 
 ## 7. Cookies & local storage
@@ -60,7 +73,10 @@ We use storage strictly necessary for authentication/session. We do not use thir
 advertising trackers. `[Update if analytics/marketing cookies are added, add a consent banner.]`
 
 ## 8. Children
-The Service is not intended for anyone under 18, and we do not knowingly collect their data.
+The Service is for adults only. At sign-up we require you to confirm you are **at least 18 years
+old** before any birth data is processed (DPDP s9 / GDPR Art 8). We do not knowingly collect data
+from, profile, or behaviourally monitor children. If we learn we have collected a child's data
+without verifiable parental consent, we will delete it.
 
 ## 9. Changes
 We will post updates here and, for material changes, notify you as required by law.

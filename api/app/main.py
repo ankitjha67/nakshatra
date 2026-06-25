@@ -125,6 +125,9 @@ def me(p: Principal = Depends(require_principal)):
             "discount_pct": int(user.get("discount_pct") or 0),
             "consent_version": user.get("consent_version"),
             "adult_confirmed": bool(user.get("adult_confirmed")),
+            "nominee": user.get("nominee"),
+            "grievance_officer": {"name": get_settings().grievance_officer_name or None,
+                                  "email": get_settings().grievance_officer_email or None},
             "birth_lock": user.get("birth_lock"),
             "birth_change_pending": bool(store.user_open_change_request(p.user_id)),
             "birth_change_notice": notice,
@@ -173,6 +176,67 @@ def record_consent(req: ConsentIn, p: Principal = Depends(require_principal)):
     store.upsert_user(p.user_id, None)
     store.set_consent(p.user_id, req.version, is_adult=True)
     return {"ok": True, "version": req.version}
+
+
+@app.post("/v1/consent/withdraw")
+def withdraw_consent(p: Principal = Depends(require_principal)):
+    """Withdraw consent (DPDP s6 / GDPR Art 7) — must be as easy as giving it. We stop
+    processing birth data (the user must consent again to use the service); this does not
+    by itself erase data — DELETE /v1/me does that."""
+    get_store().withdraw_consent(p.user_id)
+    return {"ok": True,
+            "message": "Consent withdrawn. We will not process your birth data until you "
+                       "consent again. To also erase your stored data, delete your account.",
+            "erase_endpoint": "DELETE /v1/me"}
+
+
+class GrievanceIn(BaseModel):
+    message: str = Field(..., min_length=5, max_length=4000)
+    category: str = Field("privacy", max_length=24)
+
+
+@app.post("/v1/grievance")
+def file_grievance(req: GrievanceIn, p: Principal = Depends(require_principal)):
+    """File a data-privacy grievance (DPDP s13). Recorded for the Grievance Officer."""
+    s = get_settings()
+    store = get_store()
+    u = store.get_user(p.user_id) or {}
+    store.add_grievance({
+        "uid": p.user_id, "email": u.get("email"), "tier": p.tier.key,
+        "message": req.message.strip(), "category": req.category, "status": "open",
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True,
+            "officer": {"name": s.grievance_officer_name or None,
+                        "email": s.grievance_officer_email or None},
+            "message": "Your grievance has been recorded. We will respond within the "
+                       "timeframe required by law."}
+
+
+class NomineeIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    email: Optional[str] = Field(None, max_length=200)
+    relationship: Optional[str] = Field(None, max_length=80)
+
+
+@app.get("/v1/nominee")
+def get_nominee(p: Principal = Depends(require_principal)):
+    """The Data Principal's nominee (DPDP s14) — who may exercise their rights on death/incapacity."""
+    return {"nominee": (get_store().get_user(p.user_id) or {}).get("nominee")}
+
+
+@app.post("/v1/nominee")
+def set_nominee(req: NomineeIn, p: Principal = Depends(require_principal)):
+    store = get_store()
+    store.upsert_user(p.user_id, None)
+    store.set_nominee(p.user_id, req.model_dump())
+    return {"ok": True, "nominee": req.model_dump()}
+
+
+@app.delete("/v1/nominee")
+def clear_nominee(p: Principal = Depends(require_principal)):
+    get_store().set_nominee(p.user_id, None)
+    return {"ok": True}
 
 
 @app.get("/v1/me/export")
@@ -1453,6 +1517,13 @@ def admin_feedback(_: None = Depends(require_admin)):
     """User feedback collected via the in-app feedback button (newest first)."""
     rows = get_store().list_feedback(300)
     return {"count": len(rows), "feedback": rows}
+
+
+@app.get("/admin/grievances")
+def admin_grievances(_: None = Depends(require_admin)):
+    """Data-privacy grievances filed by users (DPDP s13), newest first."""
+    rows = get_store().list_grievances(300)
+    return {"count": len(rows), "grievances": rows}
 
 
 @app.get("/admin/overview")

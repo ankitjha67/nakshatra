@@ -74,10 +74,16 @@ Legend: ✅ compliant · 🟡 partial · ❌ absent/non-compliant.
       behaviourally monitor. (When verifiable parental consent is added later, revisit profiling.)
 - [x] Config `min_user_age` (default 18).
 
-**Phase 2 — Consent withdrawal + lawful-basis fix (§4/§6).**
-- [ ] Withdrawal endpoint → stops processing + offers erasure.
-- [ ] Granular/per-purpose consent; correct DPDP legal-basis text (drop "legitimate interest").
-- [ ] §13 grievance intake + published officer; §14 nomination.
+**Phase 2 — Consent withdrawal + lawful-basis fix (§4/§6/§13/§14). ☑ shipped**
+- [x] `POST /v1/consent/withdraw` → stops processing (clears consent/adult flag, forces re-consent);
+      points to `DELETE /v1/me` for erasure. Exposed in Account → "Privacy & your data".
+- [x] DPDP legal-basis text corrected in `PRIVACY_POLICY.md` (consent + permitted uses; dropped the
+      open-ended "legitimate interest"; GDPR bases stated separately incl. Art 9 explicit consent).
+- [x] §13 grievance intake (`POST /v1/grievance`, admin `GET /admin/grievances`) + published officer
+      (`grievance_officer_name`/`_email` config, surfaced in `/v1/me`).
+- [x] §14 nomination (`GET/POST/DELETE /v1/nominee`).
+- [x] Self-service Export/Withdraw/Delete/Grievance/Nominee UI in `AccountTab`. Tests: 92 passing.
+- [ ] *Deferred:* fully granular per-purpose consent toggles (chat vs profiling vs marketing).
 
 **Phase 3 — Breach notification + §8(5) hardening.**
 - [ ] Breach runbook + Board/Principal notification template + 72-hour process.

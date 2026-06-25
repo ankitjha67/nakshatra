@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     fraud_decay_half_life_days: float = 30.0  # behavioural risk halves every N clean days (0 = no decay)
     fraud_autoban_days: int = 7               # auto-ban duration (temporary; lifts itself when it expires)
 
+    # --- privacy / grievance (DPDP s8(9)/s13) ---
+    grievance_officer_name: str = ""        # published Grievance Officer (DPDP requires a contact)
+    grievance_officer_email: str = ""       # where data grievances are directed
+
     # --- auth / billing ---
     # No usable default: admin/internal endpoints stay disabled until a real
     # secret is configured (Secret Manager). Placeholders are rejected too.

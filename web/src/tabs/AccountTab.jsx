@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { apiPost } from "../lib/api.js";
+import { apiPost, apiGet, apiDelete } from "../lib/api.js";
 import RedeemCode from "../components/RedeemCode.jsx";
 
 const TIER_LABEL = { free: "Free", basic: "Basic", pro: "Pro", enterprise: "Enterprise" };
@@ -88,12 +88,87 @@ export default function AccountTab({ me, refresh }) {
         )}
       </div>
 
+      <PrivacyBlock me={me} refresh={refresh} />
+
       {me.tier !== "enterprise" && (
         <div className="data-block">
           <p className="data-h">Have an access code?</p>
           <RedeemCode onRedeemed={refresh} />
         </div>
       )}
+    </div>
+  );
+}
+
+// Privacy & your data (DPDP/GDPR rights): export, delete, withdraw consent, file a
+// grievance, and nominate someone to act for you. Withdrawal must be as easy as consent.
+function PrivacyBlock({ me, refresh }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [griev, setGriev] = useState("");
+  const [nom, setNom] = useState(me.nominee || { name: "", email: "", relationship: "" });
+  const officer = me.grievance_officer || {};
+
+  const run = async (fn, ok) => {
+    setBusy(true); setErr(""); setMsg("");
+    try { await fn(); setMsg(ok); refresh && refresh(); }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const exportData = async () => {
+    const data = await apiGet("/v1/me/export");
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "nakshatra-my-data.json"; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const withdraw = () => {
+    if (!window.confirm("Withdraw consent? We'll stop processing your birth data until you consent again.")) return;
+    return run(() => apiPost("/v1/consent/withdraw", {}), "Consent withdrawn.");
+  };
+  const del = () => {
+    if (!window.confirm("Delete your account and all your data permanently? This cannot be undone.")) return;
+    return run(() => apiDelete("/v1/me"), "Account deletion requested.");
+  };
+  const fileGrievance = () => {
+    if (griev.trim().length < 5) { setErr("Please describe your grievance (5+ characters)."); return; }
+    return run(async () => { await apiPost("/v1/grievance", { message: griev.trim() }); setGriev(""); },
+              "Grievance filed. We'll respond within the timeframe the law requires.");
+  };
+  const saveNominee = () => {
+    if (!nom.name.trim()) { setErr("Enter your nominee's name."); return; }
+    return run(() => apiPost("/v1/nominee", nom), "Nominee saved.");
+  };
+
+  return (
+    <div className="data-block">
+      <p className="data-h">Privacy & your data</p>
+      <p className="note">Your rights under the DPDP Act 2023 and (if applicable) the GDPR.</p>
+      <div className="actions" style={{ flexWrap: "wrap", gap: 8 }}>
+        <button className="ghost sm" disabled={busy} onClick={() => run(exportData, "Your data was downloaded.")}>Export my data</button>
+        <button className="ghost sm" disabled={busy} onClick={withdraw}>Withdraw consent</button>
+        <button className="ghost sm" disabled={busy} onClick={del} style={{ color: "var(--danger, #d66)" }}>Delete my account</button>
+      </div>
+
+      <label className="fld" style={{ marginTop: 14 }}>File a privacy grievance</label>
+      <textarea rows={2} value={griev} onChange={(e) => setGriev(e.target.value)}
+                placeholder="e.g. please correct/erase X" style={{ width: "100%" }} />
+      <div className="actions"><button className="sm" disabled={busy} onClick={fileGrievance}>Submit grievance</button></div>
+      {(officer.name || officer.email) && (
+        <p className="note">Grievance Officer: {officer.name || ""} {officer.email ? `· ${officer.email}` : ""}</p>
+      )}
+
+      <label className="fld" style={{ marginTop: 14 }}>Nominee (who may act for you on death/incapacity)</label>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input placeholder="Name" value={nom.name} onChange={(e) => setNom({ ...nom, name: e.target.value })} />
+        <input placeholder="Email" value={nom.email || ""} onChange={(e) => setNom({ ...nom, email: e.target.value })} />
+        <input placeholder="Relationship" value={nom.relationship || ""} onChange={(e) => setNom({ ...nom, relationship: e.target.value })} />
+      </div>
+      <div className="actions"><button className="sm" disabled={busy} onClick={saveNominee}>Save nominee</button></div>
+
+      {msg && <p className="note" style={{ color: "var(--brass)" }}>{msg}</p>}
+      {err && <p className="err">{err}</p>}
     </div>
   );
 }
