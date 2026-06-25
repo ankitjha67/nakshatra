@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Reading from "../components/Reading.jsx";
 import CityPicker from "../components/CityPicker.jsx";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 import { tzOffsetForDate } from "../lib/geo.js";
 
 const EVENT_TYPES = ["marriage", "childbirth", "job change", "relocation", "father's death",
@@ -37,6 +38,7 @@ export default function BtrTab() {
         gender, sunrise_time: sunrise, events: evs,
       });
       setData(resp);
+      track("btr");
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 
 // Grounded chat, answers come only from the user's last cast chart's findings,
 // metered on the token credit ledger. Balance updates flow up via onBalance.
@@ -35,6 +36,7 @@ export default function ChatTab({ lastBirth, onBalance }) {
       setChatId(resp.chat_id);
       setMsgs((m) => [...m, { role: "assistant", text: resp.answer, tokens: resp.tokens_used }]);
       onBalance && onBalance(resp.balance);
+      track("chat");
     } catch (e) {
       setErr(e.message);
     } finally {

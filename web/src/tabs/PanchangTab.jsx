@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 import CityPicker from "../components/CityPicker.jsx";
 import { tzOffsetForDate } from "../lib/geo.js";
 
@@ -19,7 +20,7 @@ export default function PanchangTab() {
 
   const load = (req, label) => {
     setBusy(true); setErr(""); setPlace(label);
-    apiPost("/v1/panchang", req).then(setData).catch((e) => setErr(e.message)).finally(() => setBusy(false));
+    apiPost("/v1/panchang", req).then((d) => { setData(d); track("panchang"); }).catch((e) => setErr(e.message)).finally(() => setBusy(false));
   };
   const today = () => new Date().toISOString().slice(0, 10);
   const loadCity = (c) => load({ lat: c.lat, lon: c.lon, tz: tzOffsetForDate(c.tz, today(), "12:00") }, c.label);

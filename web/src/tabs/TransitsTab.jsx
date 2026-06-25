@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 
 const HOUSE_THEME = {
   1: "self & vitality", 2: "money & speech", 3: "effort & siblings", 4: "home & mind",
@@ -15,7 +16,7 @@ export default function TransitsTab() {
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    apiPost("/v1/transits", {}).then(setData).catch((e) => setErr(e.message)).finally(() => setBusy(false));
+    apiPost("/v1/transits", {}).then((d) => { setData(d); track("transits"); }).catch((e) => setErr(e.message)).finally(() => setBusy(false));
   }, []);
 
   if (busy) return <p className="loader" style={{ paddingTop: 20 }}>Reading current transits…</p>;

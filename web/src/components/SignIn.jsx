@@ -1,11 +1,14 @@
 import React, { useState } from "react";
 import { auth } from "../lib/firebase.js";
 import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { track } from "../lib/analytics.js";
+
+const isNew = (u) => !!u && u.metadata && u.metadata.creationTime === u.metadata.lastSignInTime;
 
 export default function SignIn() {
   const [email, setEmail] = useState(""); const [pw, setPw] = useState(""); const [err, setErr] = useState("");
-  const google = async () => { setErr(""); try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { setErr(friendly(e)); } };
-  const emailAuth = (fn) => async () => { setErr(""); if (!email || !pw) return setErr("Enter an email and password."); try { await fn(auth, email, pw); } catch (e) { setErr(friendly(e)); } };
+  const google = async () => { setErr(""); try { const c = await signInWithPopup(auth, new GoogleAuthProvider()); track(isNew(c.user) ? "sign_up" : "login", { method: "google" }); } catch (e) { setErr(friendly(e)); } };
+  const emailAuth = (fn, ev) => async () => { setErr(""); if (!email || !pw) return setErr("Enter an email and password."); try { await fn(auth, email, pw); track(ev, { method: "email" }); } catch (e) { setErr(friendly(e)); } };
   return (
     <div className="card">
       <p className="kicker">Step one · sign in</p>
@@ -15,8 +18,8 @@ export default function SignIn() {
         <div><label className="fld">Password</label><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} /></div>
       </div>
       <div className="actions">
-        <button onClick={emailAuth(signInWithEmailAndPassword)}>Sign in</button>
-        <button className="ghost" onClick={emailAuth(createUserWithEmailAndPassword)}>Create account</button>
+        <button onClick={emailAuth(signInWithEmailAndPassword, "login")}>Sign in</button>
+        <button className="ghost" onClick={emailAuth(createUserWithEmailAndPassword, "sign_up")}>Create account</button>
       </div>
       <p className="err">{err}</p>
     </div>

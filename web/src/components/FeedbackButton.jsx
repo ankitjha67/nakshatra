@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 
 const CATS = [
   { key: "idea", label: "Idea" },
@@ -24,6 +25,7 @@ export default function FeedbackButton() {
     setBusy(true); setErr("");
     try {
       await apiPost("/v1/feedback", { message: msg.trim(), category: cat, page: window.location.hash || "app" });
+      track("feedback", { category: cat });
       setSent(true); setMsg("");
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };

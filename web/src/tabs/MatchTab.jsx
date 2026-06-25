@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 import CityPicker from "../components/CityPicker.jsx";
 import { tzOffsetForDate } from "../lib/geo.js";
 
@@ -36,6 +37,7 @@ export default function MatchTab() {
         self_gender: gender,
       });
       setRes(r);
+      track("match");
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Reading from "../components/Reading.jsx";
 import CityPicker from "../components/CityPicker.jsx";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 import { tzOffsetForDate } from "../lib/geo.js";
 
 // Prashna / KP horary, a chart is cast for the moment of asking (not a birth time).
@@ -23,6 +24,7 @@ export default function PrashnaTab() {
       const tz = tzOffsetForDate(city.tz, now.toISOString().slice(0, 10), now.toTimeString().slice(0, 5));
       const resp = await apiPost("/v1/prashna", { question, lat: city.lat, lon: city.lon, tz });
       setData(resp);
+      track("prashna");
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 

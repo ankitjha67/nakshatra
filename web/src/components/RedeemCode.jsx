@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiPost } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 
 // "Have an access code?" redeem box. Beta codes unlock a tier; discount codes
 // attach a % off for checkout. On success it triggers a refresh of entitlements.
@@ -15,6 +16,7 @@ export default function RedeemCode({ onRedeemed }) {
     setBusy(true); setErr(""); setMsg("");
     try {
       const r = await apiPost("/v1/redeem", { code: c });
+      track("redeem", { kind: r.kind });
       setMsg(r.message || (r.kind === "discount" ? `${r.discount_pct}% discount applied.` : "Unlocked."));
       setCode("");
       if (r.kind !== "discount" && onRedeemed) setTimeout(onRedeemed, 600);

@@ -19,11 +19,13 @@ VITE_UMAMI_WEBSITE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 Rebuild + deploy the web. With both unset, `analytics.js` is a no-op (nothing loads, no requests).
 
 ## What's tracked (`web/src/lib/analytics.js`)
-- **Auto:** the initial pageview (Umami default).
-- **`trackPage(tab)`** — each tab view as an SPA pageview (Natal / Maha-Kundali / Chat / Account / …)
-  so the Pages report reflects feature usage.
-- **`track("reading", {type, locked})`** — a reading cast (activation).
-- **`track("checkout_start", {tier})`** — subscribe button (conversion funnel).
+- **Auto:** the initial pageview (Umami default); plus **`trackPage(tab)`** — each tab view as an SPA
+  pageview so the Pages report reflects feature usage.
+- **Acquisition:** `sign_up` / `login` (with `{method: google|email}`; Google new-vs-returning distinguished).
+- **Activation:** `reading` `{type, locked}`, `chat`, `match`, `prashna`, `btr`, `panchang`, `transits`.
+- **Monetization:** `checkout_start` `{tier}`, `redeem` `{kind}`.
+- **Engagement / compliance ops:** `feedback` `{category}`, `data_export`, `consent_withdraw`,
+  `account_delete`, `grievance`, `nominee`.
 - Add more with `track("event_name", {…})` — never throws, safe when analytics is off.
 
 ## Privacy

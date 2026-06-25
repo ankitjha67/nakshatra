@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiPost, apiGet, apiDelete } from "../lib/api.js";
+import { track } from "../lib/analytics.js";
 import RedeemCode from "../components/RedeemCode.jsx";
 
 const TIER_LABEL = { free: "Free", basic: "Basic", pro: "Pro", enterprise: "Enterprise" };
@@ -122,23 +123,24 @@ function PrivacyBlock({ me, refresh }) {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = "nakshatra-my-data.json"; a.click();
     URL.revokeObjectURL(a.href);
+    track("data_export");
   };
   const withdraw = () => {
     if (!window.confirm("Withdraw consent? We'll stop processing your birth data until you consent again.")) return;
-    return run(() => apiPost("/v1/consent/withdraw", {}), "Consent withdrawn.");
+    return run(async () => { await apiPost("/v1/consent/withdraw", {}); track("consent_withdraw"); }, "Consent withdrawn.");
   };
   const del = () => {
     if (!window.confirm("Delete your account and all your data permanently? This cannot be undone.")) return;
-    return run(() => apiDelete("/v1/me"), "Account deletion requested.");
+    return run(async () => { await apiDelete("/v1/me"); track("account_delete"); }, "Account deletion requested.");
   };
   const fileGrievance = () => {
     if (griev.trim().length < 5) { setErr("Please describe your grievance (5+ characters)."); return; }
-    return run(async () => { await apiPost("/v1/grievance", { message: griev.trim() }); setGriev(""); },
+    return run(async () => { await apiPost("/v1/grievance", { message: griev.trim() }); track("grievance"); setGriev(""); },
               "Grievance filed. We'll respond within the timeframe the law requires.");
   };
   const saveNominee = () => {
     if (!nom.name.trim()) { setErr("Enter your nominee's name."); return; }
-    return run(() => apiPost("/v1/nominee", nom), "Nominee saved.");
+    return run(async () => { await apiPost("/v1/nominee", nom); track("nominee"); }, "Nominee saved.");
   };
 
   return (
