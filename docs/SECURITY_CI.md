@@ -42,6 +42,23 @@ This satisfies the requested choices with zero-account options: **"Snyk *or* Git
   audits already done (`SECURITY_AUDIT_RACE_INJECTION_IDOR.md`, `PRELAUNCH_CHECKLIST.md`) and by ZAP +
   CodeQL. If you want a true human pen-test with Burp, that's an external engagement.
 
+## ZAP baseline scan — first run (2026-06-25, issue #17)
+Ran against the live site. **No high/critical findings** — every alert was a missing security
+**HTTP header**. Remediated by adding headers in `web/firebase.json` (verified live):
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN` (anti-clickjacking; still lets the
+app frame its own orrery), `Referrer-Policy`, `Permissions-Policy` (camera/mic/geo off),
+`Cross-Origin-Opener-Policy: same-origin-allow-popups` (keeps Google OAuth popups working), `HSTS`.
+
+**Deliberately NOT added** (would break the live app — do via report-only + staging):
+- **CSP** — needs a per-origin policy allowing Firebase/Google/Vertex/the Cloud Run API + the orrery;
+  add as `Content-Security-Policy-Report-Only` first, watch reports, then enforce.
+- **COEP `require-corp` / CORP** — would block cross-origin Firebase/Vertex resources.
+- **SRI** — low value for same-origin Vite-built assets.
+- Cache-control tuning + "Base64 disclosure" (false positive: base64 data inside the JS bundle).
+
+(The ZAP workflow run shows "failure" only due to an artifact-upload API quirk in the action; the
+scan completes and files the report regardless.)
+
 ## Owner to-dos
 1. Merge this so the workflows activate, then check the first runs under the **Actions** tab.
 2. Flip on the GitHub native settings above.
