@@ -59,6 +59,17 @@ app frame its own orrery), `Referrer-Policy`, `Permissions-Policy` (camera/mic/g
 (The ZAP workflow run shows "failure" only due to an artifact-upload API quirk in the action; the
 scan completes and files the report regardless.)
 
+## CodeQL — first run triage (2026-06-25, 12 alerts)
+| Alert | Severity | Disposition |
+|---|---|---|
+| `js/xss` + `js/missing-origin-check` (orrery graha card) | high/med | **Fixed** — message handler now checks `e.origin`; `role` sanitized to `<b>` only. |
+| `py/polynomial-redos` (main.py `_now_in_tz`) | high | **Fixed** — strip input, drop `\s*`. |
+| `py/polynomial-redos` (llm.py injection filter) | high | **Dismissed (won't fix)** — benchmarked linear; chat input capped at 6000. |
+| `py/weak-sensitive-data-hashing` ×2 (API keys, codes) | high | **Dismissed (won't fix)** — SHA-256+pepper of high-entropy random tokens (not passwords); hashes server-side only. |
+| `py/log-injection` (chat_id) | med | **Dismissed (false positive)** — `chat_id` regex-validated `[A-Za-z0-9_-]`, no newlines. |
+| `js/functionality-from-untrusted-source` (Three.js via cdnjs, no SRI) | med | **Open (low to-do)** — decorative, has a no-THREE fallback; add SRI or self-host. |
+| `actions/unpinned-tag` ×4 (trufflehog@main etc.) | med | **Open (low to-do)** — mitigated by least-privilege `contents: read`; pin to SHAs when convenient. |
+
 ## Owner to-dos
 1. Merge this so the workflows activate, then check the first runs under the **Actions** tab.
 2. Flip on the GitHub native settings above.
