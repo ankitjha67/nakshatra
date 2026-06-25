@@ -1,0 +1,52 @@
+name: Optional scanners (Snyk, GitGuardian)
+
+# These named tools need an account/token, so they stay DORMANT until you opt in:
+#   Snyk:        add secret SNYK_TOKEN          + repo variable ENABLE_SNYK=true
+#   GitGuardian: add secret GITGUARDIAN_API_KEY + repo variable ENABLE_GITGUARDIAN=true
+# (Settings -> Secrets and variables -> Actions). They're redundant with the free
+# CodeQL + TruffleHog + pip-audit above, so enabling them is optional.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  snyk:
+    name: Snyk (deps + code)
+    if: ${{ vars.ENABLE_SNYK == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snyk/actions/setup@master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r api/requirements.txt
+      - name: Snyk test (Python)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --file=api/requirements.txt --package-manager=pip --severity-threshold=high || true
+      - name: Snyk test (web)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --file=web/package-lock.json --severity-threshold=high || true
+
+  gitguardian:
+    name: GitGuardian secret scan
+    if: ${{ vars.ENABLE_GITGUARDIAN == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: GitGuardian/ggshield-action@v1
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}

@@ -1,0 +1,55 @@
+name: Security scans
+
+# Secret scanning (TruffleHog) + dependency CVE audits (pip-audit, npm audit).
+# Satisfies the "GitGuardian or TruffleHog" choice with no external account.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # weekly Monday 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Secret scan (TruffleHog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full git history so old commits are scanned too
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          extra_args: --results=verified,unknown   # fail only on real/likely secrets
+
+  python-deps:
+    name: Python dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pip-audit
+      - run: pip-audit -r requirements.txt --strict
+
+  web-deps:
+    name: Web dependency audit (npm audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm audit --audit-level=high

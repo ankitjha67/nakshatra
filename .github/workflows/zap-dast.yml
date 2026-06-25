@@ -1,0 +1,31 @@
+name: ZAP DAST (baseline)
+
+# OWASP ZAP baseline = passive spider + passive rules (no active attacks), safe to
+# point at the live site. Produces a report and opens/updates a GitHub issue with
+# findings (missing security headers, cookie flags, info leaks, etc.).
+# Run manually (Actions -> ZAP DAST -> Run workflow) or on the weekly schedule.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target URL to scan"
+        default: "https://nakshatra-prod-2026.web.app"
+  schedule:
+    - cron: "0 3 * * 1"   # weekly Monday 03:00 UTC
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  zap-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ github.event.inputs.target || 'https://nakshatra-prod-2026.web.app' }}
+          fail_action: false        # report, don't fail the run on passive findings
+          allow_issue_writing: true # file/update an issue with the report
+          cmd_options: "-a"         # include alpha passive rules

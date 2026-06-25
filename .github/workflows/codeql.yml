@@ -1,0 +1,35 @@
+name: CodeQL (GitHub code scanning)
+
+# GitHub's native SAST. Findings appear under Security -> Code scanning alerts.
+# Satisfies the "Snyk or GitHub code scanning" choice with no external account.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 4 * * 1"   # weekly Monday 04:23 UTC
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
