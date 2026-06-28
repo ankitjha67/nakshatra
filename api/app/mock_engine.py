@@ -207,8 +207,15 @@ def compute_mock_chart(birth: dict) -> dict[str, Any]:
 
     # --- divisional charts (illustrative mock; the real engine gives true vargas) ---
     def _vsign(longitude: float, n: int) -> int:
-        part = int((longitude % 30) / (30.0 / n))
-        return (int(longitude // 30) + part) % 12
+        # Correct classical mapping for the vargas the mock surfaces (matches the real
+        # engine): D9 by element-start, D10 odd->sign/even->9th, D24 odd->Leo/even->Cancer.
+        sign = int(longitude // 30); pos = longitude % 30
+        k = int(pos / (30.0 / n)); odd = (sign % 2 == 0); mfd = sign % 3
+        if n == 9:    start = (sign, (sign + 8) % 12, (sign + 4) % 12)[mfd]
+        elif n == 10: start = sign if odd else (sign + 8) % 12
+        elif n == 24: start = 4 if odd else 3
+        else:         return (sign + k) % 12
+        return (start + k) % 12
     vargas: dict[str, dict] = {}
     for tag, n in (("D9", 9), ("D10", 10), ("D24", 24)):
         v = {"Lagna": {"sign": SIGNS[_vsign(asc_lon, n)]}}
