@@ -11,7 +11,7 @@ httpx>=0.28.1
 pysweph>=2.10.3.6
 
 # --- LLM provider: Vertex / Gemini ---
-google-genai>=2.8.0
+google-genai>=2.10.0
 
 # --- auth + store (Firebase / Firestore) ---
 firebase-admin>=7.4.0
