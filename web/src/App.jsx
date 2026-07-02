@@ -184,11 +184,20 @@ export default function App() {
   );
 }
 
-// `role` is app-authored and only ever contains <b> emphasis. Strip every other tag
-// so a spoofed/postMessage'd value can't inject script/img/onerror (defense-in-depth
-// behind the origin check on the message handler). Keeps only bare <b>/</b>.
-function safeRole(html) {
-  return String(html || "").replace(/<(?!\/?b>)[^>]*>/gi, "");
+// `role` is app-authored text with simple <b> emphasis. Render it as React nodes
+// (never innerHTML): text runs are auto-escaped by React, so any tag other than the
+// <b> delimiters — e.g. a spoofed <img onerror> — is shown as harmless literal text.
+// No HTML sanitization/regex-stripping, so no injection surface at all.
+function renderRole(text) {
+  const parts = String(text || "").split(/(<\/?b>)/i);   // keep the <b>/</b> delimiters
+  let bold = false;
+  const out = [];
+  parts.forEach((p, i) => {
+    if (/^<b>$/i.test(p)) { bold = true; return; }
+    if (/^<\/b>$/i.test(p)) { bold = false; return; }
+    if (p) out.push(bold ? <strong key={i}>{p}</strong> : <span key={i}>{p}</span>);
+  });
+  return out;
 }
 
 // Info card for a planet picked in the interactive background orrery. Mirrors the
@@ -204,7 +213,7 @@ function GrahaCard({ graha, onClose }) {
       <h2 className="graha-name">{graha.name}</h2>
       <div className="graha-eng">{graha.eng}</div>
       <p className="graha-fact">{graha.fact}</p>
-      <p className="graha-role" dangerouslySetInnerHTML={{ __html: safeRole(graha.role) }} />
+      <p className="graha-role">{renderRole(graha.role)}</p>
     </aside>
   );
 }

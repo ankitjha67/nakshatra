@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0   # full git history so old commits are scanned too
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@459d5a78cbfe19b48391cf407dea916114db862f # pinned; was @main
         with:
           path: ./
           extra_args: --results=verified,unknown   # fail only on real/likely secrets
