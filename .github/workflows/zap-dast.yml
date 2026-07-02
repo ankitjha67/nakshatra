@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: ZAP Baseline Scan
-        uses: zaproxy/action-baseline@66042c8e7e24680119199a017e5b0e8603bf4dae # pinned; was v0.12.0
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # pinned; was v0.15.0
         with:
           target: ${{ github.event.inputs.target || 'https://nakshatra-prod-2026.web.app' }}
           fail_action: false        # report, don't fail the run on passive findings
