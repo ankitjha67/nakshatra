@@ -21,7 +21,7 @@ jobs:
     if: ${{ vars.ENABLE_SNYK == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: snyk/actions/setup@8e119fbb6c251787721d34ba683ed48eba792766 # pinned; was @master
       - uses: actions/setup-python@v5
         with:
@@ -41,7 +41,7 @@ jobs:
     if: ${{ vars.ENABLE_GITGUARDIAN == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: GitGuardian/ggshield-action@da20be06cafe5e8633dc24744efe1efe8d30f06b # pinned; was @v1
