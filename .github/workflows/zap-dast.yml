@@ -21,7 +21,7 @@ jobs:
   zap-baseline:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@66042c8e7e24680119199a017e5b0e8603bf4dae # pinned; was v0.12.0
         with:
