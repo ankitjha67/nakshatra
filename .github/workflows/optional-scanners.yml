@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: snyk/actions/setup@8e119fbb6c251787721d34ba683ed48eba792766 # pinned; was @master
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: pip install -r api/requirements.txt
